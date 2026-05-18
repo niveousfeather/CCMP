@@ -1,0 +1,23 @@
+export type HistoryRecord = {
+  id: string;
+  userId: string;
+  taskId: string;
+  type: "image" | "video" | "chat" | "model3d";
+  title: string;
+  prompt: string;
+  finalPrompt?: string | null;
+  failureReason?: string | null;
+  status: string;
+  model: string;
+  duration?: string;
+  ratio: string;
+  resolution?: string;
+  style?: string;
+  createdAt: string;
+  updatedAt: string;
+  images?: string[];
+  thumbnailUrl?: string | null;
+  isFavorite?: boolean;
+  favoriteId?: string;
+  favoritedAt?: string;
+};
