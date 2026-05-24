@@ -11,6 +11,20 @@ export type AgentActiveTask = {
   source: "conversation";
 };
 
+export type ConversationFileReference = {
+  attachmentId: string;
+  fileName: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  objectKey?: string | null;
+  providerFileId?: string | null;
+  extractedText?: string | null;
+  textPreview?: string | null;
+  parseStatus: "parsed" | "partial" | "failed";
+  sourceMessageId?: string | null;
+  conversationId: string;
+};
+
 export type ToolAdapterValidationResult =
   | { ok: true }
   | {
@@ -46,6 +60,7 @@ export type ToolAdapterContext = {
   userText: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   files: File[];
+  conversationFiles?: ConversationFileReference[];
   tools?: AgentToolSelection;
   signal: AbortSignal;
   timeoutMs?: number;

@@ -1,6 +1,6 @@
 import { parseDocuments } from "@/lib/document-processing/parser";
 import type { ExtractedDocument } from "@/lib/agent/types";
-import type { ToolAdapter } from "@/lib/agent/runtime/tool-adapters/types";
+import type { ConversationFileReference, ToolAdapter } from "@/lib/agent/runtime/tool-adapters/types";
 
 const FILE_PARSE_FAILED_MESSAGE = "文件解析失败，请确认文件格式或重新上传。";
 
@@ -12,6 +12,17 @@ function toExtractedDocuments(files: Awaited<ReturnType<typeof parseDocuments>>[
       fileId: `document-processing-${file.fileName}`,
       content: file.normalizedText || file.text || "",
       extractedMarkdown: file.normalizedText || file.text || ""
+    }));
+}
+
+function toConversationExtractedDocuments(files: ConversationFileReference[]): ExtractedDocument[] {
+  return files
+    .filter((file) => file.extractedText?.trim())
+    .map((file) => ({
+      fileName: file.fileName,
+      fileId: file.providerFileId || `chat-attachment-${file.attachmentId}`,
+      content: file.extractedText || "",
+      extractedMarkdown: file.extractedText || ""
     }));
 }
 
@@ -52,17 +63,23 @@ export const fileAnalysisAdapter: ToolAdapter = {
   targetTool: "file-analysis",
   canHandle: (decision) => decision.targetTool === "file-analysis",
   validateInputs: (_decision, context) => {
-    if (!context.files.length) {
+    const reusableDocuments = toConversationExtractedDocuments(context.conversationFiles || []);
+    if (!context.files.length && !reusableDocuments.length) {
       return { ok: false, missingInputs: ["file"], message: "请先上传需要分析的文件。" };
     }
     return { ok: true };
   },
   execute: async (_decision, context) => {
-    const parsed = await parseDocuments({
-      files: context.files,
-      maxChars: 80_000
-    });
-    const extractedDocuments = toExtractedDocuments(parsed.files);
+    const parsed =
+      context.files.length > 0
+        ? await parseDocuments({
+            files: context.files,
+            maxChars: 80_000
+          })
+        : null;
+    const extractedDocuments = parsed
+      ? toExtractedDocuments(parsed.files)
+      : toConversationExtractedDocuments(context.conversationFiles || []);
     if (!extractedDocuments.length) throw new Error("DOCUMENT_PARSE_FAILED");
 
     return {
@@ -70,12 +87,14 @@ export const fileAnalysisAdapter: ToolAdapter = {
         content: buildLocalFileAnalysisAnswer(extractedDocuments, context.userText),
         modelUsed: "NexusAI Runtime V2",
         providerUsed: "xheai",
-        routeReason: `runtime_v2:file-analysis-adapter:local_parse:${parsed.status}`,
+        routeReason: parsed
+          ? `runtime_v2:file-analysis-adapter:local_parse:${parsed.status}`
+          : "runtime_v2:file-analysis-adapter:conversation_file_reuse",
         fallbackUsed: false,
         extractedDocuments,
         generatedFiles: [],
         pendingTask: null,
-        defaultsApplied: ["document_processing_parser"]
+        defaultsApplied: parsed ? ["document_processing_parser"] : ["conversation_file_reuse"]
       },
       runtimeMode: "adapter"
     };

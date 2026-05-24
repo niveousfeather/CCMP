@@ -5,7 +5,7 @@ import { enqueueAgentChatTask } from "@/lib/agent/async-tasks";
 import { planAgentRuntimeTurn, type AgentRuntimePlan } from "@/lib/agent/runtime";
 import { buildAgentRuntimeContextPack, buildRuntimeChatMessagesFromContextPack } from "@/lib/agent/runtime/context-pack";
 import { executeRuntimeTool } from "@/lib/agent/runtime/tool-executor";
-import type { AgentActiveTask } from "@/lib/agent/runtime/tool-adapters";
+import type { AgentActiveTask, ConversationFileReference } from "@/lib/agent/runtime/tool-adapters";
 import { callChatModel, extractAgentTask, isAgentProviderRequestError, runAgent } from "@/lib/agent/router";
 import { isFunctionalAgentTask, shouldUseFastChatRoute } from "@/lib/agent/task-router";
 import type {
@@ -1059,6 +1059,52 @@ async function getActiveConversationTask(conversationId: string, userId: string)
   };
 }
 
+function isConversationDocumentAttachment(fileName: string, mimeType?: string | null) {
+  const normalizedName = fileName.toLowerCase();
+  const normalizedMime = (mimeType || "").toLowerCase();
+  return (
+    normalizedMime.startsWith("text/") ||
+    normalizedMime.includes("pdf") ||
+    normalizedMime.includes("wordprocessingml.document") ||
+    normalizedMime.includes("msword") ||
+    normalizedName.endsWith(".txt") ||
+    normalizedName.endsWith(".md") ||
+    normalizedName.endsWith(".pdf") ||
+    normalizedName.endsWith(".docx")
+  );
+}
+
+async function getConversationFileReferences(conversationId: string, userId: string): Promise<ConversationFileReference[]> {
+  const attachments = await prisma.chatAttachment.findMany({
+    where: {
+      conversationId,
+      userId,
+      message: { role: "user" }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 8
+  });
+
+  return attachments
+    .filter((attachment) => isConversationDocumentAttachment(attachment.fileName, attachment.mimeType))
+    .map((attachment) => {
+      const extractedText = attachment.extractedText || null;
+      return {
+        attachmentId: attachment.id,
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        sizeBytes: attachment.sizeBytes,
+        objectKey: attachment.objectKey,
+        providerFileId: attachment.providerFileId,
+        extractedText,
+        textPreview: extractedText ? extractedText.slice(0, 2_000) : null,
+        parseStatus: extractedText ? "parsed" : "partial",
+        sourceMessageId: attachment.messageId,
+        conversationId: attachment.conversationId
+      } satisfies ConversationFileReference;
+    });
+}
+
 async function saveUserAttachments({
   files,
   userId,
@@ -1715,6 +1761,7 @@ async function streamChatResponse({
 
         const pendingAgentTask = parsed.mode === "agent" ? await getPendingAgentTask(conversation.id, userId) : null;
         activeTask = parsed.mode === "agent" ? await getActiveConversationTask(conversation.id, userId) : null;
+        const conversationFiles = parsed.mode === "agent" ? await getConversationFileReferences(conversation.id, userId) : [];
         const conversationSummaryCache = await getConversationSummaryCache(conversation.id, userId);
         agentRuntimePlan =
           parsed.mode === "agent"
@@ -2050,6 +2097,7 @@ async function streamChatResponse({
                 userText,
                 messages: parsed.messages as AgentChatMessage[],
                 files: parsed.files,
+                conversationFiles,
                 tools: parsed.tools,
                 signal: abortController.signal,
                 timeoutMs,
@@ -2282,6 +2330,7 @@ export async function POST(request: NextRequest) {
     const pendingAgentTask =
       parsed.mode === "agent" ? await getPendingAgentTask(conversation.id, user!.id) : null;
     activeTask = parsed.mode === "agent" ? await getActiveConversationTask(conversation.id, user!.id) : null;
+    const conversationFiles = parsed.mode === "agent" ? await getConversationFileReferences(conversation.id, user!.id) : [];
     conversationSummaryCache = await getConversationSummaryCache(conversation.id, user!.id);
     agentRuntimePlan =
       parsed.mode === "agent"
@@ -2477,6 +2526,7 @@ export async function POST(request: NextRequest) {
             userText,
             messages: parsed.messages as AgentChatMessage[],
             files: parsed.files,
+            conversationFiles,
             tools: parsed.tools,
             signal: controller.signal,
             timeoutMs,

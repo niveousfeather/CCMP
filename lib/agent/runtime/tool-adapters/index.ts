@@ -27,6 +27,7 @@ export { legacyAgentAdapter };
 export type {
   AgentActiveTask,
   AgentActiveTaskKind,
+  ConversationFileReference,
   ToolAdapter,
   ToolAdapterContext,
   ToolAdapterExecutionResult,

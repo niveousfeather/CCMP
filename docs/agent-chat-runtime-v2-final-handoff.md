@@ -291,3 +291,84 @@ npm.cmd run build
 - 单独整理 `services/**` 历史脏改；
 - 排除 `data/**` 运行产物、patch、package lock 等不应提交内容；
 - 再准备正式 merge / PR。
+
+## 11. 第 21 阶段补充：文件分析真实上传自动化测试与当前对话文件续接
+
+第 21 阶段继续保持 Agent Runtime V2 的记忆边界：只在当前 `conversationId` 内恢复文件引用，不做长期记忆，不查用户历史全部会话，不写 user profile memory。
+
+### 文件分析链路现状
+
+- multipart 上传入口在 `app/api/ai/chat/route.ts`，通过 `request.formData()` 读取 `files`。
+- file-analysis adapter 主路径直接调用 `lib/document-processing/parser` 的 `parseDocuments()`。
+- `lib/agent/skills/parse-document.ts` 是兼容层，仍然是公共 parser 优先，旧 Kimi fallback 只作为后备。
+- 本阶段未发现 file-analysis 主路径存在新的私有 txt/docx/pdf parser。
+- 文件分析成功后，解析摘要写入当前 conversation 的 `chatAttachment.extractedText`。
+
+### 当前 conversation 文件续接
+
+新增 `ConversationFileReference` 传给 Tool Adapter，用于当前 conversation 内文件续接：
+
+- `attachmentId`
+- `fileName`
+- `mimeType`
+- `sizeBytes`
+- `objectKey`
+- `providerFileId`
+- `extractedText`
+- `textPreview`
+- `parseStatus`
+- `sourceMessageId`
+- `conversationId`
+
+chat route 查询范围严格限定为当前 `conversationId + userId` 的用户附件。adapter 处理规则：
+
+- 有新上传文件时，优先解析本轮 multipart 文件；
+- 没有新文件时，只复用当前 conversation 的 `extractedText`；
+- 没有可复用文件时，要求用户上传文件；
+- 新 conversation 不继承旧文件引用；
+- 不把完整大文件全文塞进跨会话记忆。
+
+### 自动化测试
+
+新增脚本：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-file-analysis-upload.ts
+```
+
+真实 API E2E 可选：
+
+```bash
+AGENT_E2E_BASE_URL=http://localhost:3099
+AGENT_E2E_COOKIE=<真实浏览器登录 cookie>
+```
+
+没有 `AGENT_E2E_COOKIE` 时，脚本明确跳过真实 API E2E，不把跳过当作真实上传通过。
+
+当前覆盖结果：
+
+- txt parser fixture：通过；
+- docx parser fixture：通过；
+- pdf parser fixture：通过，存在 pdfjs/canvas optional polyfill warning，但文本层解析成功；
+- txt file-analysis adapter：通过，无 taskCard，无生成附件；
+- 无文件请求：通过，要求上传文件；
+- 同一 conversation 文件续接：通过；
+- partial parsed 文件续接：通过；
+- 新 conversation 不继承文件：通过；
+- 真实 multipart API E2E：缺少登录 cookie 时跳过。
+
+### interrupted / partial 恢复边界
+
+已支持的情况：
+
+- 文件解析成功并写入当前 conversation 的 attachment metadata 后，即使后续回答中断，下一轮可通过 `extractedText` 继续总结。
+
+未覆盖的情况：
+
+- 如果中断发生在解析结果写入前，目前只保留原始附件记录；storage adapter 没有统一读取原始对象接口，本阶段不做重新拉取原文件解析。
+
+后续建议：
+
+- 补真实登录 cookie 下的 multipart API E2E；
+- 补浏览器上传流程自动化；
+- 如需覆盖“解析前中断恢复”，先为 storage adapter 增加受控读取接口，并继续限制在当前 conversation 内。

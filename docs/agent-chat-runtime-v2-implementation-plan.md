@@ -1457,3 +1457,121 @@ npm.cmd run build
 4. 继续/重试任务能力；
 5. ChatGPT 式耗时展示；
 6. 清理历史脏改和分支合并准备。
+
+## 31. 第 21 阶段：文件分析真实上传自动化测试与当前对话文件续接
+
+### 阶段目标
+
+本阶段只补文件分析上传链路的自动化验收和当前 conversation 内文件续接能力，不新增工具，不扩展 adapter 能力边界，不做长期记忆，不跨 conversation 读取文件。
+
+重点确认：
+
+- txt / docx / pdf multipart 上传链路可以由聊天入口进入 file-analysis；
+- file-analysis 优先复用 `lib/document-processing/parser`；
+- `lib/agent/skills/parse-document.ts` 继续作为兼容层，公共 parser 优先，旧 Kimi fallback 保留；
+- 文件分析结果直接作为聊天回答返回，不显示 taskCard；
+- 同一 conversation 内，下一轮“这个文件再总结短一点”可以复用上一轮保存的附件解析摘要；
+- 新 conversation 不继承旧 conversation 的文件引用、解析摘要或 activeTask。
+
+### 链路审计结果
+
+- `app/api/ai/chat/route.ts` 在 multipart 请求中通过 `request.formData()` 读取 `files`，并传给 Runtime / Tool Adapter。
+- `lib/agent/runtime/tool-adapters/file-analysis-adapter.ts` 已直接调用 `lib/document-processing/parser` 的 `parseDocuments()`。
+- `lib/agent/skills/parse-document.ts` 仍保留公共 parser 优先的兼容策略，必要时才 fallback 到旧 Kimi 文件链路。
+- 未发现 file-analysis 当前主路径新增私有 txt/docx/pdf parser；解析能力集中在 `lib/document-processing/`。
+- 解析成功后，chat route 会把 `result.extractedDocuments` 写入当前 conversation 的 `chatAttachment.extractedText`，作为后续同一 conversation 续接依据。
+
+### 当前对话文件续接实现
+
+新增当前 conversation 文件引用结构：
+
+```ts
+type ConversationFileReference = {
+  attachmentId: string;
+  fileName: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  objectKey?: string | null;
+  providerFileId?: string | null;
+  extractedText?: string | null;
+  textPreview?: string | null;
+  parseStatus: "parsed" | "partial" | "failed";
+  sourceMessageId?: string | null;
+  conversationId: string;
+};
+```
+
+chat route 只从当前 `conversationId + userId` 查询最近用户附件，并只传入 document 类型附件。file-analysis adapter 的策略是：
+
+- 若本轮有新上传文件，优先解析本轮 multipart 文件；
+- 若本轮没有新文件，但同一 conversation 有 `extractedText`，复用该解析文本生成总结；
+- 若没有新文件且当前 conversation 没有可用解析文本，返回缺少文件的追问；
+- 不从其他 conversation 查询文件；
+- 不写入 user profile memory；
+- 不把完整大文件全文塞进长期记忆或跨会话缓存。
+
+### 自动化脚本
+
+新增：
+
+```bash
+scripts/agent-runtime/check-file-analysis-upload.ts
+```
+
+运行方式：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-file-analysis-upload.ts
+```
+
+真实 API E2E 可选环境变量：
+
+```bash
+AGENT_E2E_BASE_URL=http://localhost:3099
+AGENT_E2E_COOKIE=<从真实浏览器复制的登录 cookie>
+```
+
+没有 `AGENT_E2E_COOKIE` 时，脚本会明确输出：
+
+```text
+SKIP API E2E upload: AGENT_E2E_COOKIE is not set.
+```
+
+该跳过不伪装成真实登录态 multipart 通过；本地 parser / adapter / conversation 续接 fixture 仍然运行。
+
+### 覆盖用例与结果
+
+当前本地自动化结果：
+
+- txt fixture：通过，公共 parser 使用 `txt` parser；
+- docx fixture：通过，公共 parser 使用 `docx` parser；
+- pdf fixture：通过，公共 parser 使用 `pdf` parser；本地环境会输出 pdfjs/canvas optional polyfill warning，但解析文本层成功；
+- txt file-analysis adapter：通过，返回文本总结，无 taskCard，无生成附件；
+- 无文件请求：通过，返回缺少 `file` 的 validation / clarification；
+- 同一 conversation 文件续接：通过，复用保存的 `extractedText`，不要求重新上传；
+- partial parsed 文件续接：通过，只要当前 conversation 保存了 partial/extractedText，下一轮可继续；
+- 新 conversation 不继承文件：通过，无 `conversationFiles` 时要求用户上传文件；
+- 真实 multipart API E2E：本轮因缺少 `AGENT_E2E_COOKIE` 明确跳过，未声称通过真实登录态上传。
+
+### interrupted / partial 策略
+
+- 如果文件已成功解析并写入当前 conversation 的 attachment metadata，即使回答后续中断，下一轮也可以通过 `ConversationFileReference.extractedText` 继续。
+- 如果中断发生在解析结果写入前，当前只保留原始附件上传记录；由于 storage adapter 当前没有统一读取原始对象的接口，本阶段不做重新拉取原文件再解析。
+- 后续若需要覆盖“解析前中断后恢复”，建议先为 storage adapter 增加受控读取接口，仍然限定在当前 conversation 内使用。
+
+### 未覆盖范围
+
+- 没有登录 cookie 时，真实浏览器 multipart API E2E 只能跳过；
+- 未新增 Playwright 浏览器自动化；
+- 未做跨会话文件搜索，且明确禁止；
+- 未做长期文件记忆；
+- 未改 Word / Excel / PPT / 图片底层生成器；
+- 未改 Academic PPT、services、data、教学架构图内部业务或 capability-map。
+
+### 验证命令
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-file-analysis-upload.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
+npm.cmd exec -- tsc --noEmit
+```
