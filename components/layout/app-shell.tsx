@@ -68,12 +68,14 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
   const pathname = usePathname();
   const router = useRouter();
   const isAcademicPptWorkbench = pathname === "/smart-tools/academic-ppt";
+  const isTeachingArchitectureWorkbench = pathname === "/smart-tools/teaching-architecture-diagram";
   const isWidePage =
     pathname === "/chat" ||
     pathname === "/model3d" ||
     pathname === "/image" ||
     pathname === "/video" ||
-    isAcademicPptWorkbench;
+    isAcademicPptWorkbench ||
+    isTeachingArchitectureWorkbench;
   const isAgentPage = pathname === "/chat";
   const items = useMemo(
     () =>
@@ -144,6 +146,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
           className={cn(
             "mx-auto w-full px-4 py-8 pb-24 md:px-8 lg:pb-8",
             isAcademicPptWorkbench && "px-3 py-3 md:px-4 md:py-4 lg:pb-4",
+            isTeachingArchitectureWorkbench && "px-0 py-0 pb-0 md:px-0 md:py-0 lg:pb-0",
             isWidePage ? "max-w-none" : "max-w-[1360px]"
           )}
         >
