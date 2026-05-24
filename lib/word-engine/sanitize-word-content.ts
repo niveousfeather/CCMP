@@ -1,27 +1,35 @@
 import type { WordContent, WordSection } from "./types";
 
-const pollutedPhrases = [
-  "我将围绕",
-  "本文将",
-  "附件依据",
-  "避免空泛套话",
-  "生成正文时优先",
-  "根据用户要求",
-  "作为 AI",
-  "作为AI",
-  "以下内容来自",
-  "wordTaskMemory",
-  "completedSections",
-  "pendingSections",
-  "currentStage",
-  "resumeInstruction",
-  "failureReason"
+const pollutedPatterns = [
+  /我将围绕/g,
+  /本文将/g,
+  /附件依据[:：]?/g,
+  /避免空泛套话/g,
+  /生成正文时优先/g,
+  /根据用户要求/g,
+  /作为\s*AI/g,
+  /以下内容来自[:：]?/g,
+  /内部任务[:：]?/g,
+  /内部说明/g,
+  /不应出现在正文/g,
+  /不能进入正文/g,
+  /wordTaskMemory/g,
+  /completedSections/g,
+  /pendingSections/g,
+  /currentStage/g,
+  /resumeInstruction/g,
+  /failureReason/g,
+  /mock/gi,
+  /placeholder/gi,
+  /TODO/gi
 ];
 
 function cleanText(value: string) {
   let cleaned = value;
-  for (const phrase of pollutedPhrases) cleaned = cleaned.split(phrase).join("");
-  return cleaned.replace(/\s+/g, " ").replace(/^[，。；：、\s]+/, "").trim();
+  for (const pattern of pollutedPatterns) cleaned = cleaned.replace(pattern, "");
+  cleaned = cleaned.replace(/\s+/g, " ").replace(/^[，。；：、\s]+/, "").trim();
+  if (/不应出现在正文|不能进入正文|内部说明/.test(cleaned)) return "";
+  return cleaned;
 }
 
 function sanitizeSection(section: WordSection): WordSection {

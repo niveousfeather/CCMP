@@ -41,6 +41,7 @@ export async function generateWordDocumentFromRequest(request: WordRequest) {
 }
 
 export { buildWordPlan } from "./build-word-plan";
+export { composeWordPlan } from "./compose-word-content";
 export { generateDocx } from "./generate-docx";
 export { sanitizeWordContent } from "./sanitize-word-content";
 export {
