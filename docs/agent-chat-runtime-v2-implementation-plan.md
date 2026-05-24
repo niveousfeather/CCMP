@@ -1331,3 +1331,129 @@ npm.cmd exec -- tsc --noEmit
 - 真实工具下载入口仍依赖各工具任务完成后的 metadata / attachment 写入；
 - `继续生成` 和 taskCard `重试` 仍是占位入口，后续可单独接入恢复/重试能力；
 - 若后续要进一步做到 ChatGPT 式“思考耗时”展示，应作为独立阶段处理。
+
+## 30. 第二十阶段 总体验收与交接文档
+
+### 阶段性质
+
+本阶段不是新功能开发阶段，只做 Agent Runtime V2 总体验收和交接文档。未修改业务代码，未新增工具，未扩展 adapter，未修改 Academic PPT、`services/**`、`data/**`、capability-map、教学架构图业务内部、Word / Excel / PPT / 图片底层生成器，也未修改 package / lock 文件。
+
+### 新增交接文档
+
+新增：
+
+- `docs/agent-chat-runtime-v2-final-handoff.md`
+
+该文档集中记录：
+
+- Agent Runtime V2 当前架构；
+- 当前聊天链路；
+- 当前 conversation-level memory 边界；
+- 已接入能力；
+- 已解决问题；
+- 当前遗留问题；
+- 回归测试方式；
+- 安全提交链；
+- 后续建议。
+
+### 当前架构摘要
+
+Agent Runtime V2 当前主链路：
+
+```text
+用户消息
+→ contextPack
+→ intent-planner
+→ skill-router
+→ execution-gate
+→ tool-executor
+→ tool-adapter
+→ old tool chain / answer_chat / ask_clarification
+→ SSE / taskCard / final message
+```
+
+核心涉及：
+
+- `app/api/ai/chat/route.ts`
+- `components/chat/**`
+- `lib/agent/runtime/**`
+- `lib/agent/skills-v2/**`
+- `lib/agent/runtime/tool-adapters/**`
+- `scripts/agent-runtime/check-runtime-v2.ts`
+
+### 当前记忆边界
+
+最终确认：
+
+- 只记当前 `conversationId`；
+- 新开对话清空 memory；
+- 不做长期记忆；
+- 不做 user profile memory；
+- 不跨 conversation 查 activeTask；
+- 不保存用户长期偏好。
+
+### 已接入能力
+
+- 普通聊天；
+- simple PPT；
+- Word；
+- 基础 Excel / xlsx 导出；
+- 图片生成；
+- 文件分析；
+- 教学架构图入口；
+- 知识图谱入口。
+
+说明：Excel 当前只是基础 xlsx 导出，不是完整 Excel 工作区。
+
+### 已解决问题
+
+- `PPT怎么做？` 不再误生成；
+- Excel 公式咨询不生成 xlsx；
+- 学术 PPT 不误进 simple PPT；
+- 当前对话 activeTask 可识别；
+- 新对话不继承旧任务；
+- SSE 双 assistant 气泡已修；
+- `final` 不覆盖流式正文；
+- taskCard 已统一；
+- debug 信息普通用户不可见；
+- 文件分析不显示 taskCard。
+
+### 当前遗留问题
+
+- 文件分析真实 multipart 场景仍建议继续补浏览器自动化测试；
+- simple PPT 不支持直接编辑已有 PPT，只支持重新生成新版；
+- Excel 不是完整工作区；
+- 继续/重试任务能力仍是占位；
+- GitNexus MCP 当前未暴露，所以 impact / detect_changes 仍不可用；
+- 工作区仍有历史脏改：Academic PPT、`services/**`、`data/**`、package lock、patch 等。
+
+### 回归测试方式
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
+npm.cmd exec -- tsc --noEmit
+npm.cmd run build
+```
+
+当前 `check-runtime-v2.ts` 为 17/17 PASS。
+
+### 安全提交链
+
+- `7ade063 feat(agent): add runtime v2 chat orchestration`
+- `d26a6d5 feat(agent): improve conversation memory and active task handling`
+- `a10ea72dc0b0e11450d98293d34e1b69e00f2ece fix(agent): scope memory to current conversation`
+- `1ddf932 test(agent): add runtime v2 regression checks`
+- `38f9fe4e45ab5c723f7dcc20aad215be32392471 test(agent): verify tool task card flows`
+- `863690fe2bb8ca95f8070e627d9c83cedcbcc62f fix(agent): stabilize file analysis and ppt continuation boundaries`
+- `16cce8dba355a8ca50c15bdda409465303074790 fix(agent): polish chat task card experience`
+
+### 后续建议
+
+按优先级：
+
+1. 文件分析真实上传自动化测试；
+2. Excel 独立能力规划；
+3. PPT 修改 adapter 单独设计；
+4. 继续/重试任务能力；
+5. ChatGPT 式耗时展示；
+6. 清理历史脏改和分支合并准备。
