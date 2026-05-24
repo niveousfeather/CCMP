@@ -51,6 +51,10 @@ type AiChatResponse = {
     adapterId?: string | null;
     missingInputs?: string[];
     activeTaskId?: string | null;
+    activeTaskKind?: string | null;
+    activeTaskTitle?: string | null;
+    sessionPreferences?: string[];
+    memoryHints?: string[];
   } | null;
   conversationId?: string;
   conversation?: Conversation;
@@ -991,9 +995,17 @@ export function ChatPage() {
           finalMessage.streamStatus === "interrupted" || finalMessage.streamStatus === "failed"
             ? finalMessage.streamStatus
             : "completed";
+        const shouldPreferFinalContent = Boolean(
+          finalMessage.taskCard ||
+            message.taskCard ||
+            finalMessage.imageGeneration ||
+            message.imageGeneration ||
+            message.pendingFileGeneration ||
+            message.pendingAgentTask
+        );
         return {
           ...finalMessage,
-          content: message.content || finalMessage.content || "",
+          content: shouldPreferFinalContent ? finalMessage.content || message.content || "" : message.content || finalMessage.content || "",
           clientKey: message.clientKey || pendingAssistantId,
           requestId: message.requestId || finalMessage.requestId,
           streamStatus,
@@ -1119,7 +1131,10 @@ export function ChatPage() {
         applyAssistantMessageUpdate(activeConversationId, pendingAssistantId, (message) => ({
           ...message,
           streamStatus: "streaming",
-          content: `${message.content || ""}${text}`
+          content:
+            message.content && (message.taskCard || message.pendingFileGeneration || message.pendingAgentTask || message.imageGeneration)
+              ? message.content
+              : `${message.content || ""}${text}`
         }));
         return;
       }

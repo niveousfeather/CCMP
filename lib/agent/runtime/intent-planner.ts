@@ -54,12 +54,13 @@ function progressStages(action: AgentRuntimeNextAction): AgentRuntimeStage[] {
 function clarificationQuestion(decision: Pick<AgentRuntimeDecision, "targetTool" | "missingInputs">, legacyQuestion?: string) {
   if (legacyQuestion) return legacyQuestion;
   if (decision.missingInputs.includes("subject")) {
-    if (decision.targetTool === "ppt-simple") return "可以，我先确认一下：这个 PPT 的主题是什么？需要面向谁、预计多少页？";
+    if (decision.targetTool === "ppt-simple") return "可以，我先确认一下：这个 PPT 的主题是什么？需要面向谁，预计多少页？";
     if (decision.targetTool === "word") return "可以，我先确认一下：这份 Word 文档的主题、文体和大致篇幅是什么？";
     if (decision.targetTool === "teaching-diagram") return "可以，我先确认一下：这张教学架构图围绕哪个主题或材料来生成？";
     return "可以，我先确认一下：你希望围绕什么主题来生成？";
   }
   if (decision.missingInputs.includes("data_source")) return "可以导出成 Excel。请先提供要导出的数据、表格内容，或上传源文件。";
+  if (decision.missingInputs.includes("active_task")) return "我需要先确认你指的是当前对话里的哪一个任务。请告诉我是哪个 PPT、文档或表格，或者重新上传/打开对应任务。";
   if (decision.missingInputs.includes("image_to_edit")) return "可以改图。请告诉我要修改哪张图，或上传需要编辑的图片。";
   if (decision.missingInputs.includes("file")) return "这一步需要源文件，请先上传要处理的文件。";
   return "我先确认一下：你是希望我现在直接执行生成/修改，还是先给你方案和建议？";
@@ -77,7 +78,7 @@ export function planAgentRuntimeIntent(input: AgentRuntimeInput): Omit<AgentRunt
   });
   const skillSelection = matchAgentSkill({ text, input, legacyTask });
   const selectedSkill = skillSelection.selected;
-  const gate = evaluateExecutionGate({ text, legacyTask, skillMatch: selectedSkill, hasActiveTask: Boolean(input.activeTask) });
+  const gate = evaluateExecutionGate({ text, legacyTask, skillMatch: selectedSkill, activeTaskKind: input.activeTask?.kind || null });
   const action = nextAction(gate);
   const intent = selectedSkill.skillId ? intentBySkill[selectedSkill.skillId] || "general_chat" : "general_chat";
   const baseDecision = {

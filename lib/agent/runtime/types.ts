@@ -55,6 +55,7 @@ export type AgentRuntimeContextPack = {
   attachmentSummaries: AgentRuntimeAttachmentSummary[];
   activeTask: AgentRuntimeActiveTaskSummary | null;
   sessionPreferences: string[];
+  memoryHints: string[];
   selectedSkills: string[];
   tokenBudgetHint: AgentRuntimeTokenBudgetHint;
 };
@@ -62,8 +63,10 @@ export type AgentRuntimeContextPack = {
 export type AgentConversationMemory = {
   conversationSummary: string;
   currentUploadedFiles: AgentRuntimeFileSummary;
+  currentActiveTask: AgentRuntimeActiveTaskSummary | null;
   currentTaskStatus: "idle" | "clarifying" | "queued" | "executing";
   userPreferences: string[];
+  sessionReferences: string[];
 };
 
 export type AgentSkillId =

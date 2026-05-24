@@ -21,6 +21,22 @@ function uniqueTopCandidates(candidates: AgentSkillMatch[]) {
     .slice(0, 3);
 }
 
+function wantsPlanOnly(text: string) {
+  return /不要生成|先给方案|先别生成|先不要生成|只给建议|先讲思路|先给我方案|plan first/i.test(text);
+}
+
+function referencesCurrentFile(text: string) {
+  return /这个文件|这份文件|刚才的文件|上一份文件|上传的文件|再总结|总结短一点|短一点|短些|提炼一下/i.test(text);
+}
+
+function referencesCurrentImage(text: string) {
+  return /刚才那张图|上一张图|那张图|这张图|图片标题|改图|图片.*改|标题改成|标题改为/i.test(text);
+}
+
+function referencesCurrentPpt(text: string) {
+  return /继续刚才的\s*ppt|刚才的\s*ppt|上一个\s*ppt|上一份\s*ppt|ppt.*改成|ppt.*正式|改成正式一点/i.test(text);
+}
+
 export function matchAgentSkill({
   text,
   input,
@@ -32,6 +48,27 @@ export function matchAgentSkill({
 }): AgentSkillSelection {
   const normalized = text.toLowerCase();
   const candidates: AgentSkillMatch[] = [];
+  const activeKind = input.activeTask?.kind || "";
+
+  if (wantsPlanOnly(text)) {
+    candidates.push({ skillId: null, confidence: 0.99, reasons: ["user_requested_plan_first"] });
+  }
+
+  if (activeKind === "file-analysis" && referencesCurrentFile(text)) {
+    candidates.push({ skillId: "file-analysis", confidence: 0.9, reasons: ["current_conversation_file_reference"] });
+  } else if (!activeKind && referencesCurrentFile(text)) {
+    candidates.push({ skillId: "file-analysis", confidence: 0.82, reasons: ["missing_current_conversation_file_reference"] });
+  }
+
+  if ((activeKind === "image" || activeKind === "teaching-diagram") && referencesCurrentImage(text)) {
+    candidates.push({ skillId: "image", confidence: 0.9, reasons: ["current_conversation_image_reference"] });
+  }
+
+  if (activeKind === "ppt" && referencesCurrentPpt(text)) {
+    candidates.push({ skillId: "ppt-simple", confidence: 0.84, reasons: ["current_conversation_ppt_reference"] });
+  } else if (!activeKind && referencesCurrentPpt(text)) {
+    candidates.push({ skillId: "ppt-simple", confidence: 0.82, reasons: ["missing_current_conversation_ppt_reference"] });
+  }
 
   if (input.tools?.contentMode === "image") {
     candidates.push({ skillId: "image", confidence: 0.95, reasons: ["selected_image_tool"] });

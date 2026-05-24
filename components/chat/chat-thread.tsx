@@ -33,6 +33,10 @@ export function ChatThread({
     adapterId?: string | null;
     missingInputs?: string[];
     activeTaskId?: string | null;
+    activeTaskKind?: string | null;
+    activeTaskTitle?: string | null;
+    sessionPreferences?: string[];
+    memoryHints?: string[];
   } | null;
   onPreviewAttachment: (attachment: ChatAttachment) => void;
   onOpenFile: (attachment: ChatAttachment) => void;
@@ -159,6 +163,10 @@ function ThinkingStatus({
     adapterId?: string | null;
     missingInputs?: string[];
     activeTaskId?: string | null;
+    activeTaskKind?: string | null;
+    activeTaskTitle?: string | null;
+    sessionPreferences?: string[];
+    memoryHints?: string[];
   } | null;
 }) {
   const mode = getThinkingMode(label);
@@ -223,11 +231,17 @@ function ThinkingStatus({
         </div>
         {agentDebugTrace ? (
           <div className="mt-2 max-w-md rounded-md border border-dashed border-[color:var(--color-border)] bg-[var(--color-soft)] px-3 py-2 text-[11px] leading-5 text-[var(--color-text-muted)]">
-            <span>debug: {agentDebugTrace.intent || "unknown"}</span>
-            <span className="mx-1">/</span>
-            <span>{agentDebugTrace.targetTool || "none"}</span>
-            <span className="mx-1">/</span>
-            <span>{agentDebugTrace.nextAction || "pending"}</span>
+            <div>
+              debug: {agentDebugTrace.intent || "unknown"} / {agentDebugTrace.targetTool || "none"} / {agentDebugTrace.nextAction || "pending"}
+            </div>
+            {agentDebugTrace.activeTaskKind ? (
+              <div>
+                当前识别任务：{agentDebugTrace.activeTaskKind}
+                {agentDebugTrace.activeTaskTitle ? ` / ${agentDebugTrace.activeTaskTitle}` : ""}
+              </div>
+            ) : null}
+            {agentDebugTrace.sessionPreferences?.length ? <div>当前偏好：{agentDebugTrace.sessionPreferences.join(", ")}</div> : null}
+            {agentDebugTrace.memoryHints?.length ? <div>记忆提示：{agentDebugTrace.memoryHints.slice(0, 2).join(" | ")}</div> : null}
           </div>
         ) : null}
       </div>

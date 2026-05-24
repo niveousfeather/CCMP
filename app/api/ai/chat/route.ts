@@ -955,7 +955,23 @@ async function getPendingAgentTask(conversationId: string, userId: string) {
   return isActiveClarification ? (pendingTask as AgentTask) : null;
 }
 
+function taskCardKindToActiveKind(value: unknown): AgentActiveTask["kind"] | null {
+  if (value === "ppt") return "ppt";
+  if (value === "word") return "word";
+  if (value === "excel") return "excel";
+  if (value === "image") return "image";
+  if (value === "file-analysis") return "file-analysis";
+  if (value === "teaching-diagram") return "teaching-diagram";
+  if (value === "knowledge-graph") return "knowledge-graph";
+  return null;
+}
+
 function inferActiveTaskKind(metadata: Record<string, unknown> | null, attachments: Array<{ fileName: string }>): AgentActiveTask["kind"] | null {
+  const taskCard = metadata?.taskCard;
+  if (taskCard && typeof taskCard === "object") {
+    const kind = taskCardKindToActiveKind((taskCard as Record<string, unknown>).taskType);
+    if (kind) return kind;
+  }
   const imageGeneration = metadata?.imageGeneration;
   if (imageGeneration && typeof imageGeneration === "object") return "image";
   const asyncTask = metadata?.asyncTask;
@@ -976,25 +992,59 @@ function inferActiveTaskKind(metadata: Record<string, unknown> | null, attachmen
 }
 
 async function getActiveConversationTask(conversationId: string, userId: string): Promise<AgentActiveTask | null> {
-  const latestAssistant = await prisma.chatMessage.findFirst({
+  const recentAssistants = await prisma.chatMessage.findMany({
     where: {
       role: "assistant",
       conversation: { id: conversationId, userId }
     },
     orderBy: { createdAt: "desc" },
+    take: 10,
     include: {
       attachments: { orderBy: { createdAt: "desc" }, take: 1 }
     }
   });
-  if (!latestAssistant) return null;
-  const metadata = parseJsonObject(latestAssistant.metadata || null);
-  const kind = inferActiveTaskKind(metadata, latestAssistant.attachments);
-  if (!kind) return null;
+
+  for (const assistant of recentAssistants) {
+    const metadata = parseJsonObject(assistant.metadata || null);
+    const kind = inferActiveTaskKind(metadata, assistant.attachments);
+    if (!kind) continue;
+    const taskCard = metadata?.taskCard && typeof metadata.taskCard === "object" ? (metadata.taskCard as Record<string, unknown>) : null;
+    return {
+      id: typeof taskCard?.taskId === "string" && taskCard.taskId ? taskCard.taskId : assistant.id,
+      kind,
+      title:
+        (typeof taskCard?.title === "string" && taskCard.title) ||
+        assistant.attachments[0]?.fileName ||
+        assistant.content.slice(0, 32),
+      status: (typeof taskCard?.status === "string" && taskCard.status) || "active",
+      source: "conversation"
+    };
+  }
+
+  const latestUserAttachment = await prisma.chatAttachment.findFirst({
+    where: {
+      conversationId,
+      userId,
+      message: { role: "user" }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+  if (!latestUserAttachment) return null;
+
+  const fileName = latestUserAttachment.fileName.toLowerCase();
+  const kind: AgentActiveTask["kind"] =
+    fileName.endsWith(".pptx") || fileName.endsWith(".ppt")
+      ? "ppt"
+      : fileName.endsWith(".xlsx") || fileName.endsWith(".csv") || fileName.endsWith(".xls")
+        ? "excel"
+        : latestUserAttachment.mimeType?.startsWith("image/")
+          ? "image"
+          : "file-analysis";
   return {
-    id: latestAssistant.id,
+    id: latestUserAttachment.id,
     kind,
-    title: latestAssistant.attachments[0]?.fileName || latestAssistant.content.slice(0, 32),
-    status: "active",
+    title: latestUserAttachment.fileName,
+    status: "uploaded",
     source: "conversation"
   };
 }
@@ -1275,7 +1325,11 @@ function compactRuntimeDebugTrace(plan: AgentRuntimePlan | null, activeTask: Age
     nextAction: plan.decision.nextAction,
     adapterId: adapterId || null,
     missingInputs: plan.decision.missingInputs,
-    activeTaskId: activeTask?.id || null
+    activeTaskId: activeTask?.id || null,
+    activeTaskKind: activeTask?.kind || null,
+    activeTaskTitle: activeTask?.title || null,
+    sessionPreferences: plan.trace.contextPack.sessionPreferences,
+    memoryHints: plan.trace.contextPack.memoryHints
   };
 }
 

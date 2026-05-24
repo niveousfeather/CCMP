@@ -760,3 +760,113 @@ targetTool 展示方式：
 1. Runtime V2 核心：`lib/agent/runtime/**`、`lib/agent/skills-v2/**`、`lib/agent/router.ts`、`lib/agent/models.ts`、`lib/agent/skills/parse-document.ts`。
 2. Chat API 与流式收口：`app/api/ai/chat/**`、`components/chat/**`、`lib/agent/async-tasks.ts`。
 3. 文档：`docs/agent-chat-runtime-v2-implementation-plan.md`。
+
+## 23. 第十二阶段真实登录态验收与当前对话记忆补强
+
+本阶段目标是补齐安全快照后的真实登录态验收，并增强当前 conversation 内的短期记忆体验。不新增工具，不扩展 adapter，不做长期记忆。
+
+### Git 基线
+
+- 当前分支：`feature/academic-ppt-builtin-templates`。
+- 当前 Agent Runtime V2 安全快照：`7ade063 feat(agent): add runtime v2 chat orchestration`。
+- 暂存区：本阶段开始时为空。
+- 工作区仍有 Academic PPT、`services/**`、教学架构图未跟踪文件、patch 文件等历史脏改；本阶段不触碰这些范围。
+- GitNexus MCP 当前仍不可用，因此无法补跑 `gitnexus_impact` / `gitnexus_detect_changes`。
+
+### 浏览器访问定位
+
+- 初次通过 in-app browser 打开 `http://localhost:3099/chat` 仍出现过 `net::ERR_BLOCKED_BY_CLIENT`。
+- 本地 HTTP 检查发现当时 `localhost:3099` 没有服务监听，`/api/auth/me` 和 `/chat` 都无法连接。
+- 启动 `npm.cmd run dev -- --port 3099` 后，`/api/auth/me` 命令行无 cookie 返回 401，说明 API 鉴权正常。
+- 再次通过 in-app browser 打开 `/chat` 成功，页面处于 admin 登录态，能看到聊天输入框、历史会话和用户信息。
+- 当前判断：之前 blocked/client 主要是本地服务未运行叠加浏览器客户端状态；不是项目业务逻辑问题。
+
+### 当前对话记忆补强
+
+只增强 conversation-level memory：
+
+- `conversation-memory.ts` 修正中文偏好识别规则：
+  - 正式/学术风格；
+  - 中文输出；
+  - 简洁/短一点；
+  - 详细/展开；
+  - “不要生成，先给方案”。
+- `context-pack.ts` 增加 `memoryHints`：
+  - 当前引用对象，例如上一张图片、上一个 PPT、上一份文件；
+  - 当前轮上传文件名；
+  - 当前会话偏好；
+  - 只用于当前请求上下文，不跨会话复用。
+- `getActiveConversationTask` 不再只看最后一条 assistant：
+  - 向前查最近 10 条 assistant；
+  - 优先识别 `taskCard`；
+  - 兼容 `imageGeneration`、`asyncTask`、routeReason、生成附件；
+  - 如果没有任务，再找当前会话最近的用户上传附件，作为 `file-analysis` / `image` / `ppt` / `excel` 的当前引用对象。
+- `skill-router` 补强：
+  - “这个文件 / 刚才的文件 / 再总结短一点”能命中 file-analysis；
+  - “刚才那张图 / 上一张图 / 标题改成”能命中 image；
+  - “继续刚才的 PPT / 上一份 PPT / 改成正式一点”能命中 ppt-simple；
+  - “不要生成，先给方案”优先走 normal chat。
+- `execution-gate` 补强：
+  - 没有 activeTask 时，“继续刚才的 PPT”会追问用户指哪个任务；
+  - 没有 activeTask 或附件时，“这个文件再总结短一点”会追问上传/指定文件；
+  - 图片修改只接受 image / teaching-diagram activeTask，不会把普通文件 activeTask 误当作图片。
+
+### 前端 debug 记忆提示
+
+仅在 dev 或 `debugAgent=1` 返回 trace 时显示轻量调试信息：
+
+- intent / targetTool / nextAction；
+- 当前识别任务 kind/title；
+- 当前会话偏好；
+- memory hints 前两条。
+
+普通用户默认不看内部 JSON、provider/model 或思考链，只通过自然回复感知当前上下文，例如“我会基于刚才那份文件继续总结”或“我找到刚才的 PPT 任务了”。
+
+### 流式任务气泡补丁
+
+真实 PPT 任务验收时发现同一个任务气泡里会把本地 pending 文案和服务端 final 文案拼接成两句相近提示。已调整：
+
+- 任务类 pending 气泡已有本地内容时，token 不再追加到正文；
+- final 固化任务类消息时优先使用服务端 final 内容；
+- 普通聊天流式 token 仍正常追加；
+- 仍保持单 assistant 气泡，不新增第二条。
+
+### 测试矩阵结果
+
+本地 Runtime 矩阵：
+
+| 输入 | 结果 |
+| --- | --- |
+| `随便聊聊` | `general_chat / none / answer_chat` |
+| `PPT怎么做？` | `general_chat / none / answer_chat`，不生成 |
+| `帮我生成一个10页PPT，主题是AI教育` | `ppt_simple / ppt-simple / run_legacy_tool` |
+| `继续刚才的PPT，改成正式一点`，有 PPT activeTask | `ppt_simple / ppt-simple / run_legacy_tool` |
+| `继续刚才的PPT，改成正式一点`，无 activeTask | `ppt_simple / ppt-simple / ask_clarification`，缺 `active_task` |
+| `根据上传文件总结一下`，有 `sample.txt` | `file_analysis / file-analysis / run_legacy_tool` |
+| `这个文件再总结短一点`，有 file activeTask | `file_analysis / file-analysis / run_legacy_tool` |
+| `这个文件再总结短一点`，无 activeTask | `file_analysis / file-analysis / ask_clarification`，缺 `file` |
+| `生成一张科技感教学场景图片` | `image / image / run_legacy_tool` |
+| `把刚才那张图标题改成XXX`，有 image activeTask | `image / image / run_legacy_tool` |
+| `把刚才那张图标题改成XXX`，无 activeTask | `image / image / ask_clarification`，缺 `image_to_edit` |
+| `把这些数据导出成Excel：姓名，成绩；张三，90；李四，85` | `excel / excel / run_legacy_tool` |
+| `这个Excel公式怎么写？` | `general_chat / none / answer_chat`，不生成 xlsx |
+| `不要生成，先给方案，主题是AI教育PPT` | `general_chat / none / answer_chat` |
+
+真实登录态 UI 验收：
+
+- `/chat` 成功打开 admin 登录态页面。
+- `PPT怎么做？`：只聊天，没有 taskCard，状态最终收起，没有重复 assistant 气泡。
+- `帮我生成一个10页PPT，主题是AI教育`：进入 simple PPT 任务卡片，显示 PPT 文件、生成状态和打开/下载入口，没有进入 Academic PPT。
+- `继续刚才的PPT，改成正式一点`：识别当前 PPT 任务，进入 PPT 相关任务/生成状态，没有出现找不到任务的追问。
+- 文件上传类 UI 未强行绕系统文件选择器；本阶段通过 Runtime 矩阵验证“这个文件再总结短一点”的 activeTask 判断。
+
+### 验证
+
+- `npm.cmd exec -- tsc --noEmit`：通过。
+- 前端与 API 均有修改，最终收口需继续运行 `npm.cmd run build`。
+
+### 未解决问题
+
+- in-app browser 偶发 `net::ERR_BLOCKED_BY_CLIENT` 仍可能与客户端扩展/内置策略有关；当 dev server 正常运行后本阶段可打开。
+- 文件上传真实 UI 选择器未自动化覆盖，建议后续人工补测一个小 txt/pdf。
+- 本阶段不提交，等待用户确认是否再做安全提交。
