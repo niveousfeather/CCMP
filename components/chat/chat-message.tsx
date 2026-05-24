@@ -30,10 +30,15 @@ export function ChatMessage({
   const generatedFileAttachments = !isUser
     ? (message.attachments || []).filter(isGeneratedFileAttachment)
     : [];
+  const taskCard =
+    message.taskCard && !isInlineFileAnalysisTaskCard(message.taskCard)
+      ? enrichTaskCardWithAttachment(message.taskCard, generatedFileAttachments[0])
+      : null;
+  const standaloneGeneratedFileAttachments = taskCard ? [] : generatedFileAttachments;
   const regularAttachments = generatedFileAttachments.length
     ? (message.attachments || []).filter((attachment) => !isGeneratedFileAttachment(attachment))
     : message.attachments || [];
-  const [leadContent, followContent] = splitGeneratedDocumentContent(message.content, generatedFileAttachments.length > 0);
+  const [leadContent, followContent] = splitGeneratedDocumentContent(message.content, standaloneGeneratedFileAttachments.length > 0);
   const shouldRevealText = !isUser && Boolean(message.reveal);
 
   return (
@@ -72,27 +77,27 @@ export function ChatMessage({
           </div>
         ) : null}
         {leadContent ? <MessageText content={leadContent} reveal={shouldRevealText} onRevealTick={onRevealTick} /> : null}
-        {message.taskCard ? <UnifiedTaskCard taskCard={message.taskCard} /> : null}
-        {message.imageGeneration && (!message.taskCard || message.imageGeneration.images?.length) ? (
+        {taskCard ? <UnifiedTaskCard taskCard={taskCard} /> : null}
+        {message.imageGeneration && (!taskCard || message.imageGeneration.images?.length) ? (
           <ImageGenerationCard
             imageGeneration={message.imageGeneration}
             onPreviewAttachment={onPreviewAttachment}
             onRetryImageGeneration={onRetryImageGeneration}
           />
         ) : null}
-        {!message.taskCard && message.pendingFileGeneration ? <PendingFileGenerationCard pending={message.pendingFileGeneration} /> : null}
-        {!message.taskCard && message.pendingAgentTask ? <PendingAgentTaskCard pending={message.pendingAgentTask} /> : null}
-        {generatedFileAttachments.length ? (
+        {!taskCard && message.pendingFileGeneration ? <PendingFileGenerationCard pending={message.pendingFileGeneration} /> : null}
+        {!taskCard && message.pendingAgentTask ? <PendingAgentTaskCard pending={message.pendingAgentTask} /> : null}
+        {standaloneGeneratedFileAttachments.length ? (
           <div className="mt-4 grid gap-3">
-            {generatedFileAttachments.map((attachment) => (
+            {standaloneGeneratedFileAttachments.map((attachment) => (
               <GeneratedWordCard key={attachment.id} attachment={attachment} onOpenFile={onOpenFile} />
             ))}
             <button
               type="button"
               className="inline-flex w-fit items-center gap-1 text-sm text-[var(--color-text-muted)] transition hover:text-[var(--color-primary)]"
-              onClick={() => onOpenFile(generatedFileAttachments[0])}
+              onClick={() => onOpenFile(standaloneGeneratedFileAttachments[0])}
             >
-              改用对话直接回答
+              打开生成文件
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -646,6 +651,9 @@ function UnifiedTaskCard({ taskCard }: { taskCard: NonNullable<ChatMessageType["
   const Icon = getTaskCardIcon(taskCard.taskType);
   const statusLabel = isCompleted ? "已完成" : isFailed ? "生成失败" : taskCard.status === "queued" ? "正在创建任务" : "正在生成";
   const accent = getTaskCardAccent(taskCard.taskType, isFailed);
+  const failureReason = sanitizeTaskFailureReason(taskCard.failureReason);
+  const { downloadLabel, openLabel } = getTaskCardActionLabels(taskCard.taskType);
+  const openUrl = taskCard.openUrl && !isInternalTaskPollUrl(taskCard.openUrl) ? taskCard.openUrl : null;
 
   return (
     <div className={cn("mt-4 w-full max-w-[560px] rounded-2xl border bg-white/95 p-4 shadow-sm", accent.border)}>
@@ -663,8 +671,8 @@ function UnifiedTaskCard({ taskCard }: { taskCard: NonNullable<ChatMessageType["
           {taskCard.description ? (
             <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">{taskCard.description}</p>
           ) : null}
-          {isFailed && taskCard.failureReason ? (
-            <p className="mt-2 text-xs leading-5 text-red-600">{taskCard.failureReason}</p>
+          {isFailed && failureReason ? (
+            <p className="mt-2 text-xs leading-5 text-red-600">{failureReason}</p>
           ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             {taskCard.downloadUrl && isCompleted ? (
@@ -673,16 +681,16 @@ function UnifiedTaskCard({ taskCard }: { taskCard: NonNullable<ChatMessageType["
                 className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--color-primary)] px-3 text-xs font-medium text-white transition hover:opacity-90"
               >
                 <Download className="h-3.5 w-3.5" />
-                下载
+                {downloadLabel}
               </a>
             ) : null}
-            {taskCard.openUrl ? (
+            {openUrl ? (
               <a
-                href={taskCard.openUrl}
+                href={openUrl}
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] bg-white px-3 text-xs font-medium text-[var(--color-text)] transition hover:bg-[var(--color-soft)]"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                打开
+                {openLabel}
               </a>
             ) : null}
             {taskCard.retryable ? (
@@ -728,6 +736,45 @@ function getTaskCardAccent(taskType: NonNullable<ChatMessageType["taskCard"]>["t
   if (taskType === "image") return { border: "border-violet-200", bg: "bg-violet-50", text: "text-violet-600", badge: "bg-violet-50 text-violet-700" };
   if (taskType === "teaching-diagram") return { border: "border-teal-200", bg: "bg-teal-50", text: "text-teal-600", badge: "bg-teal-50 text-teal-700" };
   return { border: "border-sky-200", bg: "bg-sky-50", text: "text-sky-600", badge: "bg-sky-50 text-sky-700" };
+}
+
+function enrichTaskCardWithAttachment(
+  taskCard: NonNullable<ChatMessageType["taskCard"]>,
+  attachment?: ChatAttachment
+): NonNullable<ChatMessageType["taskCard"]> {
+  if (!attachment) return taskCard;
+  return {
+    ...taskCard,
+    downloadUrl: taskCard.downloadUrl || attachment.downloadUrl || attachment.url || null,
+    title: taskCard.title || attachment.name
+  };
+}
+
+function getTaskCardActionLabels(taskType: NonNullable<ChatMessageType["taskCard"]>["taskType"]) {
+  if (taskType === "ppt") return { downloadLabel: "下载 PPT", openLabel: "打开任务" };
+  if (taskType === "word") return { downloadLabel: "下载 Word", openLabel: "打开任务" };
+  if (taskType === "excel") return { downloadLabel: "下载 Excel", openLabel: "打开任务" };
+  if (taskType === "image") return { downloadLabel: "下载图片", openLabel: "打开图片任务" };
+  if (taskType === "teaching-diagram") return { downloadLabel: "下载图片", openLabel: "打开工具页" };
+  if (taskType === "knowledge-graph") return { downloadLabel: "下载结果", openLabel: "打开工具页" };
+  return { downloadLabel: "下载结果", openLabel: "打开任务" };
+}
+
+function isInternalTaskPollUrl(url: string) {
+  return /^\/api\/ai\/chat\/tasks\//.test(url);
+}
+
+function isInlineFileAnalysisTaskCard(taskCard: NonNullable<ChatMessageType["taskCard"]>) {
+  return taskCard.taskType === "file-analysis";
+}
+
+function sanitizeTaskFailureReason(reason?: string | null) {
+  if (!reason) return "";
+  if (/provider|model|stack|trace|api[_ -]?key|agentRuntime|routeReason|SyntaxError|TypeError|Error:/i.test(reason)) {
+    return "生成失败，请稍后重试。";
+  }
+  if (/^\s*[{[]/.test(reason)) return "生成失败，请稍后重试。";
+  return reason.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 function UploadedImageCard({

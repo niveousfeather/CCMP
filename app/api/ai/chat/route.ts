@@ -1281,7 +1281,7 @@ function providerErrorFromException(error: unknown, timeoutMs?: number) {
 }
 
 function isAgentDebugRequest(request: NextRequest) {
-  return process.env.NODE_ENV === "development" || request.nextUrl.searchParams.get("debugAgent") === "1";
+  return request.nextUrl.searchParams.get("debugAgent") === "1";
 }
 
 function getRuntimeToolLabel(targetTool?: string) {

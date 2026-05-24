@@ -1266,3 +1266,68 @@ npm.cmd exec -- tsc --noEmit
 - 建议后续补文件分析 fixture 自动化测试，覆盖 txt / docx / pdf multipart 真实 API 请求；
 - 建议后续单独设计 PPT 修改 adapter，明确“上传 PPT 后修改”和“基于上次主题重新生成”的两条路径；
 - 若需要更高质量文件总结，可在本地解析成功后接入受控模型总结，但仍必须只传摘要/节选，不传无关长历史。
+
+## 29. 第十九阶段 聊天页最终体验收口
+
+### 阶段目标
+
+本阶段只优化聊天页展示体验，不新增工具，不扩展 adapter，不修改 Academic PPT、`services/**`、`data/**`、教学架构图业务内部、capability-map，也不重写 Word / Excel / PPT / 图片底层生成器。
+
+### UI 收口内容
+
+本阶段聚焦普通用户能直接看懂的聊天体验：
+
+- 普通聊天只显示 assistant 文本，不显示 taskCard；
+- 文件分析只显示总结回答，不显示 taskCard；
+- 工具任务统一显示一个 taskCard；
+- taskCard 状态文案固定为自然语言：`正在创建任务`、`正在生成`、`已完成`、`生成失败`；
+- taskCard 下载按钮按类型显示为 `下载 PPT`、`下载 Word`、`下载 Excel`、`下载图片`、`下载结果`；
+- 教学架构图、知识图谱等工具入口显示为 `打开工具页`；
+- 内部轮询 API 地址不再作为普通用户的“打开”入口展示；
+- 有 taskCard 时，生成附件下载入口合并进 taskCard，不再额外渲染第二张生成文件卡；
+- taskCard 失败原因在 UI 层做一次清洗，避免显示 provider、model、stack、trace、API key、Runtime JSON 等内部信息。
+
+### taskCard 展示规则
+
+- `ppt` / `word` / `excel` / `image` / `teaching-diagram` / `knowledge-graph`：明确工具任务时显示统一 taskCard；
+- `file-analysis`：即时文件总结，不显示 taskCard；
+- 普通 `answer_chat`：不显示 taskCard；
+- taskCard 与图片预览可以共存，但同一工具任务不重复显示第二个 assistant 气泡或第二张生成文件卡；
+- 刷新恢复时继续以 message metadata 中的 `taskCard` 为准，不重新插入 pending 气泡。
+
+### debug 信息隐藏规则
+
+- 前端只在 URL 包含 `debugAgent=1` 时展示精简 debug trace；
+- chat route 只在 `debugAgent=1` 时返回 `agentRuntimeTrace` / `agentRuntimeDebug`；
+- 普通用户不显示 Runtime trace；
+- 普通用户不显示 provider / model / stack / internal JSON；
+- 普通用户只看到自然语言状态和用户可读错误。
+
+### 验收结果
+
+| 用例 | 预期展示 | 当前结果 |
+| --- | --- | --- |
+| `PPT怎么做？` | 只聊天，无 taskCard | 通过，Runtime 回归保持 `answer_chat` |
+| `帮我生成一个10页PPT，主题是AI教育` | 一个 assistant 气泡，一个 PPT taskCard | 通过，taskCard 统一展示，下载入口合并到卡片 |
+| `把这些数据导出成Excel：姓名，成绩；张三，90；李四，85` | 一个 Excel taskCard，xlsx 下载入口 | 通过，taskCard 下载按钮显示为 `下载 Excel` |
+| `帮我生成一份AI教育培训方案Word文档` | 一个 Word taskCard，docx 下载入口 | 通过，taskCard 下载按钮显示为 `下载 Word` |
+| `生成一张科技感教学场景图片` | 一个图片任务卡片或预览卡片 | 通过，图片 taskCard 与完成预览不重复成第二个 assistant 气泡 |
+| `根据上传文件总结一下` | 直接返回总结，无 taskCard | 通过，file-analysis adapter 返回文本，taskCard 为空 |
+| `生成教学架构图，主题是数字赋能课程改革` | 教学架构图 taskCard，打开/下载入口 | 通过，打开入口显示为 `打开工具页` |
+| `生成知识图谱，主题是人工智能发展史` | 知识图谱 taskCard，打开入口 | 通过，打开入口显示为 `打开工具页` |
+| `继续刚才的PPT，改成正式一点` | 说明 simple PPT 只能重新生成新版并询问确认 | 通过，Runtime 回归包含 `ppt_regeneration_confirmation` |
+| `把刚才那张图标题改成XXX` | 有 image activeTask 时继续；没有时追问 | 通过，Runtime 回归覆盖有/无 image activeTask |
+
+### 验证命令
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
+npm.cmd exec -- tsc --noEmit
+```
+
+### 未解决问题
+
+- 本阶段未新增浏览器自动化截图脚本；
+- 真实工具下载入口仍依赖各工具任务完成后的 metadata / attachment 写入；
+- `继续生成` 和 taskCard `重试` 仍是占位入口，后续可单独接入恢复/重试能力；
+- 若后续要进一步做到 ChatGPT 式“思考耗时”展示，应作为独立阶段处理。

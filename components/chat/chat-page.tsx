@@ -421,6 +421,7 @@ export function ChatPage() {
   }, [searchParams, activeConversationId]);
 
   const messages = messagesByConversation[activeConversationId] || [];
+  const debugAgentEnabled = searchParams.get("debugAgent") === "1";
   const isEmptyChat = activeView === "chat" && !requestedConversationId && messages.length === 0 && !loading;
   const shouldShowWelcomePrompts = isEmptyChat && attachments.length === 0;
   const isLoadingRequestedConversation =
@@ -839,7 +840,7 @@ export function ChatPage() {
         const statusSteps = data.runtimeStatus?.events?.filter((event) => event.visible).map((event) => event.label) || data.runtimeStatus?.steps || [];
         setRuntimeStatusSteps(statusSteps);
         setLoadingLabel(data.runtimeStatus?.completedLabel || "已完成");
-        setAgentDebugTrace(data.agentRuntimeTrace || null);
+        setAgentDebugTrace(debugAgentEnabled ? data.agentRuntimeTrace || null : null);
         return { failed: false as const, data };
       }
 
@@ -1153,7 +1154,7 @@ export function ChatPage() {
         if (hasFinalized) return;
         hasFinalized = true;
         finalData = item.data;
-        if (item.data.agentRuntimeTrace) setAgentDebugTrace(item.data.agentRuntimeTrace);
+        if (debugAgentEnabled && item.data.agentRuntimeTrace) setAgentDebugTrace(item.data.agentRuntimeTrace);
         const accumulated = accumulatedText;
         const finalMessage = item.data.assistantMessage || {
           id: item.data.messageId || pendingAssistantId,
@@ -1599,7 +1600,7 @@ export function ChatPage() {
             loading={loading && !hasLocalPendingAssistantMessage(messages)}
             loadingLabel={loadingLabel}
             runtimeStatusSteps={runtimeStatusSteps}
-            agentDebugTrace={agentDebugTrace}
+            agentDebugTrace={debugAgentEnabled ? agentDebugTrace : null}
             onPreviewAttachment={setPreviewAttachment}
             onOpenFile={openFileNotice}
             onRetryImageGeneration={retryImageGeneration}
