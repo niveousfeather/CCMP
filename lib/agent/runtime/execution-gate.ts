@@ -9,6 +9,10 @@ function hasExecutionVerb(text: string) {
   return /生成|创建|制作|导出|下载|保存|分析|总结|读取|转换|修改|编辑|改成|改为|换成|标题|构建|帮我|给我|做一个|做一份|继续刚才|再总结|generate|create|make|export|download|analyze|summarize|convert|edit|build/i.test(text);
 }
 
+function hasModernChineseExecutionVerb(text: string) {
+  return /生成|创建|制作|导出|下载|保存|分析|总结|读取|转换|修改|编辑|整理|做成|新增|增加|整理成/i.test(text);
+}
+
 function isHowToQuestion(text: string) {
   return /怎么|如何|怎样|怎么做|怎么写|怎么制作|怎么生成|解释|介绍|建议|how to|what is/i.test(text);
 }
@@ -19,6 +23,14 @@ function wantsPlanOnly(text: string) {
 
 function referencesPriorObject(text: string) {
   return /刚才|上一|上一个|上一份|这个文件|这份文件|那张图|这张图|继续/i.test(text);
+}
+
+function referencesCurrentFileForExcel(text: string) {
+  return /这个文件|这份文件|上传文件|根据.*文件/i.test(text);
+}
+
+function modifiesSpreadsheetFile(text: string) {
+  return /这个\s*excel|这份\s*excel|已有\s*excel|excel.*增加|增加.*平均分|新增.*列|导出新版|修改.*excel/i.test(text);
 }
 
 function hasSubjectAfterToolMention(text: string, skillId: string | null) {
@@ -48,13 +60,21 @@ function buildMissingInputs(text: string, legacyTask: AgentTask, skillId: string
       .map((field) => String(field))
       .filter((field) => {
         if (field === "fileName" && (skillId === "ppt-simple" || skillId === "word" || skillId === "excel")) return false;
+        if ((field === "documentType" || field === "style" || field === "length") && skillId === "excel") return false;
         if ((field === "style" || field === "length") && (skillId === "word" || skillId === "ppt-simple")) return false;
         return true;
       })
   );
+  if (skillId === "excel" && activeTaskKind === "file-analysis") missing.delete("file");
   if (skillId && subjectRequiredSkills.has(skillId) && !hasSubjectAfterToolMention(text, skillId)) missing.add("subject");
   if (skillId === "excel" && /导出|export/i.test(text) && !legacyTask.hasFiles && !hasInlineDataSource(text)) {
     missing.add("data_source");
+  }
+  if (skillId === "excel" && referencesCurrentFileForExcel(text) && !legacyTask.hasFiles && !activeTaskKind) {
+    missing.add("file");
+  }
+  if (skillId === "excel" && modifiesSpreadsheetFile(text) && !legacyTask.hasFiles) {
+    missing.add("spreadsheet_file");
   }
   if ((skillId === "ppt-simple" || skillId === "word" || skillId === "excel" || skillId === "file-analysis") && referencesPriorObject(text) && !legacyTask.hasFiles && !activeTaskKind) {
     missing.add(skillId === "file-analysis" ? "file" : "active_task");
@@ -89,7 +109,7 @@ export function evaluateExecutionGate({
 
   const skillId = skillMatch.skillId;
   const needsTool = Boolean(skillId && toolSkills.has(skillId));
-  const executionIntent = hasExecutionVerb(text);
+  const executionIntent = hasExecutionVerb(text) || hasModernChineseExecutionVerb(text);
   const advisoryQuestion = isHowToQuestion(text);
   const missingInputs = buildMissingInputs(text, legacyTask, skillId, activeTaskKind);
   const reasons: string[] = [];

@@ -77,7 +77,7 @@ export function ChatMessage({
           </div>
         ) : null}
         {leadContent ? <MessageText content={leadContent} reveal={shouldRevealText} onRevealTick={onRevealTick} /> : null}
-        {taskCard ? <UnifiedTaskCard taskCard={taskCard} /> : null}
+        {taskCard ? <GeneratedFileCard taskCard={taskCard} createdAt={message.createdAt} /> : null}
         {message.imageGeneration && (!taskCard || message.imageGeneration.images?.length) ? (
           <ImageGenerationCard
             imageGeneration={message.imageGeneration}
@@ -831,6 +831,279 @@ function downloadImage(src: string, filename: string) {
   document.body.appendChild(link);
   link.click();
   link.remove();
+}
+
+type GeneratedFileKind = "word" | "excel" | "ppt" | "pdf" | "image" | "teaching-diagram" | "knowledge-graph" | "other";
+
+function GeneratedFileCard({
+  taskCard,
+  createdAt
+}: {
+  taskCard: NonNullable<ChatMessageType["taskCard"]>;
+  createdAt: string;
+}) {
+  const fileKind = getGeneratedFileKind(taskCard);
+  const visual = getGeneratedCardVisual(fileKind, taskCard.status === "failed");
+  const isRunning = taskCard.status === "queued" || taskCard.status === "running";
+  const isCompleted = taskCard.status === "completed";
+  const isFailed = taskCard.status === "failed";
+  const downloadUrl = isCompleted ? taskCard.downloadUrl || null : null;
+  const title = getGeneratedCardTitle(taskCard);
+  const meta = `${visual.typeLabel} / ${createdAt}`;
+  const className = cn(
+    "group/generated relative mt-4 flex h-32 w-full max-w-[560px] items-center overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[var(--color-panel)] px-6 py-5 text-left no-underline shadow-[0_18px_46px_rgba(15,23,42,0.10)] transition duration-200 ease-out sm:w-[560px]",
+    downloadUrl
+      ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_26px_68px_rgba(15,23,42,0.16)]"
+      : "cursor-not-allowed opacity-82",
+    downloadUrl ? visual.hover : null
+  );
+  const content = (
+    <>
+      <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]">
+        <span className={cn("absolute -left-10 -top-12 h-40 w-52 rounded-[42%] opacity-45 blur-sm transition duration-200 group-hover/generated:translate-x-1 group-hover/generated:scale-105", visual.wash)} />
+        <span className={cn("absolute -bottom-12 left-8 h-28 w-48 rounded-[55%] opacity-28 transition duration-200 group-hover/generated:-translate-y-1", visual.wash)} />
+        <span className="absolute right-16 top-9 grid gap-2 opacity-55 transition duration-200 group-hover/generated:-translate-x-1">
+          <span className={cn("h-2 w-28 rounded-full", visual.line)} />
+          <span className={cn("h-2 w-20 rounded-full", visual.line)} />
+          <span className={cn("h-2 w-14 rounded-full", visual.line)} />
+        </span>
+      </span>
+      <span className={cn("relative z-10 grid h-[76px] w-[76px] shrink-0 place-items-center rounded-[18px] text-white shadow-sm transition duration-200 group-hover/generated:-translate-y-0.5 group-hover/generated:scale-[1.03]", visual.icon)}>
+        {isRunning ? <Loader2 className="h-7 w-7 animate-spin text-white" /> : <span className={cn("font-extrabold leading-none !text-white", visual.label.length > 1 ? "text-[19px]" : "text-[36px]")}>{visual.label}</span>}
+      </span>
+      <span className="relative z-10 ml-5 min-w-0 flex-1 pr-12">
+        <span className="block truncate text-[15px] font-semibold leading-6 text-[var(--color-text)]">{title}</span>
+        <span className="mt-2 block truncate text-xs text-[var(--color-text-muted)]">{meta}</span>
+      </span>
+      {downloadUrl ? (
+        <span className="absolute bottom-4 right-4 z-10 grid h-9 w-9 translate-y-1 place-items-center rounded-full border border-[color:var(--color-border)] bg-[color-mix(in_srgb,var(--color-panel)_88%,transparent)] text-[var(--color-text)] opacity-0 shadow-sm backdrop-blur transition duration-200 group-hover/generated:translate-y-0 group-hover/generated:opacity-100">
+          <Download className="h-4 w-4" />
+        </span>
+      ) : null}
+      {isFailed ? (
+        <span className="absolute bottom-4 right-4 z-10 rounded-full border border-red-200 bg-[color-mix(in_srgb,#ef4444_8%,var(--color-panel))] px-2.5 py-1 text-xs text-red-600">
+          失败
+        </span>
+      ) : null}
+      {!downloadUrl && isRunning ? (
+        <span className="absolute bottom-4 right-4 z-10 grid h-9 w-9 place-items-center rounded-full border border-[color:var(--color-border)] bg-[color-mix(in_srgb,var(--color-panel)_88%,transparent)] text-[var(--color-text-muted)] shadow-sm">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (downloadUrl) {
+    return (
+      <a href={downloadUrl} className={className} title={title}>
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <div className={className} title={title} aria-disabled="true">
+      {content}
+    </div>
+  );
+}
+
+function getGeneratedCardTitle(taskCard: NonNullable<ChatMessageType["taskCard"]>) {
+  const preferred = taskCard.description || taskCard.title;
+  return preferred.replace(/\s+/g, " ").trim() || taskCard.title;
+}
+
+function getGeneratedCardVisual(fileKind: GeneratedFileKind, failed: boolean) {
+  if (failed) {
+    return {
+      label: "!",
+      typeLabel: "生成文件",
+      hover: "hover:border-[color:var(--color-border-strong)] hover:bg-[color-mix(in_srgb,#ef4444_6%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-red-400 via-red-500 to-red-700",
+      wash: "bg-red-200/55",
+      line: "bg-red-200/60"
+    };
+  }
+  if (fileKind === "excel") {
+    return {
+      label: "X",
+      typeLabel: "Excel 表格",
+      hover: "hover:border-[color:var(--color-border-strong)] hover:bg-[color-mix(in_srgb,#10b981_6%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-emerald-400 via-emerald-600 to-green-800",
+      wash: "bg-emerald-200/55",
+      line: "bg-emerald-200/60"
+    };
+  }
+  if (fileKind === "ppt") {
+    return {
+      label: "P",
+      typeLabel: "PPT 演示文稿",
+      hover: "hover:border-[color:var(--color-border-strong)] hover:bg-[color-mix(in_srgb,#f97316_6%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-orange-400 via-orange-600 to-red-600",
+      wash: "bg-orange-200/55",
+      line: "bg-orange-200/60"
+    };
+  }
+  if (fileKind === "pdf") {
+    return {
+      label: "PDF",
+      typeLabel: "PDF 文档",
+      hover: "hover:border-[color:var(--color-border-strong)] hover:bg-[color-mix(in_srgb,#ef4444_6%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-red-400 via-red-500 to-red-700",
+      wash: "bg-red-200/55",
+      line: "bg-red-200/60"
+    };
+  }
+  if (fileKind === "word") {
+    return {
+      label: "W",
+      typeLabel: "Word 文档",
+      hover: "hover:border-[color:var(--color-border-strong)] hover:bg-[color-mix(in_srgb,#2563eb_6%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-blue-400 via-blue-600 to-blue-800",
+      wash: "bg-blue-200/55",
+      line: "bg-blue-200/60"
+    };
+  }
+  return {
+    label: fileKind === "image" ? "IMG" : "AI",
+    typeLabel: "生成结果",
+    hover: "hover:border-[color:var(--color-border-strong)] hover:bg-[var(--color-hover)]",
+    icon: "bg-gradient-to-br from-sky-400 via-blue-600 to-indigo-700",
+    wash: "bg-sky-200/45",
+    line: "bg-sky-200/50"
+  };
+}
+
+function GeneratedTaskFileCard({ taskCard }: { taskCard: NonNullable<ChatMessageType["taskCard"]> }) {
+  const fileKind = getGeneratedFileKind(taskCard);
+  const visual = getGeneratedFileVisual(fileKind, taskCard.status === "failed");
+  const isRunning = taskCard.status === "queued" || taskCard.status === "running";
+  const isCompleted = taskCard.status === "completed";
+  const isFailed = taskCard.status === "failed";
+  const statusLabel = isCompleted ? "已完成" : isFailed ? "生成失败" : taskCard.status === "queued" ? "正在创建任务" : "正在生成";
+  const failureReason = sanitizeTaskFailureReason(taskCard.failureReason);
+  const { downloadLabel, openLabel } = getTaskCardActionLabels(taskCard.taskType);
+  const openUrl = taskCard.openUrl && !isInternalTaskPollUrl(taskCard.openUrl) ? taskCard.openUrl : null;
+  const primaryUrl = isCompleted && taskCard.downloadUrl ? taskCard.downloadUrl : openUrl;
+  const actionLabel = taskCard.downloadUrl ? downloadLabel : openLabel;
+  const disabledHint = isFailed ? "可稍后重试" : "生成完成后可下载";
+  const subtitle = isFailed && failureReason ? failureReason : taskCard.description || (primaryUrl ? "点击卡片下载" : disabledHint);
+  const baseClass = cn(
+    "group/generated mt-4 flex w-full max-w-[420px] items-center gap-3 rounded-2xl border bg-[var(--color-panel)] p-3 text-left no-underline shadow-[0_12px_34px_rgba(15,23,42,0.08)] transition duration-200 ease-out",
+    primaryUrl
+      ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(15,23,42,0.12)]"
+      : "cursor-not-allowed opacity-80",
+    visual.border,
+    primaryUrl ? visual.hover : null
+  );
+  const body = (
+    <>
+      <span className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white shadow-sm transition duration-200 group-hover/generated:-translate-y-0.5", visual.icon)}>
+        {isRunning ? <Loader2 className="h-5 w-5 animate-spin" /> : <span className={cn("font-black leading-none", visual.label.length > 1 ? "text-sm" : "text-[22px]")}>{visual.label}</span>}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-[var(--color-text)]">{taskCard.title}</span>
+          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", visual.badge)}>{statusLabel}</span>
+        </span>
+        <span className="mt-1 block truncate text-xs text-[var(--color-text-muted)]">{subtitle}</span>
+        <span className="mt-2 flex items-center gap-2">
+          <span className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition duration-200", visual.action)}>
+            {primaryUrl ? <Download className="h-3.5 w-3.5" /> : <Loader2 className={cn("h-3.5 w-3.5", isRunning && "animate-spin")} />}
+            {primaryUrl ? actionLabel : disabledHint}
+          </span>
+          {primaryUrl ? <span className="hidden text-xs text-[var(--color-text-faint)] sm:inline">点击卡片下载</span> : null}
+        </span>
+      </span>
+    </>
+  );
+
+  if (primaryUrl) {
+    return (
+      <a href={primaryUrl} className={baseClass} title={`${actionLabel}: ${taskCard.description || taskCard.title}`}>
+        {body}
+      </a>
+    );
+  }
+
+  return (
+    <div className={baseClass} title={disabledHint} aria-disabled="true">
+      {body}
+    </div>
+  );
+}
+
+function getGeneratedFileKind(taskCard: NonNullable<ChatMessageType["taskCard"]>): GeneratedFileKind {
+  const source = `${taskCard.title || ""} ${taskCard.description || ""} ${taskCard.downloadUrl || ""}`.toLowerCase();
+  if (taskCard.taskType === "word" || /\.(docx?|doc)(?:$|[?#])/.test(source)) return "word";
+  if (taskCard.taskType === "excel" || /\.(xlsx?|csv)(?:$|[?#])/.test(source)) return "excel";
+  if (taskCard.taskType === "ppt" || /\.(pptx?|ppt)(?:$|[?#])/.test(source)) return "ppt";
+  if (/\.pdf(?:$|[?#])/.test(source)) return "pdf";
+  if (taskCard.taskType === "image") return "image";
+  if (taskCard.taskType === "teaching-diagram") return "teaching-diagram";
+  if (taskCard.taskType === "knowledge-graph") return "knowledge-graph";
+  return "other";
+}
+
+function getGeneratedFileVisual(fileKind: GeneratedFileKind, failed: boolean) {
+  if (failed) {
+    return {
+      label: "!",
+      border: "border-red-200",
+      hover: "hover:border-red-300 hover:bg-[color-mix(in_srgb,#ef4444_8%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-red-400 via-red-500 to-red-700",
+      badge: "bg-[color-mix(in_srgb,#ef4444_10%,var(--color-panel))] text-red-600",
+      action: "border-red-200 bg-[color-mix(in_srgb,#ef4444_8%,var(--color-panel))] text-red-600"
+    };
+  }
+  if (fileKind === "excel") {
+    return {
+      label: "X",
+      border: "border-emerald-200",
+      hover: "hover:border-emerald-300 hover:bg-[color-mix(in_srgb,#10b981_7%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-emerald-400 via-emerald-600 to-green-800",
+      badge: "bg-[color-mix(in_srgb,#10b981_10%,var(--color-panel))] text-emerald-600",
+      action: "border-emerald-200 bg-[color-mix(in_srgb,#10b981_8%,var(--color-panel))] text-emerald-600"
+    };
+  }
+  if (fileKind === "ppt") {
+    return {
+      label: "P",
+      border: "border-orange-200",
+      hover: "hover:border-orange-300 hover:bg-[color-mix(in_srgb,#f97316_7%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-orange-400 via-orange-600 to-red-600",
+      badge: "bg-[color-mix(in_srgb,#f97316_10%,var(--color-panel))] text-orange-600",
+      action: "border-orange-200 bg-[color-mix(in_srgb,#f97316_8%,var(--color-panel))] text-orange-600"
+    };
+  }
+  if (fileKind === "pdf") {
+    return {
+      label: "PDF",
+      border: "border-red-200",
+      hover: "hover:border-red-300 hover:bg-[color-mix(in_srgb,#ef4444_7%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-red-400 via-red-500 to-red-700",
+      badge: "bg-[color-mix(in_srgb,#ef4444_10%,var(--color-panel))] text-red-600",
+      action: "border-red-200 bg-[color-mix(in_srgb,#ef4444_8%,var(--color-panel))] text-red-600"
+    };
+  }
+  if (fileKind === "word") {
+    return {
+      label: "W",
+      border: "border-blue-200",
+      hover: "hover:border-blue-300 hover:bg-[color-mix(in_srgb,#2563eb_7%,var(--color-panel))]",
+      icon: "bg-gradient-to-br from-blue-400 via-blue-600 to-blue-800",
+      badge: "bg-[color-mix(in_srgb,#2563eb_10%,var(--color-panel))] text-blue-600",
+      action: "border-blue-200 bg-[color-mix(in_srgb,#2563eb_8%,var(--color-panel))] text-blue-600"
+    };
+  }
+  return {
+    label: fileKind === "image" ? "IMG" : "AI",
+    border: "border-[color:var(--color-border)]",
+    hover: "hover:border-[color:var(--color-border-strong)] hover:bg-[var(--color-hover)]",
+    icon: "bg-gradient-to-br from-sky-400 via-blue-600 to-indigo-700",
+    badge: "bg-[var(--color-soft)] text-[var(--color-text)]",
+    action: "border-[color:var(--color-border)] bg-[var(--color-soft)] text-[var(--color-text)]"
+  };
 }
 
 function splitGeneratedDocumentContent(content: string, hasGeneratedWord: boolean) {

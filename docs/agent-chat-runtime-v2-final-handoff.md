@@ -372,3 +372,132 @@ AGENT_E2E_COOKIE=<真实浏览器登录 cookie>
 - 补真实登录 cookie 下的 multipart API E2E；
 - 补浏览器上传流程自动化；
 - 如需覆盖“解析前中断恢复”，先为 storage adapter 增加受控读取接口，并继续限制在当前 conversation 内。
+
+## 12. 第 22 阶段补充：聊天原生 Excel 能力与独立 Excel Engine
+
+第 22 阶段把 Excel 从“旧技能链路里的基础占位能力”收束为一个独立后端模块。聊天仍然只是入口，不做 Excel 独立页面，不做在线编辑器。
+
+### 架构边界
+
+- Agent Runtime：只负责判断是否需要 Excel、是否缺少文件或数据。
+- `excel-adapter`：只负责桥接、输入校验、整理请求和返回 taskCard / generatedFiles。
+- `lib/excel-engine/**`：负责真正的 `.xlsx` 生成、解析、修改、样式化和输出。
+- Chat UI：继续使用统一 taskCard 和现有附件下载入口，不新增 Excel 页面。
+
+### Excel Engine 目录
+
+```text
+lib/excel-engine/
+  README.md
+  generate-xlsx.ts
+  index.ts
+  parse-xlsx.ts
+  style-presets.ts
+  types.ts
+  validate-blueprint.ts
+  workbook-blueprint.ts
+```
+
+### 依赖选择
+
+项目已有：
+
+- `xlsx`
+- `jszip`
+- `papaparse`
+
+本阶段没有新增 `exceljs`，没有修改 package 或 lock 文件。实现策略是用 `xlsx` 读写 workbook 基础结构，再用 `jszip` 后处理 OOXML 样式、冻结窗格和筛选等结构。
+
+### WorkbookBlueprint
+
+Excel Engine 的核心输入是可序列化蓝图：
+
+- `WorkbookBlueprint`
+- `SheetBlueprint`
+- `ColumnBlueprint`
+- `FormulaBlueprint`
+
+蓝图负责描述标题、sheet、列、行、公式、汇总行、冻结表头、自动筛选和列宽。Agent 不直接拼 Excel 文件。
+
+### 默认样式
+
+当前只有一个正式模板 `formal`：
+
+- 标题行合并；
+- 表头深色背景、白字、加粗；
+- 数据区细边框；
+- 斑马纹；
+- 冻结标题/表头区域；
+- 自动筛选；
+- 数字、金额、百分比列使用基础格式；
+- 汇总行强调；
+- sheet 名和文件名会清理非法字符。
+
+### 数据来源边界
+
+允许的数据来源：
+
+- 用户当前消息里的结构化数据；
+- 当前 conversation 文件解析出的 `extractedText` / `textPreview`；
+- 当前请求上传的 txt/docx/pdf；
+- 当前请求上传的 xlsx；
+- 用户明确要求的空白模板字段。
+
+禁止：
+
+- 没有数据时编造真实成绩、销售额、金额；
+- 跨 conversation 查文件；
+- 读取长期用户记忆；
+- 保存长期偏好；
+- 把 Excel 生成逻辑塞进 chat route 或 Runtime。
+
+缺少数据时返回：
+
+```text
+请提供要整理的数据，或上传文件后我再生成 Excel。
+```
+
+### 当前支持能力
+
+- 文本数据导出 Excel；
+- 学生成绩统计模板；
+- 销售统计模板；
+- 多 sheet 工作簿；
+- 当前 conversation 文件摘要整理成 Excel；
+- 上传 xlsx 后导出新版，当前支持增加平均分等基础公式列；
+- 统一 Excel taskCard，下载入口复用现有附件链路。
+
+### 当前不支持
+
+- Excel 独立页面；
+- 在线表格编辑器；
+- 复杂 BI；
+- 数据透视；
+- 复杂图表；
+- 公式工作台；
+- 跨 conversation 修改旧 Excel；
+- 没有上传 xlsx 时直接修改已有 Excel；
+- 完整保留旧 xlsx 的复杂样式、宏、图表。
+
+### 回归测试
+
+新增：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-excel-engine.ts
+```
+
+当前结果：
+
+- `check-excel-engine.ts`：通过；
+- `check-runtime-v2.ts`：通过，22/22 PASS；
+- `check-file-analysis-upload.ts`：通过，真实 API E2E 因缺少 `AGENT_E2E_COOKIE` 明确跳过；
+- `tsc --noEmit`：通过。
+
+### 后续建议
+
+- 补真实登录态聊天 E2E，验证 Excel taskCard 下载链接；
+- 增加 CSV 上传整理；
+- 扩展预算、项目进度、客户跟进等模板；
+- 单独设计 Excel 修改能力矩阵；
+- 若后续需要复杂图表和更强样式，再评估 `exceljs` 或专用 OOXML 写入层。

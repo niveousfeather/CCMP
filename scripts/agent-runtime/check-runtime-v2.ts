@@ -54,6 +54,36 @@ const cases: RuntimeCase[] = [
     expected: { targetTool: "excel", nextAction: "run_legacy_tool" }
   },
   {
+    name: "Excel 学生成绩模板调用工具",
+    input: "帮我做一个学生成绩统计表，包含总分和平均分",
+    runtimeInput: input("帮我做一个学生成绩统计表，包含总分和平均分"),
+    expected: { targetTool: "excel", nextAction: "run_legacy_tool" }
+  },
+  {
+    name: "Excel 多 sheet 调用工具",
+    input: "生成一个三张表的Excel：学生信息、成绩明细、统计汇总",
+    runtimeInput: input("生成一个三张表的Excel：学生信息、成绩明细、统计汇总"),
+    expected: { targetTool: "excel", nextAction: "run_legacy_tool" }
+  },
+  {
+    name: "当前对话有文件时整理成 Excel",
+    input: "根据这个文件整理成Excel",
+    runtimeInput: input("根据这个文件整理成Excel", { activeTask: { id: "file-task-1", kind: "file-analysis", title: "report.txt", status: "completed" } }),
+    expected: { targetTool: "excel", nextAction: "run_legacy_tool" }
+  },
+  {
+    name: "无文件时整理成 Excel 先追问",
+    input: "根据这个文件整理成Excel",
+    runtimeInput: input("根据这个文件整理成Excel"),
+    expected: { targetTool: "excel", nextAction: "ask_clarification", missingIncludes: ["file"] }
+  },
+  {
+    name: "无上传 xlsx 时修改 Excel 先追问",
+    input: "把这个Excel增加一列平均分",
+    runtimeInput: input("把这个Excel增加一列平均分"),
+    expected: { targetTool: "excel", nextAction: "ask_clarification", missingIncludes: ["spreadsheet_file"] }
+  },
+  {
     name: "Word 生成调用工具",
     input: "帮我生成一份AI教育培训方案Word文档",
     runtimeInput: input("帮我生成一份AI教育培训方案Word文档"),
@@ -118,6 +148,23 @@ const cases: RuntimeCase[] = [
     input: "生成知识图谱，主题是人工智能发展史",
     runtimeInput: input("生成知识图谱，主题是人工智能发展史"),
     expected: { targetTool: "knowledge-graph", nextAction: "run_legacy_tool" }
+  },
+  {
+    name: "Excel explicit output wins over write content mode",
+    input: "\u628a\u8fd9\u4e9b\u6570\u636e\u5bfc\u51fa\u6210Excel\uff1a\u59d3\u540d\uff0c\u6210\u7ee9\uff1b\u5f20\u4e09\uff0c90\uff1b\u674e\u56db\uff0c85",
+    runtimeInput: input("\u628a\u8fd9\u4e9b\u6570\u636e\u5bfc\u51fa\u6210Excel\uff1a\u59d3\u540d\uff0c\u6210\u7ee9\uff1b\u5f20\u4e09\uff0c90\uff1b\u674e\u56db\uff0c85", {
+      tools: { webSearch: false, contentMode: "write" }
+    }),
+    expected: { targetTool: "excel", nextAction: "run_legacy_tool" }
+  },
+  {
+    name: "File to Excel wins over write content mode",
+    input: "\u6839\u636e\u8fd9\u4e2a\u6587\u4ef6\u6574\u7406\u6210Excel",
+    runtimeInput: input("\u6839\u636e\u8fd9\u4e2a\u6587\u4ef6\u6574\u7406\u6210Excel", {
+      activeTask: { id: "file-task-1", kind: "file-analysis", title: "report.txt", status: "completed" },
+      tools: { webSearch: false, contentMode: "write" }
+    }),
+    expected: { targetTool: "excel", nextAction: "run_legacy_tool" }
   }
 ];
 

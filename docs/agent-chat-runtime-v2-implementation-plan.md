@@ -1228,6 +1228,183 @@ npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
 npm.cmd exec -- tsc --noEmit
 ```
 
+## 32. 第 22 阶段：聊天原生 Excel 能力与独立 Excel Engine
+
+### 阶段目标
+
+第 22 阶段让用户在聊天里明确需要 Excel 文件时，能拿到可下载、可打开、有基础格式的 `.xlsx`。本阶段不做 Excel 独立页面，不做在线表格编辑器，不做 BI、数据透视、复杂图表或公式工作台。
+
+### 审计结论
+
+- 旧 `lib/agent/runtime/tool-adapters/excel-adapter.ts` 只是桥接到 `runLegacyAgent()`，真正 xlsx 生成在旧 `lib/spreadsheet/**` 技能链路中。
+- 旧 `lib/spreadsheet/create.ts` 会按销售、预算、项目等模板自动生成示例数据；这不符合本阶段“没有数据时不能编造真实数据”的边界。
+- 当前项目已有 `xlsx`、`jszip`、`papaparse`，没有 `exceljs`。
+- `xlsx` 可读写 workbook 基础结构，但样式能力有限；本阶段没有新增依赖，而是在独立 Excel Engine 中复用 `xlsx + jszip` 生成 workbook 并后处理 OOXML 样式。
+- 聊天 taskCard 下载入口可复用现有 generatedFiles / chat attachment 保存链路。
+- 上传 xlsx 可通过 `xlsx` 读取 workbook、sheet、headers、rows 和公式。
+
+### 独立 Excel Engine
+
+新增目录：
+
+```text
+lib/excel-engine/
+  README.md
+  generate-xlsx.ts
+  index.ts
+  parse-xlsx.ts
+  style-presets.ts
+  types.ts
+  validate-blueprint.ts
+  workbook-blueprint.ts
+```
+
+职责边界：
+
+- Agent Runtime 只负责意图识别、参数校验和选择 `excel`；
+- `excel-adapter` 只负责桥接、输入校验、从用户消息/当前 conversation 文件整理请求；
+- Excel Engine 负责真正生成、解析、修改、样式化 `.xlsx`；
+- Excel Engine 不依赖 Chat UI，也不依赖 Agent Runtime 内部决策。
+
+### WorkbookBlueprint 摘要
+
+核心结构：
+
+```ts
+type WorkbookBlueprint = {
+  title: string;
+  description?: string;
+  sheets: SheetBlueprint[];
+  defaultStylePreset: "formal";
+  fileName?: string;
+  template?: boolean;
+};
+```
+
+`SheetBlueprint` 包含：
+
+- `name`
+- `title`
+- `columns`
+- `rows`
+- `formulas`
+- `summaryRows`
+- `freezeHeader`
+- `autoFilter`
+- `columnWidths`
+- `notes`
+
+`ColumnBlueprint` 包含：
+
+- `key`
+- `header`
+- `type: string | number | date | currency | percent | formula`
+- `width`
+- `required`
+
+### 默认样式模板
+
+当前统一使用 `formal` 模板：
+
+- 标题行合并单元格；
+- 标题加粗、字号更大；
+- 表头深色背景、白字、加粗；
+- 数据区细边框；
+- 斑马纹行底色；
+- 冻结标题/表头区域；
+- 自动筛选；
+- 自动列宽；
+- 数字/金额/百分比列使用对应格式样式；
+- 汇总行加粗；
+- sheet 名称清理非法字符；
+- 文件名清理非法字符，保留中文。
+
+### 数据来源限制
+
+允许：
+
+- 用户当前消息里的结构化数据；
+- 当前 conversation 上传文件解析出的 `extractedText` / `textPreview`；
+- 当前请求上传的 txt/docx/pdf 文本内容；
+- 当前请求上传的 xlsx workbook；
+- 用户明确要求的空白模板字段。
+
+禁止：
+
+- 没有数据时自动编造成绩、销售额、金额等真实数据；
+- 跨 conversation 找文件；
+- 读取长期用户记忆；
+- 把文件全文塞进长期 memory；
+- 在 app/api/ai/chat/route.ts 或 Runtime 内部拼 Excel 文件。
+
+缺少数据时返回追问：
+
+```text
+请提供要整理的数据，或上传文件后我再生成 Excel。
+```
+
+### 当前支持能力
+
+- 文本数据生成 Excel，例如：`把这些数据导出成Excel：姓名，成绩；张三，90；李四，85`；
+- 空白学生成绩统计模板，包含总分、平均分公式列；
+- 销售统计模板，包含销售额、增长率等列；
+- 多 sheet 工作簿，例如学生信息、成绩明细、统计汇总；
+- 根据当前 conversation 文件解析摘要整理成 Excel；
+- 上传 xlsx 后导出新版，当前支持增加平均分等基础公式列；
+- 统一 taskCard 展示为 Excel 文件，完成后通过现有附件下载链路下载。
+
+### 当前不支持边界
+
+- 不做 Excel 独立页面；
+- 不做在线表格编辑器；
+- 不做复杂 BI；
+- 不做数据透视第一版；
+- 不做复杂图表第一版；
+- 不做公式工作台第一版；
+- 不从旧 conversation 继承文件；
+- 没有上传 xlsx 时，不假装能修改已有 Excel；
+- 旧 xlsx 的复杂样式、宏、图表不会完整保留。
+
+### 测试结果
+
+新增：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-excel-engine.ts
+```
+
+覆盖：
+
+- 文本数据生成 xlsx；
+- xlsx 可读取；
+- 至少一个 sheet；
+- 表头存在；
+- 数据行存在；
+- 样式存在：表头加粗、填充色、边框；
+- 冻结窗格存在；
+- 自动筛选存在；
+- 多 sheet 存在；
+- 公式存在；
+- 修改已有 xlsx 后能导出新版；
+- 文件大小 > 0；
+- 文件扩展名为 `.xlsx`；
+- 文件名安全。
+
+当前验证结果：
+
+- `npm.cmd exec -- tsx scripts/agent-runtime/check-excel-engine.ts`：通过；
+- `npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts`：通过，22/22 PASS；
+- `npm.cmd exec -- tsx scripts/agent-runtime/check-file-analysis-upload.ts`：通过，真实 API E2E 因缺 `AGENT_E2E_COOKIE` 明确跳过；
+- `npm.cmd exec -- tsc --noEmit`：通过。
+
+### 后续建议
+
+- 为 Excel adapter 增加真实登录态聊天 E2E，确认 taskCard 下载链接在浏览器中可点击；
+- 增加 CSV 上传整理；
+- 增加更多模板蓝图，例如预算、项目进度、客户跟进；
+- 单独设计 Excel 修改能力矩阵；
+- 未来如需更强样式/图表，再评估 `exceljs` 或专用 OOXML 写入层。
+
 ### PPT 延续边界
 
 确认的产品边界：

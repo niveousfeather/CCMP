@@ -29,6 +29,16 @@ function referencesCurrentFile(text: string) {
   return /这个文件|这份文件|刚才的文件|上一份文件|上传的文件|再总结|总结短一点|短一点|短些|提炼一下/i.test(text);
 }
 
+function wantsExcelOutput(text: string) {
+  if (/公式怎么|公式如何|怎么写|如何写|怎么用|how to|formula/i.test(text)) return false;
+  return /excel|xlsx|电子表格|表格文件|导出.*表|整理成.*表|做成.*表|生成.*表|学生成绩统计表|成绩统计表|销售统计|三张表|三个sheet/i.test(text);
+}
+
+function modifiesExcelFile(text: string) {
+  if (/公式怎么|公式如何|怎么写|如何写|怎么用|how to|formula/i.test(text)) return false;
+  return /这个\s*excel|这份\s*excel|已有\s*excel|excel.*增加|增加.*平均分|新增.*列|导出新版|修改.*excel/i.test(text);
+}
+
 function referencesCurrentImage(text: string) {
   return /刚才那张图|上一张图|那张图|这张图|图片标题|改图|图片.*改|标题改成|标题改为/i.test(text);
 }
@@ -64,6 +74,16 @@ export function matchAgentSkill({
     candidates.push({ skillId: "file-analysis", confidence: 0.82, reasons: ["missing_current_conversation_file_reference"] });
   }
 
+  if (wantsExcelOutput(text) && (activeKind === "file-analysis" || referencesCurrentFile(text))) {
+    candidates.push({ skillId: "excel", confidence: 0.94, reasons: ["current_file_to_excel_output"] });
+  } else if (wantsExcelOutput(text)) {
+    candidates.push({ skillId: "excel", confidence: 0.9, reasons: ["explicit_excel_output_terms"] });
+  }
+
+  if (modifiesExcelFile(text)) {
+    candidates.push({ skillId: "excel", confidence: 0.92, reasons: ["spreadsheet_modification_terms"] });
+  }
+
   if ((activeKind === "image" || activeKind === "teaching-diagram") && referencesCurrentImage(text)) {
     candidates.push({ skillId: "image", confidence: 0.9, reasons: ["current_conversation_image_reference"] });
   }
@@ -80,7 +100,7 @@ export function matchAgentSkill({
   if (input.tools?.contentMode === "ppt") {
     candidates.push({ skillId: "ppt-simple", confidence: 0.95, reasons: ["selected_ppt_tool"] });
   }
-  if (input.tools?.contentMode === "write") {
+  if (input.tools?.contentMode === "write" && !wantsExcelOutput(text) && !modifiesExcelFile(text)) {
     candidates.push({ skillId: "word", confidence: 0.95, reasons: ["selected_write_tool"] });
   }
 
