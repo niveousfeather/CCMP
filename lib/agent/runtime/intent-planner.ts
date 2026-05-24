@@ -29,6 +29,13 @@ function targetTool(skillId: string | null): AgentRuntimeTargetTool {
   return "none";
 }
 
+function isAmbiguousAcademicPptRequest(text: string) {
+  const compact = text.replace(/\s+/g, "").toLowerCase();
+  if (!/(学术ppt|论文ppt|课题ppt|申报ppt|academicppt|paperppt)/i.test(compact)) return false;
+  const remainder = compact.replace(/帮我|请|生成|创建|制作|一个|一份|学术ppt|论文ppt|课题ppt|申报ppt|academicppt|paperppt/gi, "");
+  return remainder.length < 4;
+}
+
 function nextAction({
   allowed,
   needsTool,
@@ -53,6 +60,9 @@ function progressStages(action: AgentRuntimeNextAction): AgentRuntimeStage[] {
 
 function clarificationQuestion(decision: Pick<AgentRuntimeDecision, "targetTool" | "missingInputs">, legacyQuestion?: string) {
   if (legacyQuestion) return legacyQuestion;
+  if (decision.missingInputs.includes("academic_ppt_confirmation")) {
+    return "我先确认一下：你要做的是普通 PPT，还是论文、课题、申报等学术汇报 PPT？请补充主题、用途和材料。";
+  }
   if (decision.missingInputs.includes("subject")) {
     if (decision.targetTool === "ppt-simple") return "可以，我先确认一下：这个 PPT 的主题是什么？需要面向谁，预计多少页？";
     if (decision.targetTool === "word") return "可以，我先确认一下：这份 Word 文档的主题、文体和大致篇幅是什么？";
@@ -78,16 +88,18 @@ export function planAgentRuntimeIntent(input: AgentRuntimeInput): Omit<AgentRunt
   });
   const skillSelection = matchAgentSkill({ text, input, legacyTask });
   const selectedSkill = skillSelection.selected;
+  const ambiguousAcademicPpt = isAmbiguousAcademicPptRequest(text);
   const gate = evaluateExecutionGate({ text, legacyTask, skillMatch: selectedSkill, activeTaskKind: input.activeTask?.kind || null });
-  const action = nextAction(gate);
-  const intent = selectedSkill.skillId ? intentBySkill[selectedSkill.skillId] || "general_chat" : "general_chat";
+  const action = ambiguousAcademicPpt ? "ask_clarification" : nextAction(gate);
+  const intent = ambiguousAcademicPpt ? "academic_ppt" : selectedSkill.skillId ? intentBySkill[selectedSkill.skillId] || "general_chat" : "general_chat";
+  const missingInputs = ambiguousAcademicPpt ? Array.from(new Set([...gate.missingInputs, "academic_ppt_confirmation"])) : gate.missingInputs;
   const baseDecision = {
     intent,
-    targetTool: targetTool(selectedSkill.skillId),
+    targetTool: ambiguousAcademicPpt ? "none" : targetTool(selectedSkill.skillId),
     confidence: Math.max(0, Math.min(0.99, selectedSkill.confidence)),
-    needsTool: gate.needsTool,
-    needsConfirmation: gate.needsConfirmation || legacyTask.type === "clarify",
-    missingInputs: gate.missingInputs,
+    needsTool: ambiguousAcademicPpt ? false : gate.needsTool,
+    needsConfirmation: ambiguousAcademicPpt || gate.needsConfirmation || legacyTask.type === "clarify",
+    missingInputs,
     activeTaskId: input.activeTask?.id || (input.pendingTask ? "pending-conversation-task" : null),
     nextAction: action,
     progressStages: progressStages(action)

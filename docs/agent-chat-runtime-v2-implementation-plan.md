@@ -952,3 +952,163 @@ Runtime V2 只从当前 conversation 最近消息和 metadata 恢复：
 - 不做记忆管理页。
 - 不做跨会话历史搜索。
 - 不保存用户长期偏好。
+
+## 25. 第十五阶段 当前对话记忆边界安全提交
+
+### 阶段性质
+
+- 第十五阶段不是新功能开发阶段。
+- 第十五阶段是安全提交快照阶段。
+- 目标是把第十四阶段“当前对话记忆边界”固定到 Git。
+- 本阶段没有继续开发长期记忆。
+- 本阶段没有新增工具。
+- 本阶段没有扩展 adapter。
+
+### Commit 信息
+
+Commit hash:
+`a10ea72dc0b0e11450d98293d34e1b69e00f2ece`
+
+Commit message:
+`fix(agent): scope memory to current conversation`
+
+### 提交文件
+
+- `app/api/ai/chat/route.ts`
+- `lib/agent/runtime/context-pack.ts`
+- `docs/agent-chat-runtime-v2-implementation-plan.md`
+
+### 本阶段确认的记忆边界
+
+- 记忆只绑定当前 `conversationId`。
+- 新开对话后 memory 为空。
+- 新开对话不继承旧 activeTask。
+- 新开对话不继承旧文件引用。
+- 新开对话不继承旧临时偏好。
+- 新开对话不继承旧 `conversationSummary`。
+- 不做 user profile memory。
+- 不做长期 memory。
+- 不做全站 memory。
+- 不做记忆管理页。
+- 不保存用户长期偏好。
+- 不跨 conversation 读取任务、文件或偏好。
+
+### 验证结果
+
+- `npm.cmd exec -- tsc --noEmit`：通过。
+- `npm.cmd run build`：通过。
+- staged 为空。
+- Academic PPT 历史脏改未提交。
+- `services/**` 历史脏改未提交。
+- `data/**` 运行产物未提交。
+- `.env` / key / token 未提交。
+- patch 文件未提交。
+- package lock 文件未提交。
+
+### 当前提交链
+
+- `7ade063 feat(agent): add runtime v2 chat orchestration`
+- `d26a6d5 feat(agent): improve conversation memory and active task handling`
+- `a10ea72dc0b0e11450d98293d34e1b69e00f2ece fix(agent): scope memory to current conversation`
+
+### 后续建议
+
+下一阶段可以做：
+
+- 自动化 Runtime 回归测试脚本；
+- 当前对话 activeTask 测试矩阵固化；
+- 工具 taskCard 端到端验收；
+- ChatGPT 式聊天 UI 继续打磨。
+
+但不要在第十五阶段继续写业务代码。
+
+## 26. 第十六阶段 自动化回归测试脚本
+
+### 阶段目标
+
+第十六阶段只补 Agent Runtime V2 的自动化回归测试，不新增工具、不扩展 adapter、不真实调用模型、不真实调用工具、不创建真实业务文件。
+
+测试目标是固定这些分流规则：
+
+- 普通咨询不调用工具；
+- 明确生成才调用工具；
+- 缺少信息先追问；
+- 当前对话内可以识别 activeTask；
+- 新对话不继承旧 activeTask；
+- `不要生成，先给方案` 必须只聊天；
+- Excel 公式咨询不能生成 xlsx；
+- simple PPT 不能误进 Academic PPT。
+
+### 脚本路径
+
+- `scripts/agent-runtime/check-runtime-v2.ts`
+
+脚本直接调用 `planAgentRuntimeTurn`，覆盖 planner / skill-router / execution-gate / context-pack 的关键决策输出。
+
+### 覆盖用例
+
+共 16 条：
+
+1. 普通聊天：`随便聊聊` -> `targetTool=none`，`nextAction=answer_chat`。
+2. PPT 咨询：`PPT怎么做？` -> 只聊天，不进入 `ppt-simple`。
+3. 明确生成简单 PPT：`帮我生成一个10页PPT，主题是AI教育` -> `ppt-simple / run_legacy_tool`。
+4. 学术 PPT 模糊请求：`生成学术PPT` -> `ask_clarification`，不默认进入 Academic PPT，也不进入 simple PPT 直接生成。
+5. Excel 公式咨询：`这个Excel公式怎么写？` -> 只聊天，不生成 xlsx。
+6. Excel 导出：`把这些数据导出成Excel：姓名，成绩；张三，90；李四，85` -> `excel / run_legacy_tool`。
+7. Word 生成：`帮我生成一份AI教育培训方案Word文档` -> `word / run_legacy_tool`。
+8. 文件分析，有 file activeTask：`这个文件再总结短一点` -> `file-analysis / run_legacy_tool`。
+9. 文件分析，无 file activeTask：`这个文件再总结短一点` -> `ask_clarification`，`missingInputs` 包含 `file`。
+10. 图片修改，有 image activeTask：`把刚才那张图标题改成XXX` -> `image / run_legacy_tool`。
+11. 图片修改，无 image activeTask：`把刚才那张图标题改成XXX` -> `ask_clarification`，`missingInputs` 包含 `image_to_edit`。
+12. 当前对话 PPT activeTask：`继续刚才的PPT，改成正式一点` -> `ppt-simple / run_legacy_tool`。
+13. 新对话不继承 PPT activeTask：`继续刚才的PPT，改成正式一点` -> `ask_clarification`，`missingInputs` 包含 `active_task`。
+14. 不要生成，先给方案：`不要生成，先给我一个AI教育PPT方案` -> `targetTool=none`，`nextAction=answer_chat`。
+15. 教学架构图：`生成教学架构图，主题是数字赋能课程改革` -> `teaching-diagram / run_legacy_tool`。
+16. 知识图谱：`生成知识图谱，主题是人工智能发展史` -> `knowledge-graph / run_legacy_tool`。
+
+### 如何运行
+
+当前 `package.json` 已存在与本阶段无关的历史脏改，因此本阶段不修改 package script。直接运行：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
+```
+
+类型检查：
+
+```bash
+npm.cmd exec -- tsc --noEmit
+```
+
+### 当前测试结果
+
+- `npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts`：通过，16/16 PASS。
+- `npm.cmd exec -- tsc --noEmit`：通过。
+
+脚本通过时输出：
+
+```text
+Agent Runtime V2 regression passed.
+```
+
+### 本阶段修正
+
+自动化脚本首次运行发现 `生成学术PPT` 被识别为 `ppt-simple`，虽然会追问，但 `targetTool` 不符合“不得默认进入 Academic PPT / 不得进入 simple PPT 直接生成”的规则。
+
+已在 Runtime V2 判断层做最小修正：
+
+- 模糊学术 PPT 请求进入 `ask_clarification`；
+- `targetTool=none`；
+- `missingInputs` 包含 `academic_ppt_confirmation`；
+- 不调用 simple PPT adapter；
+- 不调用 Academic PPT。
+
+### 未覆盖范围
+
+- 不覆盖真实模型调用；
+- 不覆盖真实工具执行；
+- 不覆盖 SSE token streaming；
+- 不覆盖浏览器 UI；
+- 不覆盖 taskCard 真实下载/跳转；
+- 不覆盖 Academic PPT 业务内部；
+- 不覆盖 `services/**`。
