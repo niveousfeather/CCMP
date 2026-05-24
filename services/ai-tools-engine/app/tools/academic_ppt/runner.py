@@ -77,6 +77,8 @@ async def run_academic_ppt_task(
         state.preview_manifest_path = result.get("previewManifestPath")
         state.preview_fallback_reason = result.get("previewFallbackReason")
         state.preview_updated_at = result.get("previewUpdatedAt")
+        state.selected_variants = result.get("selectedVariants")
+        state.role_mapping = result.get("roleMapping")
         state.updated_at = now_iso()
         state.heartbeat_at = state.updated_at
     except asyncio.CancelledError:

@@ -59,6 +59,8 @@ class AcademicPptTaskStatus(BaseModel):
     previewManifestPath: str | None = None
     previewFallbackReason: str | None = None
     previewUpdatedAt: str | None = None
+    selectedVariants: list[dict[str, Any]] | None = None
+    roleMapping: list[dict[str, Any]] | None = None
     error: str | None = None
     heartbeatAt: str | None = None
     updatedAt: str | None = None

@@ -41,6 +41,8 @@ class EngineTaskState:
     preview_manifest_path: str | None = None
     preview_fallback_reason: str | None = None
     preview_updated_at: str | None = None
+    selected_variants: list[dict[str, Any]] | None = None
+    role_mapping: list[dict[str, Any]] | None = None
     error: str | None = None
     heartbeat_at: str = field(default_factory=now_iso)
     created_at: str = field(default_factory=now_iso)
@@ -77,6 +79,8 @@ class EngineTaskState:
             "previewManifestPath": self.preview_manifest_path,
             "previewFallbackReason": self.preview_fallback_reason,
             "previewUpdatedAt": self.preview_updated_at,
+            "selectedVariants": self.selected_variants,
+            "roleMapping": self.role_mapping,
             "error": self.error,
             "heartbeatAt": self.heartbeat_at,
             "updatedAt": self.updated_at,
