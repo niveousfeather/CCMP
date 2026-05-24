@@ -1,0 +1,3869 @@
+{
+  "templateId": "school_academic_report",
+  "displayName": "电子科技大学",
+  "mode": "theme_preset",
+  "templateFamily": "cqupt-purple-academic",
+  "source": "builtin-pptx-template",
+  "category": "school",
+  "sanitized": true,
+    "sourceTemplate": {
+      "runtimeUsed": false,
+      "compatibilityOnly": true,
+      "note": "Theme preset runtime no longer reconstructs the uploaded template layout."
+    },
+  "coverBackgroundAsset": "cover-background.jpg",
+  "aspectRatio": "16:9",
+  "coordinateSystem": {
+    "type": "inches",
+    "unit": "in",
+    "width": 13.333,
+    "height": 7.5
+  },
+  "language": [
+    "zh-CN"
+  ],
+  "theme": {
+    "primary": "#801C80",
+    "gradientFrom": "#811C81",
+    "gradientTo": "#9D229D",
+    "primaryColor": "#801C80",
+    "secondaryColor": "#9D229D",
+    "backgroundColor": "#FFFFFF",
+    "surfaceColor": "#FFFFFF",
+    "titleColor": "#2F1B3A",
+    "bodyColor": "#3F3F3F",
+    "accentColor": "#801C80",
+    "gradientStartColor": "#811C81",
+    "gradientEndColor": "#9D229D"
+  },
+  "fontPolicy": {
+    "preserveEmbeddedFonts": true,
+    "doNotExportFonts": true,
+    "fallbackFonts": [
+      "SimSun",
+      "SimHei",
+      "Microsoft YaHei",
+      "Arial"
+    ],
+    "headingFontFamily": "SimSun",
+    "bodyFontFamily": "SimHei",
+    "titleFontPolicy": "prefer-bold-songti",
+    "bodyFontPolicy": "prefer-heiti"
+  },
+  "schoolIdentityPolicy": {
+    "preserveExistingLogo": true,
+    "preserveExistingSeal": true,
+    "preserveExistingSchoolName": true,
+    "doNotMoveLogo": true,
+    "doNotResizeLogo": true,
+    "doNotDuplicateLogo": true,
+    "doNotGenerateNewLogo": true,
+    "doNotUseLogoAsPlaceholder": true,
+    "logoAreasAreForbiddenForContent": true
+  },
+  "layoutPolicy": {
+    "preserveMasterHeader": true,
+    "preserveLogoPosition": true,
+    "preserveOriginalTextBoxPosition": true,
+    "preserveOriginalFontSize": true,
+    "disableGeneratedFooterPageNumber": true,
+    "doNotMoveSchoolLogo": true,
+    "doNotRedrawHeader": true,
+    "doNotAddLogo": true,
+    "doNotDuplicateLogo": true,
+    "doNotUseLogoAsContentSlot": true,
+    "preferNativeTemplateGeometry": true,
+    "replaceOnlyMappedContentRegions": true,
+    "preserveTemplateFooterDecoration": true,
+    "autoLayoutMustStayInsideRegion": true
+  },
+  "placeholderPolicy": {
+    "replaceOnlyKnownPlaceholders": true,
+    "removePowerPointDefaultPrompts": true,
+    "removeUnfilledPlaceholders": true,
+    "visibleAnnotationsCleared": true,
+    "knownPlaceholders": [
+      "Click to add text",
+      "Click to add title",
+      "{{BODY}}",
+      "{{CHART}}",
+      "{{FOOTER}}",
+      "{{IMAGE}}",
+      "{{KEY_POINTS}}",
+      "{{TITLE}}",
+      "单位",
+      "单击此处添加文本",
+      "单击此处添加标题",
+      "单击添加标题",
+      "姓名",
+      "小标题",
+      "日期",
+      "标题",
+      "标题1",
+      "标题2",
+      "目录文字",
+      "章节副标题",
+      "章节大标题",
+      "编号",
+      "职务",
+      "职务、单位",
+      "英文章节"
+    ],
+    "defaultPrompts": [
+      "单击此处添加标题",
+      "单击添加标题",
+      "单击此处添加文本",
+      "Click to add title",
+      "Click to add text"
+    ]
+  },
+  "previewPolicy": {
+    "templateModeNotice": "Preview is for reference only. The downloaded PPTX is authoritative.",
+    "finalPptxIsAuthoritative": true
+  },
+  "themePresetPolicy": {
+    "route": "theme_preset",
+    "doNotReconstructUploadedTemplate": true,
+    "whiteBackground": true,
+    "coverHasTopBar": false,
+    "coverStyle": "use the full cover-background.jpg image as the 16:9 slide background without cropping; no top decoration bar; no center accent line; overlay only title and subtitle text",
+    "nonCoverHeader": {
+      "enabled": "postprocess-gradient-bar",
+      "fill": "gradient",
+      "gradientFrom": "#811c81",
+      "gradientTo": "#9d229d",
+      "height": 0.62,
+      "identityLogo": "ppt/media/image9.png",
+      "logoOnly": true,
+      "forbidCompanionText": true
+    },
+    "primary": "#801C80",
+    "gradientFrom": "#811C81",
+    "gradientTo": "#9D229D",
+    "rightTopSchoolIdentitySafeZone": {
+      "x": 10.0,
+      "y": 0.0,
+      "w": 3.05,
+      "h": 0.9
+    },
+    "schoolIdentityTextFallback": null,
+    "logoAssetPolicy": "use only the verified template asset ppt/media/image9.png; never generate a fake logo and never write school-name text as a logo substitute",
+    "decorationPolicy": {
+      "useNativePaperPptDecorations": true,
+      "recolorToThemePurple": true,
+      "avoidLargePalePurpleCircles": true,
+      "avoidDecorativeSvgMotifs": true,
+      "allowedDecoration": [
+        "native paper-ppt cards",
+        "native charts",
+        "subtle lines",
+        "pale blocks",
+        "card borders"
+      ]
+    },
+    "pageRoles": [
+      "cover",
+      "toc",
+      "section",
+      "content",
+      "chart",
+      "comparison",
+      "summary"
+    ],
+    "layoutStrategy": "paper_ppt_native_layout_recolored",
+    "doNotForceUniformHeaderLayout": true,
+    "doNotRewriteSlidesAfterGeneration": true,
+    "logoAsset": {
+      "sourcePptx": "template.pptx",
+      "mediaPath": "ppt/media/image9.png",
+      "kind": "verified-horizontal-white-school-logo",
+      "placement": {
+        "x": 10.35,
+        "y": 0.015,
+        "w": 2.45
+      },
+      "useOnEverySlide": false,
+      "preserveAspectRatio": true,
+      "useOnNonCoverSlides": true
+    },
+    "textFallbackAllowed": false,
+    "coverMinimalText": true,
+    "noEndingSlide": false,
+    "doNotGenerateBackCover": true,
+    "finalSlidePolicy": {
+      "topDecorationBar": false,
+      "logo": false,
+      "primaryText": "谢谢聆听",
+      "secondaryText": "欢迎交流",
+      "forbidSummaryCards": true,
+      "forbidBottomSummaryBar": true
+    },
+    "topDecorationBar": {
+      "appliesTo": "non-cover-slides",
+      "fill": "gradient",
+      "gradientFrom": "#811c81",
+      "gradientTo": "#9d229d",
+      "height": 0.62
+    },
+    "logoOnly": true,
+    "forbiddenLogoCompanionText": [
+      "学术汇报",
+      "汇报分析",
+      "Academic Report",
+      "Report Analysis",
+      "CHONGQING POLYTECHNIC UNIVERSITY OF ELECTRONIC TECHNOLOGY"
+    ]
+  },
+  "roleSelectionPolicy": {
+    "firstSlide": [
+      "cover",
+      "cover_alt"
+    ],
+    "secondSlidePreferred": "toc",
+    "sectionOnlyForTransitions": true,
+    "bodyPreferredRoles": [
+      "content_fixed",
+      "content_auto",
+      "chart_auto",
+      "image_text_auto"
+    ],
+    "endingRole": "summary",
+    "doNotUseTocOrSectionAsBody": true,
+    "summaryRole": "summary",
+    "doNotGenerateEndingSlide": true,
+    "finalSlidePreferredRole": "summary"
+  },
+  "variants": {
+    "cover": [
+      {
+        "variantId": "cover_primary",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 1,
+        "templateSlideIndex": 1,
+        "role": "cover",
+        "slots": {
+          "role": {
+            "x": 4.993,
+            "y": 6.007,
+            "w": 0.91,
+            "h": 0.347,
+            "fontSize": 12,
+            "color": "#3F3F3F"
+          },
+          "title": {
+            "x": 0.142,
+            "y": 2.853,
+            "w": 13.049,
+            "h": 1.168,
+            "fontSize": 54.0,
+            "color": "#3F3F3F"
+          },
+          "author": {
+            "x": 6.307,
+            "y": 5.438,
+            "w": 0.673,
+            "h": 0.404,
+            "fontSize": 24.0,
+            "color": "#3F3F3F"
+          },
+          "subtitle": {
+            "x": 0.98,
+            "y": 1.25,
+            "w": 11.5,
+            "h": 5.05,
+            "fontSize": 14,
+            "color": "#3F3F3F"
+          }
+        }
+      },
+      {
+        "variantId": "cover_alt_left_title",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 2,
+        "templateSlideIndex": 2,
+        "role": "cover",
+        "slots": {
+          "title": {
+            "x": 0.659,
+            "y": 1.687,
+            "w": 2.178,
+            "h": 1.168,
+            "fontSize": 54.0,
+            "color": "#3F3F3F"
+          },
+          "subtitle": {
+            "x": 0.668,
+            "y": 2.854,
+            "w": 1.666,
+            "h": 0.891,
+            "fontSize": 40.0,
+            "color": "#3F3F3F"
+          },
+          "author": {
+            "x": 1.1,
+            "y": 5.539,
+            "w": 0.781,
+            "h": 0.404,
+            "fontSize": 14,
+            "color": "#3F3F3F"
+          },
+          "organization": {
+            "x": 2.146,
+            "y": 5.627,
+            "w": 1.554,
+            "h": 0.404,
+            "fontSize": 12,
+            "color": "#3F3F3F"
+          }
+        }
+      }
+    ],
+    "toc": [
+      {
+        "variantId": "toc_three_item",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 4,
+        "templateSlideIndex": 4,
+        "role": "toc",
+        "slots": {
+          "tocItems": {
+            "x": 5.44,
+            "y": 3.424,
+            "w": 7.8,
+            "h": 0.64,
+            "fontSize": 32.0,
+            "color": "#3F3F3F"
+          },
+          "tocNumber": {
+            "x": 3.702,
+            "y": 1.676,
+            "w": 0.451,
+            "h": 0.64,
+            "fontSize": 18,
+            "color": "#801C80"
+          }
+        }
+      }
+    ],
+    "section": [
+      {
+        "variantId": "section_transition",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 5,
+        "templateSlideIndex": 5,
+        "role": "section",
+        "slots": {
+          "sectionEnglishTitle": {
+            "x": 7.15,
+            "y": 2.077,
+            "w": 2.02,
+            "h": 0.606,
+            "fontSize": 36.0,
+            "color": "#3F3F3F"
+          },
+          "sectionTitle": {
+            "x": 6.685,
+            "y": 2.938,
+            "w": 3.366,
+            "h": 0.808,
+            "fontSize": 48.0,
+            "color": "#3F3F3F"
+          },
+          "subtitle": {
+            "x": 6.685,
+            "y": 3.845,
+            "w": 2.805,
+            "h": 0.673,
+            "fontSize": 40.0,
+            "color": "#3F3F3F"
+          },
+          "sectionNumber": {
+            "x": 8.946,
+            "y": 0.177,
+            "w": 2.239,
+            "h": 3.181,
+            "fontSize": 92,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          }
+        }
+      }
+    ],
+    "content": [
+      {
+        "variantId": "content_fixed_overview_cards",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 3,
+        "templateSlideIndex": 3,
+        "role": "content",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": -1.52,
+            "y": 1.52,
+            "w": 7.5,
+            "h": 4.46,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      },
+      {
+        "variantId": "content_auto_blank_body",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 6,
+        "templateSlideIndex": 6,
+        "role": "content",
+        "slots": {
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 0.98,
+            "y": 1.25,
+            "w": 11.5,
+            "h": 5.05,
+            "fontSize": 14,
+            "color": "#3F3F3F"
+          }
+        }
+      },
+      {
+        "variantId": "content_fixed_four_columns",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 7,
+        "templateSlideIndex": 7,
+        "role": "content",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 0.393,
+            "y": 1.44,
+            "w": 2.628,
+            "h": 0.64,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      },
+      {
+        "variantId": "content_fixed_four_cards",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 8,
+        "templateSlideIndex": 8,
+        "role": "content",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 0.283,
+            "y": 7.063,
+            "w": 4.549,
+            "h": 0.301,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      },
+      {
+        "variantId": "content_auto_three_highlights",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 11,
+        "templateSlideIndex": 11,
+        "role": "content",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 0.98,
+            "y": 1.25,
+            "w": 11.5,
+            "h": 5.05,
+            "fontSize": 14,
+            "color": "#3F3F3F"
+          }
+        }
+      }
+    ],
+    "imageText": [
+      {
+        "variantId": "image_text_auto_two_column",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 10,
+        "templateSlideIndex": 10,
+        "role": "imageText",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 0.328,
+            "y": 1.964,
+            "w": 6.139,
+            "h": 2.324,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      }
+    ],
+    "chart": [
+      {
+        "variantId": "chart_auto_matrix_grid",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 9,
+        "templateSlideIndex": 9,
+        "role": "chart",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 1.509,
+            "y": 2.062,
+            "w": 2.077,
+            "h": 0.725,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      },
+      {
+        "variantId": "chart_auto_timeline",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 12,
+        "templateSlideIndex": 12,
+        "role": "chart",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 1.59,
+            "y": 2.803,
+            "w": 0.785,
+            "h": 0.531,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      },
+      {
+        "variantId": "chart_auto_table_matrix",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 13,
+        "templateSlideIndex": 13,
+        "role": "chart",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 5.216,
+            "y": 5.959,
+            "w": 6.225,
+            "h": 0.303,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      }
+    ],
+    "summary": [
+      {
+        "variantId": "summary_process_six_steps",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 14,
+        "templateSlideIndex": 14,
+        "role": "summary",
+        "slots": {
+          "slideNumber": {
+            "x": 0.393,
+            "y": 0.388,
+            "w": 0.371,
+            "h": 0.375,
+            "fontSize": 11,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          },
+          "body": {
+            "x": 1.964,
+            "y": 1.178,
+            "w": 9.497,
+            "h": 0.806,
+            "fontSize": 13,
+            "color": "#3F3F3F"
+          }
+        }
+      }
+    ],
+    "ending": [
+      {
+        "variantId": "ending_thanks",
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 15,
+        "templateSlideIndex": 15,
+        "role": "ending",
+        "slots": {
+          "closingText": {
+            "x": 5.111,
+            "y": 2.587,
+            "w": 3.871,
+            "h": 2.322,
+            "fontSize": 30,
+            "color": "#801C80"
+          },
+          "title": {
+            "x": 1.037,
+            "y": 0.389,
+            "w": 9.248,
+            "h": 0.373,
+            "fontSize": 20,
+            "color": "#3F3F3F"
+          }
+        }
+      }
+    ]
+  },
+  "blueprintVersion": "2026-05-20-annotated-page-roles",
+  "pageVariants": [
+    {
+      "variantId": "cover_primary",
+      "role": "cover",
+      "sourceSlideIndex": 1,
+      "templateSlideIndex": 1,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "x": 4.993,
+          "y": 6.007,
+          "w": 0.91,
+          "h": 0.347,
+          "type": "role",
+          "sourceShapeName": "Rectangle: Rounded Corners 15",
+          "align": "center",
+          "fontSize": 12,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 14
+        },
+        {
+          "x": 6.039,
+          "y": 6.007,
+          "w": 1.255,
+          "h": 0.347,
+          "type": "role",
+          "sourceShapeName": "Rectangle: Rounded Corners 22",
+          "align": "center",
+          "fontSize": 12,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 15
+        },
+        {
+          "x": 7.43,
+          "y": 6.007,
+          "w": 0.91,
+          "h": 0.347,
+          "type": "role",
+          "sourceShapeName": "Rectangle: Rounded Corners 17",
+          "align": "center",
+          "fontSize": 12,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 16
+        },
+        {
+          "x": 0.142,
+          "y": 2.853,
+          "w": 13.049,
+          "h": 1.168,
+          "type": "title",
+          "sourceShapeName": "Shape7",
+          "fontSize": 54.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "align": "center",
+          "color": "#3F3F3F",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 20
+        },
+        {
+          "x": 6.307,
+          "y": 4.942,
+          "w": 0.673,
+          "h": 0.404,
+          "type": "role",
+          "sourceShapeName": "TextBox 6",
+          "fontSize": 24.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "color": "#3F3F3F",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 21
+        },
+        {
+          "x": 6.307,
+          "y": 5.438,
+          "w": 0.673,
+          "h": 0.404,
+          "type": "author",
+          "sourceShapeName": "TextBox 8",
+          "fontSize": 24.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "color": "#3F3F3F",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 22
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide01_asset01",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 21",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide01_asset04",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "图片 101",
+          "x": -0.409,
+          "y": 5.34,
+          "w": 14.548,
+          "h": 2.947,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide01_asset05",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Graphic 14",
+          "x": 5.628,
+          "y": 0.532,
+          "w": 2.077,
+          "h": 0.501,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide01_asset08",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 16",
+          "x": 0.328,
+          "y": 4.274,
+          "w": 2.499,
+          "h": 2.425,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide01_asset09",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 18",
+          "x": 10.881,
+          "y": 0.0,
+          "w": 2.455,
+          "h": 2.356,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide01_cover_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 5.45,
+          "y": 0.25,
+          "w": 3.1,
+          "h": 0.95,
+          "policy": "reserved for existing cover logo/school name; no content allowed",
+          "reason": "protect cover logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide01_forbidden01",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide01_forbidden04",
+          "x": -0.409,
+          "y": 5.34,
+          "w": 14.548,
+          "h": 2.947,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide01_forbidden05",
+          "x": 5.628,
+          "y": 0.532,
+          "w": 2.077,
+          "h": 0.501,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide01_forbidden08",
+          "x": 0.328,
+          "y": 4.274,
+          "w": 2.499,
+          "h": 2.425,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide01_forbidden09",
+          "x": 10.881,
+          "y": 0.0,
+          "w": 2.455,
+          "h": 2.356,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide01_cover_logo_guard",
+          "x": 5.45,
+          "y": 0.25,
+          "w": 3.1,
+          "h": 0.95,
+          "reason": "protect cover logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "cover_alt_left_title",
+      "role": "cover_alt",
+      "sourceSlideIndex": 2,
+      "templateSlideIndex": 2,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "x": 0.659,
+          "y": 1.687,
+          "w": 2.178,
+          "h": 1.168,
+          "type": "title",
+          "sourceShapeName": "文本框 12",
+          "fontSize": 54.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "align": "center",
+          "color": "#3F3F3F",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 3
+        },
+        {
+          "x": 0.668,
+          "y": 2.854,
+          "w": 1.666,
+          "h": 0.891,
+          "type": "subtitle",
+          "sourceShapeName": "文本框 12",
+          "fontSize": 40.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "align": "center",
+          "color": "#3F3F3F",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 4
+        },
+        {
+          "x": 1.1,
+          "y": 5.539,
+          "w": 0.781,
+          "h": 0.404,
+          "type": "author",
+          "sourceShapeName": "文本框 1",
+          "bold": true,
+          "fontSize": 14,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 17
+        },
+        {
+          "x": 2.146,
+          "y": 5.627,
+          "w": 1.554,
+          "h": 0.404,
+          "type": "organization",
+          "sourceShapeName": "文本框 2",
+          "bold": true,
+          "fontSize": 12,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 18
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide02_asset02",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 1525",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide02_asset05",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Graphic 1519",
+          "x": 0.774,
+          "y": 0.532,
+          "w": 2.077,
+          "h": 0.501,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide02_asset06",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 1526",
+          "x": 10.756,
+          "y": 0.395,
+          "w": 2.077,
+          "h": 1.993,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide02_asset07",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 1531",
+          "x": 0.0,
+          "y": 5.278,
+          "w": 13.333,
+          "h": 2.222,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide02_asset08",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 1667",
+          "x": 13.005,
+          "y": 0.123,
+          "w": 0.25,
+          "h": 7.191,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide02_asset09",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 1666",
+          "x": 0.077,
+          "y": 0.123,
+          "w": 0.25,
+          "h": 7.191,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide02_asset11",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 1669",
+          "x": 8.304,
+          "y": 1.59,
+          "w": 2.926,
+          "h": 3.409,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide02_cover_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 0.0,
+          "y": 0.25,
+          "w": 3.1,
+          "h": 0.95,
+          "policy": "reserved for existing cover logo/school name; no content allowed",
+          "reason": "protect cover logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide02_forbidden02",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide02_forbidden05",
+          "x": 0.774,
+          "y": 0.532,
+          "w": 2.077,
+          "h": 0.501,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide02_forbidden06",
+          "x": 10.756,
+          "y": 0.395,
+          "w": 2.077,
+          "h": 1.993,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide02_forbidden07",
+          "x": 0.0,
+          "y": 5.278,
+          "w": 13.333,
+          "h": 2.222,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide02_forbidden08",
+          "x": 13.005,
+          "y": 0.123,
+          "w": 0.25,
+          "h": 7.191,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide02_forbidden09",
+          "x": 0.077,
+          "y": 0.123,
+          "w": 0.25,
+          "h": 7.191,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide02_forbidden11",
+          "x": 8.304,
+          "y": 1.59,
+          "w": 2.926,
+          "h": 3.409,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide02_cover_logo_guard",
+          "x": 0.0,
+          "y": 0.25,
+          "w": 3.1,
+          "h": 0.95,
+          "reason": "protect cover logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "content_fixed_overview_cards",
+      "role": "content_fixed",
+      "sourceSlideIndex": 3,
+      "templateSlideIndex": 3,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": -1.52,
+          "y": 1.52,
+          "w": 7.5,
+          "h": 4.46,
+          "sourceShapeName": "Rectangle: Single Corner Rounded 4",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.328,
+          "y": 1.903,
+          "w": 0.729,
+          "h": 5.273,
+          "sourceShapeName": "TextBox 18",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide03_asset01",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 3",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide03_asset03",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 6",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 4.46,
+          "h": 7.5,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide03_asset07",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 7",
+          "x": 0.628,
+          "y": 2.117,
+          "w": 3.325,
+          "h": 3.226,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "school seal/logo/identity or template illustration"
+        },
+        {
+          "assetId": "slide03_asset08",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "组合 24",
+          "x": 3.453,
+          "y": 1.39,
+          "w": 8.882,
+          "h": 1.061,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "background or master decoration"
+        },
+        {
+          "assetId": "slide03_asset09",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "组合 22",
+          "x": 3.453,
+          "y": 4.58,
+          "w": 8.882,
+          "h": 1.06,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "background or master decoration"
+        },
+        {
+          "assetId": "slide03_asset10",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "组合 23",
+          "x": 3.988,
+          "y": 2.97,
+          "w": 8.883,
+          "h": 1.352,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "background or master decoration"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide03_forbidden01",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide03_forbidden03",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 4.46,
+          "h": 7.5,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide03_forbidden07",
+          "x": 0.628,
+          "y": 2.117,
+          "w": 3.325,
+          "h": 3.226,
+          "reason": "school seal/logo/identity or template illustration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide03_forbidden08",
+          "x": 3.453,
+          "y": 1.39,
+          "w": 8.882,
+          "h": 1.061,
+          "reason": "background or master decoration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide03_forbidden09",
+          "x": 3.453,
+          "y": 4.58,
+          "w": 8.882,
+          "h": 1.06,
+          "reason": "background or master decoration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide03_forbidden10",
+          "x": 3.988,
+          "y": 2.97,
+          "w": 8.883,
+          "h": 1.352,
+          "reason": "background or master decoration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "toc_three_item",
+      "role": "toc",
+      "sourceSlideIndex": 4,
+      "templateSlideIndex": 4,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "x": 5.44,
+          "y": 3.424,
+          "w": 7.8,
+          "h": 0.64,
+          "type": "tocItem",
+          "sourceShapeName": "文本框 27",
+          "fontSize": 32.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 19
+        },
+        {
+          "x": 4.518,
+          "y": 5.115,
+          "w": 7.8,
+          "h": 0.64,
+          "type": "tocItem",
+          "sourceShapeName": "文本框 27",
+          "fontSize": 32.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 20
+        },
+        {
+          "type": "tocNumber",
+          "x": 3.702,
+          "y": 1.676,
+          "w": 0.451,
+          "h": 0.64,
+          "sourceShapeName": "number annotation",
+          "sourceShapeIndex": 16,
+          "fontSize": 18,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit"
+        },
+        {
+          "type": "tocNumber",
+          "x": 4.653,
+          "y": 3.375,
+          "w": 0.451,
+          "h": 0.64,
+          "sourceShapeName": "number annotation",
+          "sourceShapeIndex": 17,
+          "fontSize": 18,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit"
+        },
+        {
+          "type": "tocNumber",
+          "x": 3.702,
+          "y": 5.107,
+          "w": 0.451,
+          "h": 0.64,
+          "sourceShapeName": "number annotation",
+          "sourceShapeIndex": 18,
+          "fontSize": 18,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit"
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide04_asset01",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 3",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide04_asset03",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 6",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 4.46,
+          "h": 7.5,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide04_asset07",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 58",
+          "x": 3.533,
+          "y": 1.593,
+          "w": 8.843,
+          "h": 0.915,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "background or master decoration"
+        },
+        {
+          "assetId": "slide04_asset09",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 57",
+          "x": 4.46,
+          "y": 3.292,
+          "w": 8.843,
+          "h": 0.915,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "background or master decoration"
+        },
+        {
+          "assetId": "slide04_asset11",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 56",
+          "x": 3.533,
+          "y": 4.992,
+          "w": 8.843,
+          "h": 0.915,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "background or master decoration"
+        },
+        {
+          "assetId": "slide04_asset12",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 7",
+          "x": 1.653,
+          "y": 2.537,
+          "w": 2.499,
+          "h": 2.425,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "school seal/logo/identity or template illustration"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide04_forbidden01",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide04_forbidden03",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 4.46,
+          "h": 7.5,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide04_forbidden07",
+          "x": 3.533,
+          "y": 1.593,
+          "w": 8.843,
+          "h": 0.915,
+          "reason": "background or master decoration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide04_forbidden09",
+          "x": 4.46,
+          "y": 3.292,
+          "w": 8.843,
+          "h": 0.915,
+          "reason": "background or master decoration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide04_forbidden11",
+          "x": 3.533,
+          "y": 4.992,
+          "w": 8.843,
+          "h": 0.915,
+          "reason": "background or master decoration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide04_forbidden12",
+          "x": 1.653,
+          "y": 2.537,
+          "w": 2.499,
+          "h": 2.425,
+          "reason": "school seal/logo/identity or template illustration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "section_transition",
+      "role": "section",
+      "sourceSlideIndex": 5,
+      "templateSlideIndex": 5,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "x": 7.15,
+          "y": 2.077,
+          "w": 2.02,
+          "h": 0.606,
+          "type": "sectionEnglishTitle",
+          "sourceShapeName": "TextBox 12",
+          "fontSize": 36.0,
+          "bold": true,
+          "fontFamily": "+mn-ea",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 6
+        },
+        {
+          "x": 6.685,
+          "y": 2.938,
+          "w": 3.366,
+          "h": 0.808,
+          "type": "sectionTitle",
+          "sourceShapeName": "文本框 6",
+          "fontSize": 48.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "align": "left",
+          "color": "#3F3F3F",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 7
+        },
+        {
+          "x": 6.685,
+          "y": 3.845,
+          "w": 2.805,
+          "h": 0.673,
+          "type": "sectionSubtitle",
+          "sourceShapeName": "文本框 6",
+          "fontSize": 40.0,
+          "fontFamily": "思源宋体 CN Heavy",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 11
+        },
+        {
+          "type": "sectionNumber",
+          "x": 8.946,
+          "y": 0.177,
+          "w": 2.239,
+          "h": 3.181,
+          "sourceShapeName": "number annotation",
+          "sourceShapeIndex": 10,
+          "fontSize": 92,
+          "fontFamily": "SimSun",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit"
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide05_asset02",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 1",
+          "x": 0.0,
+          "y": -0.042,
+          "w": 13.333,
+          "h": 7.542,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide05_asset03",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "组合 157",
+          "x": 12.303,
+          "y": 0.367,
+          "w": 0.702,
+          "h": 0.46,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-right school identity/logo area"
+        },
+        {
+          "assetId": "slide05_asset08",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "组合 118",
+          "x": 10.11,
+          "y": -2.018,
+          "w": 5.121,
+          "h": 5.121,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-right school identity/logo area"
+        },
+        {
+          "assetId": "slide05_asset09",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Picture 2",
+          "x": 0.328,
+          "y": 1.252,
+          "w": 5.149,
+          "h": 4.997,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "school seal/logo/identity or template illustration"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide05_forbidden02",
+          "x": 0.0,
+          "y": -0.042,
+          "w": 13.333,
+          "h": 7.542,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide05_forbidden03",
+          "x": 12.303,
+          "y": 0.367,
+          "w": 0.702,
+          "h": 0.46,
+          "reason": "top-right school identity/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide05_forbidden08",
+          "x": 10.11,
+          "y": -2.018,
+          "w": 5.121,
+          "h": 5.121,
+          "reason": "top-right school identity/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide05_forbidden09",
+          "x": 0.328,
+          "y": 1.252,
+          "w": 5.149,
+          "h": 4.997,
+          "reason": "school seal/logo/identity or template illustration",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "content_auto_blank_body",
+      "role": "content_auto",
+      "sourceSlideIndex": 6,
+      "templateSlideIndex": 6,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": false,
+      "allowAutoLayout": true,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "type": "slideTitle",
+          "sourceShapeName": "标题 12",
+          "bold": true,
+          "fontFamily": "思源宋体 CN Heavy",
+          "fontSize": 20,
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 2
+        },
+        {
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "type": "slideNumber",
+          "sourceShapeName": "文本占位符 13",
+          "bold": true,
+          "fontFamily": "思源宋体 CN Heavy",
+          "fontSize": 11,
+          "color": "#3F3F3F",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "shrinkToFit",
+          "sourceShapeIndex": 3
+        }
+      ],
+      "autoLayoutRegion": {
+        "x": 0.98,
+        "y": 1.25,
+        "w": 11.5,
+        "h": 5.05,
+        "maxColumns": 4,
+        "preferredLayouts": [
+          "cards",
+          "bullets",
+          "two-column",
+          "three-column",
+          "comparison",
+          "process"
+        ],
+        "fontSizeRange": {
+          "min": 10,
+          "max": 20
+        },
+        "colorPolicy": {
+          "primary": "#801C80",
+          "secondary": "#9D229D",
+          "body": "#3F3F3F",
+          "background": "#F2F2F2",
+          "doNotUseLogoColorsAsContentCue": true
+        },
+        "overflowPolicy": "splitToNextContentSlide",
+        "avoidForbiddenAreas": true
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide06_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide06_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "content_fixed_four_columns",
+      "role": "content_fixed",
+      "sourceSlideIndex": 7,
+      "templateSlideIndex": 7,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.393,
+          "y": 1.44,
+          "w": 2.628,
+          "h": 0.64,
+          "sourceShapeName": "TextBox 13",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.0,
+          "y": 6.309,
+          "w": 13.333,
+          "h": 1.191,
+          "sourceShapeName": "矩形 1",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.393,
+          "y": 2.565,
+          "w": 2.826,
+          "h": 3.742,
+          "sourceShapeName": "矩形: 圆顶角 2",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.521,
+          "y": 2.822,
+          "w": 1.914,
+          "h": 0.476,
+          "sourceShapeName": "矩形: 圆角 7",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.422,
+          "y": 3.383,
+          "w": 2.796,
+          "h": 0.286,
+          "sourceShapeName": "文本框 8",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.422,
+          "y": 3.688,
+          "w": 2.796,
+          "h": 0.286,
+          "sourceShapeName": "文本框 9",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.422,
+          "y": 3.959,
+          "w": 2.796,
+          "h": 0.707,
+          "sourceShapeName": "文本框 10",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.422,
+          "y": 4.651,
+          "w": 2.796,
+          "h": 0.286,
+          "sourceShapeName": "文本框 11",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.422,
+          "y": 4.923,
+          "w": 2.796,
+          "h": 0.252,
+          "sourceShapeName": "文本框 12",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 3.634,
+          "y": 2.3,
+          "w": 2.826,
+          "h": 4.007,
+          "sourceShapeName": "矩形: 圆顶角 40",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 3.762,
+          "y": 2.532,
+          "w": 1.914,
+          "h": 0.476,
+          "sourceShapeName": "矩形: 圆角 41",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 3.663,
+          "y": 3.064,
+          "w": 2.796,
+          "h": 0.286,
+          "sourceShapeName": "文本框 42",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide07_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide07_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "content_fixed_four_cards",
+      "role": "content_fixed",
+      "sourceSlideIndex": 8,
+      "templateSlideIndex": 8,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.283,
+          "y": 7.063,
+          "w": 4.549,
+          "h": 0.301,
+          "sourceShapeName": "文本框 20",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.667,
+          "y": 1.15,
+          "w": 8.449,
+          "h": 0.503,
+          "sourceShapeName": "文本框 21",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.328,
+          "y": 3.122,
+          "w": 2.997,
+          "h": 3.809,
+          "sourceShapeName": "Rectangle: Rounded Corners 14",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 3.548,
+          "y": 3.122,
+          "w": 2.997,
+          "h": 3.809,
+          "sourceShapeName": "Rectangle: Rounded Corners 14",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 6.788,
+          "y": 3.122,
+          "w": 2.997,
+          "h": 3.809,
+          "sourceShapeName": "Rectangle: Rounded Corners 14",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 10.008,
+          "y": 3.122,
+          "w": 2.997,
+          "h": 3.809,
+          "sourceShapeName": "Rectangle: Rounded Corners 14",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 3.647,
+          "y": 3.309,
+          "w": 2.797,
+          "h": 2.843,
+          "sourceShapeName": "文本框 32",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.424,
+          "y": 3.309,
+          "w": 2.806,
+          "h": 2.789,
+          "sourceShapeName": "文本框 34",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.328,
+          "y": 1.889,
+          "w": 2.997,
+          "h": 0.612,
+          "sourceShapeName": "Oval 8",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 3.548,
+          "y": 1.889,
+          "w": 2.997,
+          "h": 0.612,
+          "sourceShapeName": "Oval 8",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 6.788,
+          "y": 1.889,
+          "w": 2.997,
+          "h": 0.612,
+          "sourceShapeName": "Oval 8",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 10.008,
+          "y": 1.889,
+          "w": 2.997,
+          "h": 0.612,
+          "sourceShapeName": "Oval 8",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide08_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide08_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "chart_auto_matrix_grid",
+      "role": "chart_auto",
+      "sourceSlideIndex": 9,
+      "templateSlideIndex": 9,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": false,
+      "allowAutoLayout": true,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 1.509,
+          "y": 2.062,
+          "w": 2.077,
+          "h": 0.725,
+          "sourceShapeName": "文本框 90",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 1.509,
+          "y": 2.802,
+          "w": 2.077,
+          "h": 0.703,
+          "sourceShapeName": "文本框 91",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 4.26,
+          "y": 2.062,
+          "w": 2.077,
+          "h": 0.725,
+          "sourceShapeName": "文本框 12",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 4.26,
+          "y": 2.802,
+          "w": 2.077,
+          "h": 0.703,
+          "sourceShapeName": "文本框 18",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 7.012,
+          "y": 2.062,
+          "w": 2.077,
+          "h": 0.725,
+          "sourceShapeName": "文本框 27",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 7.011,
+          "y": 2.802,
+          "w": 2.077,
+          "h": 0.703,
+          "sourceShapeName": "文本框 28",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 9.763,
+          "y": 2.062,
+          "w": 2.077,
+          "h": 0.725,
+          "sourceShapeName": "文本框 32",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 9.763,
+          "y": 2.802,
+          "w": 2.077,
+          "h": 0.703,
+          "sourceShapeName": "文本框 33",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 1.509,
+          "y": 5.023,
+          "w": 2.077,
+          "h": 0.85,
+          "sourceShapeName": "文本框 37",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 1.509,
+          "y": 6.077,
+          "w": 2.077,
+          "h": 0.703,
+          "sourceShapeName": "文本框 38",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 4.26,
+          "y": 5.023,
+          "w": 2.077,
+          "h": 0.85,
+          "sourceShapeName": "文本框 42",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 4.26,
+          "y": 6.077,
+          "w": 2.077,
+          "h": 0.703,
+          "sourceShapeName": "文本框 43",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "x": 0.75,
+        "y": 1.15,
+        "w": 11.85,
+        "h": 5.85,
+        "maxColumns": 4,
+        "preferredLayouts": [
+          "chart",
+          "matrix",
+          "timeline",
+          "comparison",
+          "process"
+        ],
+        "fontSizeRange": {
+          "min": 10,
+          "max": 20
+        },
+        "colorPolicy": {
+          "primary": "#801C80",
+          "secondary": "#9D229D",
+          "body": "#3F3F3F",
+          "background": "#F2F2F2",
+          "doNotUseLogoColorsAsContentCue": true
+        },
+        "overflowPolicy": "splitToNextContentSlide",
+        "avoidForbiddenAreas": true
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide09_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide09_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "image_text_auto_two_column",
+      "role": "image_text_auto",
+      "sourceSlideIndex": 10,
+      "templateSlideIndex": 10,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": false,
+      "allowAutoLayout": true,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.328,
+          "y": 1.964,
+          "w": 6.139,
+          "h": 2.324,
+          "sourceShapeName": "文本框 10",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 6.84,
+          "y": 2.026,
+          "w": 6.174,
+          "h": 1.934,
+          "sourceShapeName": "文本框 14",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "x": 0.55,
+        "y": 1.15,
+        "w": 12.0,
+        "h": 5.75,
+        "maxColumns": 2,
+        "preferredLayouts": [
+          "image-text",
+          "case-study",
+          "two-column"
+        ],
+        "fontSizeRange": {
+          "min": 10,
+          "max": 20
+        },
+        "colorPolicy": {
+          "primary": "#801C80",
+          "secondary": "#9D229D",
+          "body": "#3F3F3F",
+          "background": "#F2F2F2",
+          "doNotUseLogoColorsAsContentCue": true
+        },
+        "overflowPolicy": "splitToNextContentSlide",
+        "avoidForbiddenAreas": true
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide10_asset05",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 24",
+          "x": 0.328,
+          "y": 1.177,
+          "w": 4.322,
+          "h": 0.692,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide10_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide10_forbidden05",
+          "x": 0.328,
+          "y": 1.177,
+          "w": 4.322,
+          "h": 0.692,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide10_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "content_auto_three_highlights",
+      "role": "content_auto",
+      "sourceSlideIndex": 11,
+      "templateSlideIndex": 11,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": false,
+      "allowAutoLayout": true,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "x": 0.82,
+        "y": 1.22,
+        "w": 11.75,
+        "h": 5.65,
+        "maxColumns": 4,
+        "preferredLayouts": [
+          "cards",
+          "bullets",
+          "two-column",
+          "three-column",
+          "comparison",
+          "process"
+        ],
+        "fontSizeRange": {
+          "min": 10,
+          "max": 20
+        },
+        "colorPolicy": {
+          "primary": "#801C80",
+          "secondary": "#9D229D",
+          "body": "#3F3F3F",
+          "background": "#F2F2F2",
+          "doNotUseLogoColorsAsContentCue": true
+        },
+        "overflowPolicy": "splitToNextContentSlide",
+        "avoidForbiddenAreas": true
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide11_asset06",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 24",
+          "x": 0.328,
+          "y": 1.177,
+          "w": 5.66,
+          "h": 0.8,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide11_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide11_forbidden06",
+          "x": 0.328,
+          "y": 1.177,
+          "w": 5.66,
+          "h": 0.8,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide11_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "chart_auto_timeline",
+      "role": "chart_auto",
+      "sourceSlideIndex": 12,
+      "templateSlideIndex": 12,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": false,
+      "allowAutoLayout": true,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 1.59,
+          "y": 2.803,
+          "w": 0.785,
+          "h": 0.531,
+          "sourceShapeName": "文本框 27",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 4.295,
+          "y": 2.803,
+          "w": 0.785,
+          "h": 0.531,
+          "sourceShapeName": "文本框 29",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 7.001,
+          "y": 2.803,
+          "w": 0.785,
+          "h": 0.531,
+          "sourceShapeName": "文本框 30",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 0.84,
+          "y": 1.457,
+          "w": 2.283,
+          "h": 1.347,
+          "sourceShapeName": "文本框 31",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 3.546,
+          "y": 1.457,
+          "w": 2.283,
+          "h": 1.347,
+          "sourceShapeName": "文本框 32",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 6.252,
+          "y": 1.457,
+          "w": 2.283,
+          "h": 1.347,
+          "sourceShapeName": "文本框 33",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 2.855,
+          "y": 4.861,
+          "w": 0.969,
+          "h": 0.531,
+          "sourceShapeName": "文本框 34",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 5.563,
+          "y": 4.861,
+          "w": 0.969,
+          "h": 0.531,
+          "sourceShapeName": "文本框 35",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 8.281,
+          "y": 4.861,
+          "w": 0.969,
+          "h": 0.531,
+          "sourceShapeName": "文本框 36",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 2.197,
+          "y": 5.396,
+          "w": 2.283,
+          "h": 1.347,
+          "sourceShapeName": "文本框 37",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 4.906,
+          "y": 5.396,
+          "w": 2.283,
+          "h": 1.347,
+          "sourceShapeName": "文本框 38",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 7.623,
+          "y": 5.396,
+          "w": 2.283,
+          "h": 1.347,
+          "sourceShapeName": "文本框 39",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "x": 0.75,
+        "y": 1.15,
+        "w": 11.85,
+        "h": 5.85,
+        "maxColumns": 4,
+        "preferredLayouts": [
+          "chart",
+          "matrix",
+          "timeline",
+          "comparison",
+          "process"
+        ],
+        "fontSizeRange": {
+          "min": 10,
+          "max": 20
+        },
+        "colorPolicy": {
+          "primary": "#801C80",
+          "secondary": "#9D229D",
+          "body": "#3F3F3F",
+          "background": "#F2F2F2",
+          "doNotUseLogoColorsAsContentCue": true
+        },
+        "overflowPolicy": "splitToNextContentSlide",
+        "avoidForbiddenAreas": true
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide12_asset31",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "Group 24",
+          "x": 0.328,
+          "y": 1.177,
+          "w": 3.506,
+          "h": 0.692,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "top-left school name/logo area"
+        },
+        {
+          "assetId": "slide12_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide12_forbidden31",
+          "x": 0.328,
+          "y": 1.177,
+          "w": 3.506,
+          "h": 0.692,
+          "reason": "top-left school name/logo area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide12_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "chart_auto_table_matrix",
+      "role": "chart_auto",
+      "sourceSlideIndex": 13,
+      "templateSlideIndex": 13,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": false,
+      "allowAutoLayout": true,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 5.216,
+          "y": 5.959,
+          "w": 6.225,
+          "h": 0.303,
+          "sourceShapeName": "TextBox 42",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "chart",
+          "x": 5.216,
+          "y": 6.424,
+          "w": 6.225,
+          "h": 0.303,
+          "sourceShapeName": "TextBox 42",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "x": 0.75,
+        "y": 1.15,
+        "w": 11.85,
+        "h": 5.85,
+        "maxColumns": 4,
+        "preferredLayouts": [
+          "chart",
+          "matrix",
+          "timeline",
+          "comparison",
+          "process"
+        ],
+        "fontSizeRange": {
+          "min": 10,
+          "max": 20
+        },
+        "colorPolicy": {
+          "primary": "#801C80",
+          "secondary": "#9D229D",
+          "body": "#3F3F3F",
+          "background": "#F2F2F2",
+          "doNotUseLogoColorsAsContentCue": true
+        },
+        "overflowPolicy": "splitToNextContentSlide",
+        "avoidForbiddenAreas": true
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide13_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide13_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "summary_process_six_steps",
+      "role": "summary",
+      "sourceSlideIndex": 14,
+      "templateSlideIndex": 14,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "slideNumber",
+          "x": 0.393,
+          "y": 0.388,
+          "w": 0.371,
+          "h": 0.375,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 11,
+          "fontFamily": "SimHei",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "slideTitle",
+          "x": 1.037,
+          "y": 0.389,
+          "w": 9.248,
+          "h": 0.373,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 20,
+          "fontFamily": "SimSun",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 1,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 1.964,
+          "y": 1.178,
+          "w": 9.497,
+          "h": 0.806,
+          "sourceShapeName": "TextBox 13",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.956,
+          "y": 2.102,
+          "w": 11.422,
+          "h": 1.582,
+          "sourceShapeName": "矩形: 圆角 3",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 8,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 0.933,
+          "y": 2.244,
+          "w": 2.016,
+          "h": 0.571,
+          "sourceShapeName": "Shape 567",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 2.87,
+          "y": 2.244,
+          "w": 1.95,
+          "h": 0.571,
+          "sourceShapeName": "Shape 567",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 4.764,
+          "y": 2.244,
+          "w": 1.97,
+          "h": 0.571,
+          "sourceShapeName": "Shape 567",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 6.854,
+          "y": 2.244,
+          "w": 1.594,
+          "h": 0.572,
+          "sourceShapeName": "Shape 567",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 8.971,
+          "y": 2.362,
+          "w": 1.172,
+          "h": 0.335,
+          "sourceShapeName": "Shape 567",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 10.637,
+          "y": 2.244,
+          "w": 1.647,
+          "h": 0.571,
+          "sourceShapeName": "Shape 567",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 1.244,
+          "y": 2.948,
+          "w": 1.393,
+          "h": 0.469,
+          "sourceShapeName": "Rectangle: Rounded Corners 11",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 3.148,
+          "y": 2.948,
+          "w": 1.393,
+          "h": 0.469,
+          "sourceShapeName": "Rectangle: Rounded Corners 11",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 5.052,
+          "y": 2.948,
+          "w": 1.393,
+          "h": 0.469,
+          "sourceShapeName": "Rectangle: Rounded Corners 11",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        },
+        {
+          "type": "body",
+          "x": 6.956,
+          "y": 2.948,
+          "w": 1.393,
+          "h": 0.469,
+          "sourceShapeName": "Rectangle: Rounded Corners 11",
+          "fontSize": 13,
+          "fontFamily": "SimHei",
+          "color": "#3F3F3F",
+          "align": "left",
+          "maxLines": 4,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide14_top_right_logo_guard",
+          "kind": "schoolIdentityGuard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "policy": "reserved for existing top-right logo/school identity from template or master; no content allowed",
+          "reason": "protect body-page top-right logo/school identity area"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide14_top_right_logo_guard",
+          "x": 10.1,
+          "y": 0.0,
+          "w": 3.0,
+          "h": 0.95,
+          "reason": "protect body-page top-right logo/school identity area",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    },
+    {
+      "variantId": "ending_thanks",
+      "role": "ending",
+      "sourceSlideIndex": 15,
+      "templateSlideIndex": 15,
+      "sourceFile": "template.pptx",
+      "isFixedLayout": true,
+      "allowAutoLayout": false,
+      "preserveMaster": true,
+      "preserveLogo": true,
+      "preserveExistingSchoolIdentity": true,
+      "doNotAddLogo": true,
+      "slots": [
+        {
+          "type": "closingText",
+          "x": 5.111,
+          "y": 2.587,
+          "w": 3.871,
+          "h": 2.322,
+          "sourceShapeName": "inferred-safe-region",
+          "fontSize": 30,
+          "fontFamily": "SimSun",
+          "color": "#801C80",
+          "align": "center",
+          "maxLines": 2,
+          "overflowPolicy": "fitThenSplit",
+          "inferred": true
+        }
+      ],
+      "autoLayoutRegion": {
+        "enabled": false
+      },
+      "preservedAssets": [
+        {
+          "assetId": "slide15_asset02",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "图片 17",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide15_asset05",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "图片 11",
+          "x": 7.854,
+          "y": -0.499,
+          "w": 6.715,
+          "h": 6.359,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide15_asset06",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "图片 13",
+          "x": 0.322,
+          "y": 0.325,
+          "w": 2.35,
+          "h": 0.567,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        },
+        {
+          "assetId": "slide15_asset07",
+          "kind": "schoolIdentityOrDecoration",
+          "sourceShapeName": "组合 7",
+          "x": 1.51,
+          "y": 5.431,
+          "w": 10.219,
+          "h": 0.571,
+          "policy": "preserve-position-size-layer; do not move, resize, duplicate, or use as content slot",
+          "reason": "cover/ending school identity, logo, seal, or background asset"
+        }
+      ],
+      "forbiddenAreas": [
+        {
+          "areaId": "slide15_forbidden02",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 13.333,
+          "h": 7.5,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide15_forbidden05",
+          "x": 7.854,
+          "y": -0.499,
+          "w": 6.715,
+          "h": 6.359,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide15_forbidden06",
+          "x": 0.322,
+          "y": 0.325,
+          "w": 2.35,
+          "h": 0.567,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        },
+        {
+          "areaId": "slide15_forbidden07",
+          "x": 1.51,
+          "y": 5.431,
+          "w": 10.219,
+          "h": 0.571,
+          "reason": "cover/ending school identity, logo, seal, or background asset",
+          "contentPolicy": "no generated content, no generated logo, no copied logo"
+        }
+      ],
+      "notes": "Generated from user-provided cleaned annotation template. Visible annotation text is slot metadata only and must not appear in output."
+    }
+  ],
+  "layoutTypes": {
+    "cover": [
+      {
+        "variantId": "cover_primary",
+        "templateSlideIndex": 1,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 1
+      },
+      {
+        "variantId": "cover_alt_left_title",
+        "templateSlideIndex": 2,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 2
+      }
+    ],
+    "toc": [
+      {
+        "variantId": "toc_three_item",
+        "templateSlideIndex": 4,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 4
+      }
+    ],
+    "section": [
+      {
+        "variantId": "section_transition",
+        "templateSlideIndex": 5,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 5
+      }
+    ],
+    "content": [
+      {
+        "variantId": "content_fixed_overview_cards",
+        "templateSlideIndex": 3,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 3
+      },
+      {
+        "variantId": "content_auto_blank_body",
+        "templateSlideIndex": 6,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 6
+      },
+      {
+        "variantId": "content_fixed_four_columns",
+        "templateSlideIndex": 7,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 7
+      },
+      {
+        "variantId": "content_fixed_four_cards",
+        "templateSlideIndex": 8,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 8
+      },
+      {
+        "variantId": "content_auto_three_highlights",
+        "templateSlideIndex": 11,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 11
+      }
+    ],
+    "imageText": [
+      {
+        "variantId": "image_text_auto_two_column",
+        "templateSlideIndex": 10,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 10
+      }
+    ],
+    "chart": [
+      {
+        "variantId": "chart_auto_matrix_grid",
+        "templateSlideIndex": 9,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 9
+      },
+      {
+        "variantId": "chart_auto_timeline",
+        "templateSlideIndex": 12,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 12
+      },
+      {
+        "variantId": "chart_auto_table_matrix",
+        "templateSlideIndex": 13,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 13
+      }
+    ],
+    "summary": [
+      {
+        "variantId": "summary_process_six_steps",
+        "templateSlideIndex": 14,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 14
+      }
+    ],
+    "ending": [
+      {
+        "variantId": "ending_thanks",
+        "templateSlideIndex": 15,
+        "sourceFile": "template.pptx",
+        "sourceSlideIndex": 15
+      }
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.gitnexus/
 dist/
 build/
 coverage/
@@ -25,6 +26,7 @@ work_docx/
 public/mock-storage/
 
 *.pptx
+!services/ai-tools-engine/app/tools/academic_ppt/templates/builtin/**/*.pptx
 *.ppt
 *.docx
 *.doc
@@ -52,6 +54,5 @@ __pycache__/
 *.sqlite
 *.sqlite-journal
 *.tsbuildinfo
-k.includes('run')
 
 .DS_Store
