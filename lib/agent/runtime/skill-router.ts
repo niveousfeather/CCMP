@@ -1,4 +1,4 @@
-import { getExplicitFileGenerationTool } from "@/lib/agent/task-intents";
+import { getExplicitFileGenerationTool, hasExplicitWordOutputIntent } from "@/lib/agent/task-intents";
 import type { AgentRuntimeInput, AgentSkillId, AgentSkillMatch, AgentSkillSelection } from "@/lib/agent/runtime/types";
 import type { AgentTask } from "@/lib/agent/types";
 
@@ -25,8 +25,18 @@ function wantsPlanOnly(text: string) {
   return /不要生成|先给方案|先别生成|先不要生成|只给建议|先讲思路|先给我方案|plan first/i.test(text);
 }
 
+function isAdvisoryQuestion(text: string) {
+  return /怎么|如何|怎样|怎么写|怎么做|怎么排版|怎么设置|建议|思路|how to|what is/i.test(text);
+}
+
 function referencesCurrentFile(text: string) {
-  return /这个文件|这份文件|刚才的文件|上一份文件|上传的文件|再总结|总结短一点|短一点|短些|提炼一下/i.test(text);
+  return /这个文件|这份文件|这个文档|这份文档|这个附件|上传资料|上传的资料|刚才的文件|上一份文件|上传的文件|再总结|总结短一点|短一点|短些|短一些|提炼一下/i.test(text);
+}
+
+function wantsFileAnalysis(text: string) {
+  const referencesFile = /文件|文档|附件|资料|两个文件|两份文件|file|document|attachment/i.test(text) || referencesCurrentFile(text);
+  const analysisIntent = /总结|分析|提取|重点|对比|比较|讲了什么|说了什么|概括|摘要|analy[sz]e|summari[sz]e|extract|compare/i.test(text);
+  return referencesFile && analysisIntent && !hasExplicitWordOutputIntent(text);
 }
 
 function wantsExcelOutput(text: string) {
@@ -68,10 +78,18 @@ export function matchAgentSkill({
     candidates.push({ skillId: null, confidence: 0.99, reasons: ["user_requested_plan_first"] });
   }
 
-  if (activeKind === "file-analysis" && referencesCurrentFile(text)) {
+  if (wantsFileAnalysis(text) && activeKind === "file-analysis") {
+    candidates.push({ skillId: "file-analysis", confidence: 0.95, reasons: ["current_conversation_file_analysis"] });
+  } else if (wantsFileAnalysis(text)) {
+    candidates.push({ skillId: "file-analysis", confidence: 0.88, reasons: ["file_analysis_terms"] });
+  } else if (activeKind === "file-analysis" && referencesCurrentFile(text)) {
     candidates.push({ skillId: "file-analysis", confidence: 0.9, reasons: ["current_conversation_file_reference"] });
-  } else if (!activeKind && referencesCurrentFile(text)) {
+  } else if (!activeKind && referencesCurrentFile(text) && !isAdvisoryQuestion(text)) {
     candidates.push({ skillId: "file-analysis", confidence: 0.82, reasons: ["missing_current_conversation_file_reference"] });
+  }
+
+  if (getExplicitFileGenerationTool(text) === "write" && hasExplicitWordOutputIntent(text) && (activeKind === "file-analysis" || referencesCurrentFile(text))) {
+    candidates.push({ skillId: "word", confidence: 0.96, reasons: ["current_file_to_word_output"] });
   }
 
   if (wantsExcelOutput(text) && (activeKind === "file-analysis" || referencesCurrentFile(text))) {

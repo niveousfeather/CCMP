@@ -21,8 +21,16 @@ function wantsPlanOnly(text: string) {
   return /不要生成|先给方案|先别生成|先不要生成|只给建议|先讲思路|先给我方案|plan first/i.test(text);
 }
 
+function referencesConversationText(text: string) {
+  return /上面内容|刚才的总结|前面内容|上述内容|以上内容/i.test(text);
+}
+
 function referencesPriorObject(text: string) {
-  return /刚才|上一|上一个|上一份|这个文件|这份文件|那张图|这张图|继续/i.test(text);
+  return /刚才|上一|上一个|上一份|这个文件|这份文件|这个文档|这份文档|这个附件|那张图|这张图|继续/i.test(text);
+}
+
+function referencesCurrentFileForWord(text: string) {
+  return /这个文件|这份文件|这个文档|这份文档|这个附件|上传资料|上传的资料|根据.*文件|根据.*资料/i.test(text);
 }
 
 function referencesCurrentFileForExcel(text: string) {
@@ -54,6 +62,10 @@ function hasInlineDataSource(text: string) {
   return /[:：]\s*\S+/.test(text) || /数据|名单|表格|列表|姓名|成绩|金额|数量|日期|项目/i.test(text);
 }
 
+function isVagueClarificationRequest(text: string) {
+  return /^(整理一下|帮我弄成正式一点|导出一下)$/i.test(text.trim());
+}
+
 function buildMissingInputs(text: string, legacyTask: AgentTask, skillId: string | null, activeTaskKind?: string | null) {
   const missing = new Set<string>(
     legacyTask.missingFields
@@ -66,7 +78,17 @@ function buildMissingInputs(text: string, legacyTask: AgentTask, skillId: string
       })
   );
   if (skillId === "excel" && activeTaskKind === "file-analysis") missing.delete("file");
-  if (skillId && subjectRequiredSkills.has(skillId) && !hasSubjectAfterToolMention(text, skillId)) missing.add("subject");
+  if (skillId === "file-analysis" && activeTaskKind === "file-analysis") missing.delete("file");
+  if (skillId === "word" && activeTaskKind === "file-analysis" && referencesCurrentFileForWord(text)) {
+    missing.delete("file");
+    missing.delete("documentType");
+  }
+  if (skillId === "word" && referencesConversationText(text)) {
+    missing.delete("documentType");
+  }
+  if (skillId && subjectRequiredSkills.has(skillId) && !hasSubjectAfterToolMention(text, skillId) && !(skillId === "word" && referencesCurrentFileForWord(text) && activeTaskKind)) {
+    missing.add("subject");
+  }
   if (skillId === "excel" && /导出|export/i.test(text) && !legacyTask.hasFiles && !hasInlineDataSource(text)) {
     missing.add("data_source");
   }
@@ -76,13 +98,21 @@ function buildMissingInputs(text: string, legacyTask: AgentTask, skillId: string
   if (skillId === "excel" && modifiesSpreadsheetFile(text) && !legacyTask.hasFiles) {
     missing.add("spreadsheet_file");
   }
-  if ((skillId === "ppt-simple" || skillId === "word" || skillId === "excel" || skillId === "file-analysis") && referencesPriorObject(text) && !legacyTask.hasFiles && !activeTaskKind) {
-    missing.add(skillId === "file-analysis" ? "file" : "active_task");
+  if ((skillId === "ppt-simple" || skillId === "word" || skillId === "excel" || skillId === "file-analysis") && referencesPriorObject(text) && !referencesConversationText(text) && !legacyTask.hasFiles && !activeTaskKind) {
+    missing.add(skillId === "file-analysis" || referencesCurrentFileForWord(text) ? "file" : "active_task");
   }
   const hasEditableImageTask = activeTaskKind === "image" || activeTaskKind === "teaching-diagram";
   if (skillId === "image" && /修改|编辑|改成|改为|换成|标题|刚才|上一张|那张|edit|revise|change/i.test(text) && !legacyTask.hasFiles && !hasEditableImageTask) {
     missing.add("image_to_edit");
   }
+  if (!skillId && isVagueClarificationRequest(text)) {
+    missing.add(/导出/.test(text) ? "output_format" : "topic");
+  }
+  if (!skillId && /继续刚才的文档/i.test(text)) {
+    missing.add("active_task");
+  }
+  if (!skillId && !isVagueClarificationRequest(text) && !/继续刚才的文档/i.test(text)) missing.clear();
+  missing.delete("outputFormat");
   return Array.from(missing);
 }
 
@@ -112,6 +142,7 @@ export function evaluateExecutionGate({
   const executionIntent = hasExecutionVerb(text) || hasModernChineseExecutionVerb(text);
   const advisoryQuestion = isHowToQuestion(text);
   const missingInputs = buildMissingInputs(text, legacyTask, skillId, activeTaskKind);
+  const needsClarificationWithoutTool = !needsTool && missingInputs.length > 0;
   const reasons: string[] = [];
 
   if (needsTool) reasons.push(`skill:${skillId}`);
@@ -124,11 +155,12 @@ export function evaluateExecutionGate({
 
   const confidenceNeedsConfirmation = skillId === "file-analysis" ? skillMatch.confidence < 0.6 : skillMatch.confidence < 0.78;
   const needsConfirmation =
-    needsTool &&
-    (confidenceNeedsConfirmation ||
-      (!executionIntent && skillId !== "file-analysis") ||
-      (advisoryQuestion && fileGenerationSkills.has(String(skillId))) ||
-      missingInputs.length > 0);
+    needsClarificationWithoutTool ||
+    (needsTool &&
+      (confidenceNeedsConfirmation ||
+        (!executionIntent && skillId !== "file-analysis") ||
+        (advisoryQuestion && fileGenerationSkills.has(String(skillId))) ||
+        missingInputs.length > 0));
 
   return {
     needsTool,
