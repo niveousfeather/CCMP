@@ -849,6 +849,7 @@ function buildAdapterTaskCard(input: {
 }
 
 async function getConversationSummaryCache(conversationId: string, userId: string) {
+  // Conversation-level memory only: never read summaries from another conversation or a user profile.
   const latestAssistant = await prisma.chatMessage.findFirst({
     where: {
       role: "assistant",
@@ -992,6 +993,7 @@ function inferActiveTaskKind(metadata: Record<string, unknown> | null, attachmen
 }
 
 async function getActiveConversationTask(conversationId: string, userId: string): Promise<AgentActiveTask | null> {
+  // Conversation-level memory only: recover active objects from this conversationId and this user.
   const recentAssistants = await prisma.chatMessage.findMany({
     where: {
       role: "assistant",

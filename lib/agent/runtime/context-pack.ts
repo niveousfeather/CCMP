@@ -14,14 +14,14 @@ function compactText(value: string, maxLength: number) {
 }
 
 function taskKindLabel(kind: string) {
-  if (kind === "image") return "上一张图片";
-  if (kind === "teaching-diagram") return "上一个教学架构图";
-  if (kind === "ppt") return "上一个 PPT";
-  if (kind === "word") return "上一个 Word 文档";
-  if (kind === "excel") return "上一个 Excel 表格";
-  if (kind === "file-analysis") return "上一份文件";
-  if (kind === "knowledge-graph") return "上一个知识图谱";
-  return "上一个任务";
+  if (kind === "image") return "previous image in this conversation";
+  if (kind === "teaching-diagram") return "previous teaching diagram in this conversation";
+  if (kind === "ppt") return "previous PPT in this conversation";
+  if (kind === "word") return "previous Word document in this conversation";
+  if (kind === "excel") return "previous Excel sheet in this conversation";
+  if (kind === "file-analysis") return "previous file in this conversation";
+  if (kind === "knowledge-graph") return "previous knowledge graph in this conversation";
+  return "previous task in this conversation";
 }
 
 function summarizeAttachment(file: NonNullable<AgentRuntimeInput["files"]>[number]) {
@@ -84,8 +84,12 @@ function activeTaskSummary(input: AgentRuntimeInput): AgentRuntimeActiveTaskSumm
   };
 }
 
-function buildMemoryHints(input: AgentRuntimeInput, activeTask: AgentRuntimeActiveTaskSummary | null, attachmentSummaries: AgentRuntimeContextPack["attachmentSummaries"]) {
-  const hints: string[] = [];
+function buildMemoryHints(
+  input: AgentRuntimeInput,
+  activeTask: AgentRuntimeActiveTaskSummary | null,
+  attachmentSummaries: AgentRuntimeContextPack["attachmentSummaries"]
+) {
+  const hints: string[] = ["Memory is scoped to the current conversationId only."];
   if (activeTask) {
     const title = activeTask.title ? `: ${activeTask.title}` : "";
     hints.push(`Current referenced object is ${taskKindLabel(activeTask.kind)}${title}.`);
@@ -138,22 +142,23 @@ export function buildRuntimeChatMessagesFromContextPack(contextPack: AgentRuntim
     {
       role: "system" as const,
       content:
-        "你是 NexusAI 主聊天助手。只使用当前会话的压缩上下文回答，不要声称读取了未提供的完整文件。普通咨询直接回答；生成、修改、导出类动作只有在系统决策允许时才执行。不要暴露内部决策 JSON、provider、模型名或思考链。"
+        "You are NexusAI's main chat assistant. Use only the compressed context from the current conversationId. Do not use cross-conversation memory, user profile memory, or permanent memory. Do not claim to read a full file unless it is provided in this conversation. Answer normal questions directly; generation, editing, and export actions run only when the runtime gate allows them. Never expose internal decision JSON, provider names, model names, API keys, or chain-of-thought."
     },
     {
       role: "system" as const,
       content: [
-        `上下文预算: ${contextPack.tokenBudgetHint.mode} (${contextPack.tokenBudgetHint.reason})`,
-        `最近对话摘要:\n${contextPack.recentSummary}`,
-        `附件摘要:\n${attachmentContext}`,
-        `当前引用对象: ${activeTask}`,
-        `当前会话偏好: ${contextPack.sessionPreferences.join(", ") || "none"}`,
-        `记忆提示:\n${memoryHints}`
+        "Memory boundary: current conversation only. A new conversation starts with empty memory.",
+        `Context budget: ${contextPack.tokenBudgetHint.mode} (${contextPack.tokenBudgetHint.reason})`,
+        `Recent conversation summary:\n${contextPack.recentSummary}`,
+        `Attachment summaries:\n${attachmentContext}`,
+        `Current referenced object: ${activeTask}`,
+        `Temporary preferences in this conversation: ${contextPack.sessionPreferences.join(", ") || "none"}`,
+        `Memory hints:\n${memoryHints}`
       ].join("\n\n")
     },
     {
       role: "user" as const,
-      content: contextPack.latestUserMessage || "请继续。"
+      content: contextPack.latestUserMessage || "Please continue."
     }
   ];
 }

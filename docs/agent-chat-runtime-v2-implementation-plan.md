@@ -870,3 +870,85 @@ targetTool 展示方式：
 - in-app browser 偶发 `net::ERR_BLOCKED_BY_CLIENT` 仍可能与客户端扩展/内置策略有关；当 dev server 正常运行后本阶段可打开。
 - 文件上传真实 UI 选择器未自动化覆盖，建议后续人工补测一个小 txt/pdf。
 - 本阶段不提交，等待用户确认是否再做安全提交。
+
+## 24. 第十四阶段当前对话记忆边界
+
+本阶段只收紧和说明 conversation-level memory，不做长期记忆。
+
+### 明确边界
+
+- 记忆只绑定当前 `conversationId`。
+- 新开对话后，Runtime memory 为空。
+- 不做 user profile memory。
+- 不做全站长期 memory。
+- 不保存敏感个人信息。
+- 不做记忆管理页。
+- 不做“永久记住”。
+- 不跨 conversation 读取 activeTask、文件引用、临时偏好或 conversation summary。
+
+### 当前对话内允许记住
+
+Runtime V2 只从当前 conversation 最近消息和 metadata 恢复：
+
+- 最近对话摘要；
+- 当前 activeTask；
+- 最近上传文件；
+- 最近生成的 PPT / Word / Excel / 图片 / 教学架构图 / 知识图谱 taskCard；
+- 本对话里的临时偏好，例如“简短点”“不要生成，先给方案”。
+
+这些信息只进入当前请求的 `contextPack` 和 assistant metadata，不写入长期用户资料。
+
+### 新开对话必须清空
+
+当用户新开对话或使用新的 draft conversation 时，不继承旧 conversation 的：
+
+- activeTask；
+- 文件引用；
+- 临时偏好；
+- 任务引用；
+- conversationSummary。
+
+实现上，`getConversationSummaryCache`、`getPendingAgentTask`、`getActiveConversationTask` 都以当前 `conversationId` 和 `userId` 为查询条件。没有当前 `conversationId` 时，会创建新 conversation，并从空 memory 开始。
+
+### 语义优化范围
+
+当前阶段重点支持：
+
+- `刚才那个`：只在当前 conversation 内解析为最近任务或文件；
+- `上一张图`：只在当前 conversation 内解析为最近 image / teaching-diagram；
+- `继续刚才的 PPT`：当前 conversation 有 PPT task 时继续，否则追问用户指哪个；
+- `把这个文件再总结短一点`：当前 conversation 有文件 activeTask 时继续，否则要求上传/指定文件；
+- `用刚才的数据生成 Excel`：只可引用当前 conversation 内的数据或文件；
+- `不要生成，先给我方案`：记为本对话临时偏好，当前轮走普通回答，不自动调工具。
+
+### 防止长期记忆误用
+
+`context-pack.ts` 的 system context 明确写入：
+
+- only compressed context from the current conversationId；
+- do not use cross-conversation memory；
+- do not use user profile memory；
+- do not use permanent memory；
+- new conversation starts with empty memory。
+
+这条边界是 Runtime V2 的当前设计约束，不是临时提示语。
+
+### 验证矩阵
+
+| 场景 | 预期 |
+| --- | --- |
+| 同一对话内刚生成 PPT 后说 `继续刚才的PPT，改成正式一点` | 命中当前 PPT activeTask |
+| 新开对话后说 `继续刚才的PPT，改成正式一点` | 不跨会话查找，追问指哪个 PPT |
+| 同一对话内上传文件后说 `这个文件再总结短一点` | 命中当前文件 activeTask |
+| 新开对话后说 `这个文件再总结短一点` | 不跨会话查找，要求上传/指定文件 |
+| 同一对话内生成图片后说 `上一张图标题改成XXX` | 命中当前图片 activeTask |
+| 新开对话后说 `上一张图标题改成XXX` | 不跨会话查找，要求上传/指定图片 |
+| 本对话说 `不要生成，先给我方案` | 当前轮 answer_chat，不调用工具 |
+| 新开对话后普通生成请求 | 不继承上一对话的“不要生成”偏好 |
+
+### 未做事项
+
+- 不做长期记忆开关。
+- 不做记忆管理页。
+- 不做跨会话历史搜索。
+- 不保存用户长期偏好。
