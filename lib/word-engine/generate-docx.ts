@@ -1,7 +1,7 @@
 import { createDocxBuffer } from "@/lib/document/create";
 import { serializeWordDocumentPlan, type WordDocumentPlan } from "@/lib/document/plan";
 import { DOCX_MIME } from "@/lib/document/types";
-import type { WordContent, WordGenerateResult, WordRequest } from "./types";
+import type { WordContent, WordGenerateResult, WordRequest, WordTaskMemory } from "./types";
 
 function safeBaseFileName(value?: string, fallback = "report") {
   const raw = (value || fallback).replace(/\.docx$/i, "").trim();
@@ -61,11 +61,13 @@ function contentToDocumentPlan(content: WordContent): WordDocumentPlan {
 export function generateDocx({
   content,
   request,
-  warnings
+  warnings,
+  wordTaskMemory
 }: {
   content: WordContent;
   request: WordRequest;
   warnings: string[];
+  wordTaskMemory: WordTaskMemory;
 }): WordGenerateResult {
   const markdown = serializeWordDocumentPlan(contentToDocumentPlan(content));
   const buffer = createDocxBuffer({
@@ -81,6 +83,7 @@ export function generateDocx({
     buffer,
     mimeType: DOCX_MIME,
     sizeBytes: buffer.length,
-    warnings
+    warnings,
+    wordTaskMemory
   };
 }

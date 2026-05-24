@@ -7,6 +7,8 @@ export type WordSourceFile = {
 export type WordStylePreset = "professional" | "concise" | "formal";
 
 export type WordRequest = {
+  taskId?: string;
+  conversationId?: string;
   title: string;
   instruction: string;
   sourceText?: string;
@@ -15,6 +17,8 @@ export type WordRequest = {
   outputFileName?: string;
   stylePreset?: WordStylePreset;
   language?: "zh-CN" | "en-US" | string;
+  resumeFromMemory?: WordTaskMemory | null;
+  resumeInstruction?: string;
 };
 
 export type WordSection = {
@@ -58,4 +62,31 @@ export type WordGenerateResult = {
   mimeType: string;
   sizeBytes: number;
   warnings: string[];
+  wordTaskMemory: WordTaskMemory;
+};
+
+export type WordTaskStage =
+  | "planning"
+  | "generating_content"
+  | "sanitizing"
+  | "rendering_docx"
+  | "completed"
+  | "failed"
+  | "interrupted";
+
+export type WordTaskMemory = {
+  taskId?: string;
+  conversationId: string;
+  originalInstruction: string;
+  title: string;
+  sourceFileNames: string[];
+  sourceSummary: string;
+  plan: WordPlan | null;
+  completedSections: string[];
+  pendingSections: string[];
+  currentStage: WordTaskStage;
+  failureReason?: string;
+  resumeInstruction?: string;
+  createdAt: string;
+  updatedAt: string;
 };

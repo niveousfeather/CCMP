@@ -135,6 +135,7 @@ const checks: Check[] = [
       assert(resultCard?.taskType === "word", "resultCard should be word");
       assert(resultCard?.status === "completed", "resultCard should be completed");
       assert(resultCard?.downloadUrl === generated.url, "resultCard should expose generated downloadUrl");
+      assert(resultCard?.wordTaskMemory?.currentStage === "completed", "resultCard should include completed wordTaskMemory");
       assert(textFromXml(xml).includes("AI 教育"), "docx should include topic");
     }
   },

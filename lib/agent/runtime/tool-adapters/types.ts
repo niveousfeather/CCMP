@@ -1,5 +1,6 @@
 import type { AgentRuntimeDecision, AgentRuntimeTargetTool } from "@/lib/agent/runtime/types";
 import type { AgentRunResult, AgentToolSelection } from "@/lib/agent/types";
+import type { WordTaskMemory } from "@/lib/word-engine";
 
 export type AgentActiveTaskKind = "image" | "teaching-diagram" | "ppt" | "word" | "excel" | "file-analysis" | "knowledge-graph";
 
@@ -43,6 +44,7 @@ export type ToolAdapterResultCard = {
   openUrl?: string | null;
   retryable?: boolean;
   failureReason?: string | null;
+  wordTaskMemory?: WordTaskMemory | null;
 };
 
 export type ToolAdapterExecutionResult = {
@@ -65,6 +67,7 @@ export type ToolAdapterContext = {
   signal: AbortSignal;
   timeoutMs?: number;
   activeTask?: AgentActiveTask | null;
+  wordTaskMemory?: WordTaskMemory | null;
   runLegacyAgent: () => Promise<AgentRunResult>;
   runImageGeneration: () => Promise<{ result: AgentRunResult; imageGeneration: unknown | null }>;
   runChatAnswer: () => Promise<AgentRunResult>;

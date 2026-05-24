@@ -34,3 +34,4 @@ export type {
   ToolAdapterResultCard,
   ToolAdapterValidationResult
 } from "@/lib/agent/runtime/tool-adapters/types";
+export type { WordTaskMemory } from "@/lib/word-engine";

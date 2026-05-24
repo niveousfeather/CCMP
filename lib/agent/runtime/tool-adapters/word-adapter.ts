@@ -5,13 +5,16 @@ import type { GeneratedAgentFile } from "@/lib/agent/types";
 import type { ConversationFileReference, ToolAdapter } from "@/lib/agent/runtime/tool-adapters/types";
 import * as storage from "@/lib/storage";
 import { createMockStorage } from "@/lib/storage/local";
-import { generateWordDocumentFromRequest, type WordRequest } from "@/lib/word-engine";
+import { generateWordDocumentFromRequest, resumeWordRequestFromMemory, type WordRequest, type WordTaskMemory } from "@/lib/word-engine";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const WORD_FAILED_MESSAGE = "Word 文档生成失败，请补充更明确的主题或稍后重试。";
 const WORD_MISSING_SUBJECT_MESSAGE = "请补充 Word 文档的主题、文体和大致篇幅。";
 const WORD_MISSING_FILE_MESSAGE = "请先上传需要整理成 Word 的文件，或补充当前对话中的材料。";
 const WORD_MISSING_CONTENT_MESSAGE = "请提供要写入 Word 的正文材料、对话总结或明确主题。";
+const WORD_MISSING_ACTIVE_TASK_MESSAGE = "请先在当前对话里生成一个 Word 任务，我再继续完善。";
+const MAX_WORD_TASK_MEMORY_ENTRIES = 100;
+const wordTaskMemoryByConversation = new Map<string, WordTaskMemory>();
 
 function datePath() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -23,6 +26,23 @@ function isDocumentFile(file: File) {
 
 function referencesCurrentFile(text: string) {
   return /这个文件|这份文件|这个文档|这份文档|上传资料|上传的资料|根据.*文件|根据.*资料/i.test(text);
+}
+
+function referencesPriorWordTask(text: string) {
+  return /继续刚才的\s*Word|继续生成这个文档|把刚才的\s*Word\s*补完整|根据刚才的\s*Word\s*继续写/i.test(text);
+}
+
+function currentConversationWordMemory(context: Parameters<ToolAdapter["execute"]>[1]): WordTaskMemory | null {
+  const memory = context.wordTaskMemory || wordTaskMemoryByConversation.get(context.conversationId) || null;
+  if (!memory || memory.conversationId !== context.conversationId) return null;
+  return memory;
+}
+
+function rememberWordTaskMemory(memory: WordTaskMemory) {
+  wordTaskMemoryByConversation.set(memory.conversationId, memory);
+  if (wordTaskMemoryByConversation.size <= MAX_WORD_TASK_MEMORY_ENTRIES) return;
+  const oldestKey = wordTaskMemoryByConversation.keys().next().value;
+  if (oldestKey) wordTaskMemoryByConversation.delete(oldestKey);
 }
 
 function sanitizeTitle(value: string) {
@@ -102,6 +122,11 @@ function toGeneratedFile(result: Awaited<ReturnType<typeof generateWordDocumentF
 }
 
 async function buildWordRequest(context: Parameters<ToolAdapter["execute"]>[1]): Promise<WordRequest> {
+  const wordMemory = currentConversationWordMemory(context);
+  if (referencesPriorWordTask(context.userText) && wordMemory) {
+    return resumeWordRequestFromMemory(wordMemory, context.userText);
+  }
+
   const uploadedSourceText = await parseUploadedSourceText(context.files);
   const conversationText = conversationSourceText(context.conversationFiles);
   const recentSummary = collectRecentSummary(context.messages, context.userText);
@@ -109,6 +134,7 @@ async function buildWordRequest(context: Parameters<ToolAdapter["execute"]>[1]):
   const title = inferTitle(context.userText, sourceText);
 
   return {
+    conversationId: context.conversationId,
     title,
     instruction: context.userText,
     sourceText: sourceText || undefined,
@@ -129,6 +155,9 @@ export const wordAdapter: ToolAdapter = {
   targetTool: "word",
   canHandle: (decision) => decision.targetTool === "word",
   validateInputs: (decision, context) => {
+    if (referencesPriorWordTask(context.userText) && !currentConversationWordMemory(context)) {
+      return { ok: false, missingInputs: ["active_word_task"], message: WORD_MISSING_ACTIVE_TASK_MESSAGE };
+    }
     if (decision.missingInputs.includes("subject")) {
       return { ok: false, missingInputs: ["subject"], message: WORD_MISSING_SUBJECT_MESSAGE };
     }
@@ -143,6 +172,7 @@ export const wordAdapter: ToolAdapter = {
   execute: async (_decision, context) => {
     const request = await buildWordRequest(context);
     const result = await generateWordDocumentFromRequest(request);
+    rememberWordTaskMemory(result.wordTaskMemory);
     const persisted = await persistDocx({ buffer: result.buffer, userId: context.userId });
     const generatedFile = toGeneratedFile(result, persisted);
 
@@ -165,7 +195,8 @@ export const wordAdapter: ToolAdapter = {
         status: "completed",
         taskType: "word",
         downloadUrl: generatedFile.url,
-        retryable: true
+        retryable: true,
+        wordTaskMemory: result.wordTaskMemory
       }
     };
   },

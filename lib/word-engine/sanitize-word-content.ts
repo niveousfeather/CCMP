@@ -9,7 +9,13 @@ const pollutedPhrases = [
   "根据用户要求",
   "作为 AI",
   "作为AI",
-  "以下内容来自"
+  "以下内容来自",
+  "wordTaskMemory",
+  "completedSections",
+  "pendingSections",
+  "currentStage",
+  "resumeInstruction",
+  "failureReason"
 ];
 
 function cleanText(value: string) {
