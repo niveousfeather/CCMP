@@ -36,6 +36,18 @@ function isAmbiguousAcademicPptRequest(text: string) {
   return remainder.length < 4;
 }
 
+function referencesCurrentPptEdit(text: string) {
+  return /继续刚才的\s*ppt|刚才的\s*ppt|上一个\s*ppt|上一份\s*ppt|ppt.*改成|ppt.*修改|ppt.*编辑|ppt.*正式|改成正式一点/i.test(text);
+}
+
+function explicitlyRegeneratesPpt(text: string) {
+  return /重新生成|再生成|重新做|重新制作|生成.*新版|新版|另生成|重新出一版|regenerate/i.test(text);
+}
+
+function needsPptRegenerationConfirmation(text: string, input: AgentRuntimeInput, selectedSkillId: string | null) {
+  return input.activeTask?.kind === "ppt" && selectedSkillId === "ppt-simple" && referencesCurrentPptEdit(text) && !explicitlyRegeneratesPpt(text);
+}
+
 function nextAction({
   allowed,
   needsTool,
@@ -63,6 +75,9 @@ function clarificationQuestion(decision: Pick<AgentRuntimeDecision, "targetTool"
   if (decision.missingInputs.includes("academic_ppt_confirmation")) {
     return "我先确认一下：你要做的是普通 PPT，还是论文、课题、申报等学术汇报 PPT？请补充主题、用途和材料。";
   }
+  if (decision.missingInputs.includes("ppt_regeneration_confirmation")) {
+    return "当前聊天里的简单 PPT 支持基于原主题重新生成新版，不支持直接编辑已有 PPT 文件。要我按刚才主题重新生成一个更正式版本吗？";
+  }
   if (decision.missingInputs.includes("subject")) {
     if (decision.targetTool === "ppt-simple") return "可以，我先确认一下：这个 PPT 的主题是什么？需要面向谁，预计多少页？";
     if (decision.targetTool === "word") return "可以，我先确认一下：这份 Word 文档的主题、文体和大致篇幅是什么？";
@@ -89,16 +104,23 @@ export function planAgentRuntimeIntent(input: AgentRuntimeInput): Omit<AgentRunt
   const skillSelection = matchAgentSkill({ text, input, legacyTask });
   const selectedSkill = skillSelection.selected;
   const ambiguousAcademicPpt = isAmbiguousAcademicPptRequest(text);
+  const pptRegenerationConfirmation = needsPptRegenerationConfirmation(text, input, selectedSkill.skillId);
   const gate = evaluateExecutionGate({ text, legacyTask, skillMatch: selectedSkill, activeTaskKind: input.activeTask?.kind || null });
-  const action = ambiguousAcademicPpt ? "ask_clarification" : nextAction(gate);
+  const action = ambiguousAcademicPpt || pptRegenerationConfirmation ? "ask_clarification" : nextAction(gate);
   const intent = ambiguousAcademicPpt ? "academic_ppt" : selectedSkill.skillId ? intentBySkill[selectedSkill.skillId] || "general_chat" : "general_chat";
-  const missingInputs = ambiguousAcademicPpt ? Array.from(new Set([...gate.missingInputs, "academic_ppt_confirmation"])) : gate.missingInputs;
+  const missingInputs = Array.from(
+    new Set([
+      ...gate.missingInputs,
+      ...(ambiguousAcademicPpt ? ["academic_ppt_confirmation"] : []),
+      ...(pptRegenerationConfirmation ? ["ppt_regeneration_confirmation"] : [])
+    ])
+  );
   const baseDecision = {
     intent,
     targetTool: ambiguousAcademicPpt ? "none" : targetTool(selectedSkill.skillId),
     confidence: Math.max(0, Math.min(0.99, selectedSkill.confidence)),
     needsTool: ambiguousAcademicPpt ? false : gate.needsTool,
-    needsConfirmation: ambiguousAcademicPpt || gate.needsConfirmation || legacyTask.type === "clarify",
+    needsConfirmation: ambiguousAcademicPpt || pptRegenerationConfirmation || gate.needsConfirmation || legacyTask.type === "clarify",
     missingInputs,
     activeTaskId: input.activeTask?.id || (input.pendingTask ? "pending-conversation-task" : null),
     nextAction: action,

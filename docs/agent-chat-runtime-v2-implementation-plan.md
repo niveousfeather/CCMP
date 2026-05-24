@@ -1183,3 +1183,86 @@ Agent Runtime V2 regression passed.
 - 单独修复文件分析 multipart 端到端链路，确认是否走 `lib/document-processing` 或旧 `parse-document`。
 - 为“继续刚才的 PPT，改成正式一点”设计明确的 continuation 语义：重新生成、修改已有文件、还是追问用户选择。
 - 若前端改动较多，再补一次浏览器 UI 验收，检查单气泡、taskCard 刷新恢复和入口点击。
+
+## 28. 第十八阶段 文件分析上传链路与 PPT 延续边界
+
+### 阶段目标
+
+本阶段只修复第十七阶段遗留的两个问题：
+
+- 文件分析 multipart / txt 上传后应能被聊天链路读取和总结；
+- `继续刚才的PPT，改成正式一点` 不能假装直接编辑旧 PPT，需要明确 simple PPT 的能力边界。
+
+本阶段未新增工具，未扩展 adapter，未修改 Academic PPT、`services/**`、`data/**`、教学架构图业务内部、capability-map，也未重写 Word / Excel / PPT / 图片底层生成器。
+
+### 文件分析链路修复
+
+修复点：
+
+- `file-analysis-adapter` 不再把文件分析直接委托给旧 Agent 模型链路；
+- adapter 内优先复用 `lib/document-processing/parser`；
+- multipart 上传的 `File[]` 直接交给公共解析器处理；
+- txt / md / docx / pdf / pptx 等公共解析器支持的文件会被解析为 `extractedDocuments`；
+- 文件分析结果直接作为聊天文本返回；
+- `getResultCard()` 固定返回 `null`，因此文件总结不显示 taskCard；
+- 不生成 Word / PPT / Excel / 图片；
+- 不调用 Academic PPT。
+
+解析失败时用户可见文案统一为：
+
+```text
+文件解析失败，请确认文件格式或重新上传。
+```
+
+### 文件分析验证结果
+
+- 上传 txt 后 `根据这个文件总结一下`：本地 adapter 解析验证通过，返回聊天文本摘要，`resultCard=null`。
+- docx：使用临时内存 docx 验证公共解析入口通过，`status=parsed`。
+- pdf：使用临时内存 pdf 验证公共解析入口通过，`status=parsed`；本地环境会输出 pdfjs/canvas polyfill warning，不影响文本解析结果。
+- 无文件时 `根据这个文件总结一下` / `这个文件再总结短一点`：Runtime 继续进入 `ask_clarification`，`missingInputs` 包含 `file`。
+
+本阶段补充验证命令：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
+npm.cmd exec -- tsc --noEmit
+```
+
+### PPT 延续边界
+
+确认的产品边界：
+
+- simple PPT 当前只支持“生成新版”；
+- simple PPT 不支持直接编辑已有 PPT 文件；
+- `继续刚才的PPT，改成正式一点` 即使识别到当前 conversation 的 PPT activeTask，也先追问确认；
+- 不直接覆盖旧 PPT；
+- 不假装已经修改旧 PPT；
+- 不进入 Academic PPT。
+
+追问文案：
+
+```text
+当前聊天里的简单 PPT 支持基于原主题重新生成新版，不支持直接编辑已有 PPT 文件。要我按刚才主题重新生成一个更正式版本吗？
+```
+
+只有用户明确表达 `重新生成`、`再生成`、`新版`、`重新出一版` 等语义时，才允许进入 `ppt-simple / run_legacy_tool`。
+
+如果用户要求编辑已有 PPT 文件，当前阶段提示需要上传 PPT 文件或后续单独建设 PPT 修改能力，不在 simple PPT 旧生成器里硬做真实编辑。
+
+### Runtime 回归更新
+
+`scripts/agent-runtime/check-runtime-v2.ts` 从 16 个用例扩展到 17 个用例：
+
+- `当前对话有 PPT activeTask 时先确认重新生成边界`：`ppt-simple / ask_clarification`，`missingInputs` 包含 `ppt_regeneration_confirmation`；
+- `当前对话明确重新生成 PPT 新版时调用工具`：`ppt-simple / run_legacy_tool`。
+
+当前结果：
+
+- `npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts`：通过，17/17 PASS。
+- `npm.cmd exec -- tsc --noEmit`：通过。
+
+### 未解决问题与后续建议
+
+- 建议后续补文件分析 fixture 自动化测试，覆盖 txt / docx / pdf multipart 真实 API 请求；
+- 建议后续单独设计 PPT 修改 adapter，明确“上传 PPT 后修改”和“基于上次主题重新生成”的两条路径；
+- 若需要更高质量文件总结，可在本地解析成功后接入受控模型总结，但仍必须只传摘要/节选，不传无关长历史。

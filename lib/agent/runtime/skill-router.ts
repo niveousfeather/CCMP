@@ -37,6 +37,10 @@ function referencesCurrentPpt(text: string) {
   return /继续刚才的\s*ppt|刚才的\s*ppt|上一个\s*ppt|上一份\s*ppt|ppt.*改成|ppt.*正式|改成正式一点/i.test(text);
 }
 
+function referencesPptRegenerationFollowup(text: string) {
+  return /重新生成|再生成|重新做|重新制作|生成.*新版|新版|另生成|重新出一版|更正式版本|regenerate/i.test(text);
+}
+
 export function matchAgentSkill({
   text,
   input,
@@ -64,7 +68,7 @@ export function matchAgentSkill({
     candidates.push({ skillId: "image", confidence: 0.9, reasons: ["current_conversation_image_reference"] });
   }
 
-  if (activeKind === "ppt" && referencesCurrentPpt(text)) {
+  if (activeKind === "ppt" && (referencesCurrentPpt(text) || referencesPptRegenerationFollowup(text))) {
     candidates.push({ skillId: "ppt-simple", confidence: 0.84, reasons: ["current_conversation_ppt_reference"] });
   } else if (!activeKind && referencesCurrentPpt(text)) {
     candidates.push({ skillId: "ppt-simple", confidence: 0.82, reasons: ["missing_current_conversation_ppt_reference"] });

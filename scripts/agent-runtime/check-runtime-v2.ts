@@ -84,9 +84,15 @@ const cases: RuntimeCase[] = [
     expected: { nextAction: "ask_clarification", missingIncludes: ["image_to_edit"] }
   },
   {
-    name: "当前对话有 PPT activeTask 时继续 PPT",
+    name: "当前对话有 PPT activeTask 时先确认重新生成边界",
     input: "继续刚才的PPT，改成正式一点",
     runtimeInput: input("继续刚才的PPT，改成正式一点", { activeTask: { id: "ppt-task-1", kind: "ppt", title: "AI教育", status: "completed" } }),
+    expected: { targetTool: "ppt-simple", nextAction: "ask_clarification", missingIncludes: ["ppt_regeneration_confirmation"] }
+  },
+  {
+    name: "当前对话明确重新生成 PPT 新版时调用工具",
+    input: "重新生成一个更正式版本",
+    runtimeInput: input("重新生成一个更正式版本", { activeTask: { id: "ppt-task-1", kind: "ppt", title: "AI教育", status: "completed" } }),
     expected: { targetTool: "ppt-simple", nextAction: "run_legacy_tool" }
   },
   {
