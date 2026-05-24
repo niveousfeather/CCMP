@@ -67,6 +67,14 @@ const previewThemes: Record<string, PreviewTheme> = {
     surface: "#E3F2FD",
     text: "#1A2E44",
     muted: "#6B7B8C"
+  },
+  school_academic_report: {
+    primary: "#801C80",
+    accent: "#4EA72E",
+    secondary: "#801C44",
+    surface: "#F2F2F2",
+    text: "#3F3F3F",
+    muted: "#666666"
   }
 };
 

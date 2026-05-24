@@ -5,8 +5,8 @@ import type {
   AcademicPptVisualType
 } from "@/lib/smart-tools/academic-ppt/types";
 
-export type AcademicPptTemplateSource = "paper-ppt-agent" | "pptagent" | "nexus";
-export type AcademicPptTemplateCategory = "academic" | "business" | "tech" | "report";
+export type AcademicPptTemplateSource = "paper-ppt-agent" | "pptagent" | "nexus" | "builtin-pptx-template";
+export type AcademicPptTemplateCategory = "academic" | "business" | "tech" | "report" | "school";
 
 export type AcademicPptTemplate = {
   id: string;
@@ -168,6 +168,26 @@ export const academicPptTemplates: AcademicPptTemplate[] = [
     coverMode: "university",
     supportedLayouts: EXTENDED_LAYOUTS,
     supportedVisualTypes: CORE_VISUALS
+  },
+  {
+    id: "school_academic_report",
+    name: "电子科技大学",
+    source: "builtin-pptx-template",
+    category: "school",
+    description: "Sanitized built-in school or institution academic-report template with preserved masters, layouts, embedded fonts, logos, background imagery, and institutional visual hierarchy.",
+    primaryColor: "801C80",
+    accentColor: "801C80",
+    secondaryAccentColor: "9D229D",
+    backgroundColor: "F2F2F2",
+    surfaceColor: "FFFFFF",
+    textColor: "3F3F3F",
+    mutedTextColor: "666666",
+    borderColor: "D9D9D9",
+    designTone: "institutional academic formal clean report-oriented",
+    headerMode: "minimal",
+    coverMode: "university",
+    supportedLayouts: EXTENDED_LAYOUTS,
+    supportedVisualTypes: CORE_VISUALS
   }
 ];
 
@@ -175,7 +195,8 @@ const styleTemplateMap: Record<AcademicPptTemplateStyle, string> = {
   academic_clean: "academic_defense",
   blue_tech: "tech_blue_business",
   research_report: "mckinsey",
-  course_presentation: "google_style"
+  course_presentation: "google_style",
+  school_academic_report: "school_academic_report"
 };
 
 export function getAcademicPptTemplate(templateId: string | undefined) {
@@ -191,7 +212,8 @@ export function getAcademicPptTemplateStyleLabel(style: AcademicPptTemplateStyle
     academic_clean: "Academic clean",
     blue_tech: "Blue technology",
     research_report: "Research report",
-    course_presentation: "Course presentation"
+    course_presentation: "Course presentation",
+    school_academic_report: "电子科技大学"
   };
   return labels[style];
 }

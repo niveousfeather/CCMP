@@ -32,8 +32,25 @@ lib/smart-tools/academic-ppt/text-layout.ts
 - `blue_tech` -> `tech_blue_business`
 - `research_report` -> `mckinsey`
 - `course_presentation` -> `google_style`
+- `school_academic_report` -> sanitized built-in PPTX template constraints
 
 `chongqing_university` is kept as an additional academic reference theme for future UI exposure.
+
+## Built-in Sanitized PPTX Templates
+
+The first built-in school template is registered as:
+
+```text
+services/ai-tools-engine/app/tools/academic_ppt/templates/builtin/school_academic_report/
+  template.pptx
+  template.json
+```
+
+`template.pptx` is a sanitized copy of the user-provided institutional template. Source example text, names, phone/email-like content, course/project wording, and original sample business text are replaced by standardized placeholders such as `{{TITLE}}`, `{{SLIDE_TITLE}}`, `{{BODY}}`, `{{KEY_POINTS}}`, and `{{FOOTER}}`.
+
+The PPTX keeps masters, layouts, theme colors, embedded font entries, logos/backgrounds/media, page ratio, and decoration structure. Embedded fonts remain inside the PPTX package only; no standalone font files are exported or committed.
+
+The current paper-ppt-agent integration does not rewrite vendor core or make the vendor consume the PPTX directly. The adapter verifies `template.json` and `template.pptx`, then injects the template palette, font policy, layout roles, and institutional style constraints into the existing native paper-ppt-agent generation path.
 
 ## Design Ideas Absorbed
 

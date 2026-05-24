@@ -68,8 +68,7 @@ const STEP_TO_PIPELINE_INDEX: Partial<Record<AcademicPptTaskStep, number>> = {
   pptx_exported: 6,
   rendering_preview: 6,
   completed: 6,
-  failed: 0,
-  cancelled: 0
+  cancelled: 6
 };
 
 const ACADEMIC_PPT_TASK_STEPS = new Set<AcademicPptTaskStep>([
@@ -95,23 +94,44 @@ const ACADEMIC_PPT_TASK_STEPS = new Set<AcademicPptTaskStep>([
 ]);
 
 const RECENT_TASKS_HIDDEN_STORAGE_KEY = "academic-ppt:hidden-recent-task-ids";
+const ACADEMIC_PPT_PLACEHOLDER_TASK_ID = "00000000-0000-4000-8000-000000000000";
 
 function normalizeTaskStep(step: string): AcademicPptTaskStep | undefined {
   return ACADEMIC_PPT_TASK_STEPS.has(step as AcademicPptTaskStep) ? (step as AcademicPptTaskStep) : undefined;
 }
 
-function getPipelineForStep(currentStep: string, status: AcademicPptTaskStatus): AcademicPptPipelineStep[] {
+function getPipelineForStep(
+  currentStep: string,
+  status: AcademicPptTaskStatus,
+  failedStage?: string,
+  lastCompletedStep?: string,
+  progressSteps?: AcademicPptPipelineStep[]
+): AcademicPptPipelineStep[] {
+  if (status !== "failed" && progressSteps?.length && !progressSteps.some((step) => step.status === "failed")) return progressSteps;
   const normalizedStep = normalizeTaskStep(currentStep);
-  const activeIndex = normalizedStep ? STEP_TO_PIPELINE_INDEX[normalizedStep] ?? 0 : 0;
+  const normalizedFailedStage = normalizeTaskStep(failedStage || "");
+  const normalizedLastCompletedStep = normalizeTaskStep(lastCompletedStep || "");
+  const failedStep =
+    normalizedFailedStage ||
+    (status === "failed" && normalizedStep !== "failed" ? normalizedStep : undefined) ||
+    (status === "failed" ? normalizedLastCompletedStep : undefined);
+  const activeIndex =
+    status === "failed"
+      ? STEP_TO_PIPELINE_INDEX[failedStep || "generating_slides"] ?? 3
+      : normalizedStep
+        ? STEP_TO_PIPELINE_INDEX[normalizedStep] ?? 0
+        : 0;
+  const lastCompletedIndex = normalizedLastCompletedStep ? STEP_TO_PIPELINE_INDEX[normalizedLastCompletedStep] ?? -1 : -1;
 
   return initialAcademicPptPipeline.map((step, index) => {
+    if (status === "failed" && index < activeIndex) return { ...step, status: "success" };
     if (status === "failed" && index === activeIndex) return { ...step, status: "failed" };
     if (status === "success") return { ...step, status: "success" };
     if (status === "cancelled") return { ...step, status: index < activeIndex ? "success" : "waiting" };
     if (status === "queued") return { ...step, status: index === 0 ? "running" : "waiting" };
     if (status === "pending") return { ...step, status: index === 0 ? "running" : "waiting" };
     if (status === "running") {
-      if (index < activeIndex) return { ...step, status: "success" };
+      if (index < activeIndex || index <= lastCompletedIndex) return { ...step, status: "success" };
       if (index === activeIndex) return { ...step, status: "running" };
     }
     return { ...step, status: "waiting" };
@@ -141,6 +161,10 @@ function isPollableStatus(status: AcademicPptTaskStatus) {
 
 function isAcademicPptNotFoundError(error: unknown) {
   return error instanceof AcademicPptApiError && error.status === 404;
+}
+
+function isAcademicPptPlaceholderTaskId(taskId: string | null | undefined) {
+  return String(taskId || "").toLowerCase() === ACADEMIC_PPT_PLACEHOLDER_TASK_ID;
 }
 
 function deriveSlidesFromPreviewManifest(
@@ -225,6 +249,10 @@ export function AcademicPptWorkbench() {
   const [finalVisualQaScore, setFinalVisualQaScore] = useState<number | undefined>();
   const [resumable, setResumable] = useState(false);
   const [resumeFromStep, setResumeFromStep] = useState<string | undefined>();
+  const [failedStage, setFailedStage] = useState<string | undefined>();
+  const [previousFailedStage, setPreviousFailedStage] = useState<string | undefined>();
+  const [lastCompletedStep, setLastCompletedStep] = useState<string | undefined>();
+  const [progressSteps, setProgressSteps] = useState<AcademicPptPipelineStep[] | undefined>();
   const [createdAt, setCreatedAt] = useState<string | undefined>();
   const [updatedAt, setUpdatedAt] = useState<string | undefined>();
   const [logs, setLogs] = useState<AcademicPptTaskLog[]>([]);
@@ -285,6 +313,10 @@ export function AcademicPptWorkbench() {
     setUpdatedAt(undefined);
     setResumable(false);
     setResumeFromStep(undefined);
+    setFailedStage(undefined);
+    setPreviousFailedStage(undefined);
+    setLastCompletedStep(undefined);
+    setProgressSteps(undefined);
     setSlidesPreview(sampleAcademicPptSlides);
     setActiveSlideIndex(0);
     setLogs([]);
@@ -299,7 +331,10 @@ export function AcademicPptWorkbench() {
     resetTaskDetails();
   }, [resetTaskDetails]);
 
-  const pipeline = useMemo(() => getPipelineForStep(currentStep, status), [currentStep, status]);
+  const pipeline = useMemo(
+    () => getPipelineForStep(currentStep, status, failedStage, lastCompletedStep, progressSteps),
+    [currentStep, failedStage, lastCompletedStep, progressSteps, status]
+  );
   const visibleLogs = useMemo(() => limitLogs(logs), [logs]);
   const visibleRecentTasks = useMemo(
     () => recentTasks.filter((task) => !hiddenRecentTaskIds.has(task.taskId)),
@@ -320,7 +355,13 @@ export function AcademicPptWorkbench() {
       const stored = window.localStorage.getItem(RECENT_TASKS_HIDDEN_STORAGE_KEY);
       const values = stored ? (JSON.parse(stored) as unknown) : [];
       if (Array.isArray(values)) {
-        setHiddenRecentTaskIds(new Set(values.filter((value): value is string => typeof value === "string")));
+        const cleanedValues = values.filter(
+          (value): value is string => typeof value === "string" && !isAcademicPptPlaceholderTaskId(value)
+        );
+        if (cleanedValues.length !== values.length) {
+          window.localStorage.setItem(RECENT_TASKS_HIDDEN_STORAGE_KEY, JSON.stringify(cleanedValues));
+        }
+        setHiddenRecentTaskIds(new Set(cleanedValues));
       }
     } catch {
       setHiddenRecentTaskIds(new Set());
@@ -372,11 +413,12 @@ export function AcademicPptWorkbench() {
 
   const refreshRecentTasks = useCallback(async (signal?: AbortSignal) => {
     const recent = await getAcademicPptRecentTasks({ limit: ACADEMIC_PPT_RECENT_TASK_LIMIT, signal });
-    setRecentTasks(recent.tasks);
+    setRecentTasks(recent.tasks.filter((task) => !isAcademicPptPlaceholderTaskId(task.taskId)));
   }, []);
 
   const dismissRecentTask = useCallback(
     (dismissedTaskId: string) => {
+      if (isAcademicPptPlaceholderTaskId(dismissedTaskId)) return;
       setHiddenRecentTaskIds((current) => new Set([...current, dismissedTaskId]));
       if (selectedTaskId === dismissedTaskId) {
         activeRequestRef.current?.abort();
@@ -405,9 +447,13 @@ export function AcademicPptWorkbench() {
     setStatus(snapshot.status);
     setProgress(snapshot.progress ?? 0);
     setCurrentStep(snapshot.currentStep || "");
-    setError(snapshot.error);
+    setError(snapshot.status === "failed" ? snapshot.errorSummary || snapshot.error : undefined);
     setResumable(Boolean(snapshot.resumable));
     setResumeFromStep(snapshot.resumeFromStep);
+    setFailedStage(snapshot.failedStage);
+    setPreviousFailedStage(snapshot.previousFailedStage);
+    setLastCompletedStep(snapshot.lastCompletedStep || snapshot.lastSuccessfulStage);
+    setProgressSteps(snapshot.progressState?.steps);
     setDownloadUrl(snapshot.downloadUrl);
     setModelSource(snapshot.modelSource);
     setModelName(snapshot.modelName);
@@ -719,7 +765,7 @@ export function AcademicPptWorkbench() {
       if (resumed.task) applyTaskSnapshot(resumed.task);
       setStatus(resumed.status);
       setSelectedTaskId(taskId);
-      setActiveTaskId(taskId);
+      setActiveTaskId(resumed.task?.status === "success" ? null : taskId);
       setResumable(false);
       setProgress((current) => Math.max(current, 5));
       toast({ type: "success", message: "已继续生成任务。" });
@@ -777,8 +823,11 @@ export function AcademicPptWorkbench() {
     setPreviewFallbackReason("Image preview failed; structured preview is shown.");
   }, []);
 
-
   const loadRecentTask = useCallback(async (recentTaskId: string) => {
+    if (isAcademicPptPlaceholderTaskId(recentTaskId)) {
+      setHiddenRecentTaskIds((current) => new Set([...current, recentTaskId]));
+      return;
+    }
     activeRequestRef.current?.abort();
     abortPreviewRequest();
     if (activeTaskIdRef.current === recentTaskId) {
@@ -938,10 +987,12 @@ export function AcademicPptWorkbench() {
             taskId={selectedTaskId || taskId}
             generatorSource={generatorSource}
             createdAt={createdAt}
-            updatedAt={updatedAt}
-            resumeFromStep={resumeFromStep}
-            status={status}
-          />
+        updatedAt={updatedAt}
+        resumeFromStep={resumeFromStep}
+        failedStage={failedStage}
+        previousFailedStage={previousFailedStage}
+        status={status}
+      />
     </div>
   );
 }

@@ -39,6 +39,7 @@ function templateLabel(style?: AcademicPptTemplateStyle) {
   if (style === "blue_tech") return "深蓝科技";
   if (style === "research_report") return "研究报告";
   if (style === "course_presentation") return "课程展示";
+  if (style === "school_academic_report") return "电子科技大学";
   return "模板";
 }
 
@@ -208,6 +209,8 @@ export const AcademicPptTaskMonitor = memo(function AcademicPptTaskMonitor({
   autoRepairApplied,
   finalQualityScore,
   finalVisualQaScore,
+  failedStage,
+  previousFailedStage,
   resumeFromStep,
   resumable,
   status,
@@ -262,6 +265,8 @@ export const AcademicPptTaskMonitor = memo(function AcademicPptTaskMonitor({
   autoRepairApplied?: boolean;
   finalQualityScore?: number;
   finalVisualQaScore?: number;
+  failedStage?: string;
+  previousFailedStage?: string;
   resumeFromStep?: string;
   resumable?: boolean;
   status: AcademicPptTaskStatus;
@@ -277,6 +282,10 @@ export const AcademicPptTaskMonitor = memo(function AcademicPptTaskMonitor({
   const isBasicFallbackDeck =
     generationMode === ruleFallbackGenerationMode ||
     modelSource === "local-fallback";
+  const staleFailureNotice =
+    isActive && previousFailedStage
+      ? `上次失败：${previousFailedStage}，已继续重试。`
+      : undefined;
 
   return (
     <section className="grid h-64 max-h-64 shrink-0 gap-2 overflow-hidden lg:h-36 lg:max-h-36 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_500px]">
@@ -336,6 +345,7 @@ export const AcademicPptTaskMonitor = memo(function AcademicPptTaskMonitor({
             <Metric label="服务" value={generatorLabel(generatorSource) || "未知"} />
             <Metric label="联网" value={searchLabel(searchStatus, webSearchEnabled || externalResearchEnabled)} wide />
             <Metric label="继续" value={resumable ? resumeFromStep || "可继续" : "否"} />
+            {status === "failed" ? <Metric label="失败阶段" value={failedStage || currentStep || "-"} /> : null}
             <Metric label="创建" value={createdAt ? formatCompactTime(createdAt) : "-"} />
             <Metric label="更新" value={updatedAt ? formatCompactTime(updatedAt) : "-"} />
           </div>
@@ -372,7 +382,8 @@ export const AcademicPptTaskMonitor = memo(function AcademicPptTaskMonitor({
         {status === "success" && visualQaEnabled !== false && modelCriticStatus === "failed" ? <Notice text={productCriticReason(modelCriticFallbackReason)} /> : null}
         {status === "success" && autoRepairFallbackReason ? <Notice text="自动优化未应用，已保留稳定版本。" /> : null}
         {status === "success" && visualQaLevel && visualQaLevel !== "good" ? <Notice tone="warn" text={visualQaSummary || "生成完成，但仍有版式或可读性提示。"} /> : null}
-        {error ? <Notice tone="error" text={productTaskError(error)} /> : null}
+        {staleFailureNotice ? <Notice text={staleFailureNotice} /> : null}
+        {status === "failed" && error ? <Notice tone="error" text={productTaskError(error)} /> : null}
         {status === "missing" ? <Notice tone="warn" text="该历史任务已不可用，不影响当前生成。" /> : null}
         {status === "failed" && resumable ? <Notice text="任务中断，可继续生成。" /> : null}
         </div>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { resumeAcademicPptGeneration } from "@/lib/smart-tools/academic-ppt/sidecar-client";
 import { enqueueAcademicPptTask, scheduleAcademicPptQueue } from "@/lib/smart-tools/academic-ppt/task-queue";
-import { toAcademicPptSnapshot } from "@/lib/smart-tools/academic-ppt/server-task-store";
+import { readAcademicPptTaskRecord, toAcademicPptSnapshot } from "@/lib/smart-tools/academic-ppt/server-task-store";
 import type { ResumeAcademicPptTaskResponse } from "@/lib/smart-tools/academic-ppt/types";
 
 export const runtime = "nodejs";
@@ -15,12 +15,15 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const { taskId } = await context.params;
     const record = await resumeAcademicPptGeneration(taskId);
-    await enqueueAcademicPptTask(taskId, { resume: true, requestOrigin: new URL(request.url).origin });
-    await scheduleAcademicPptQueue();
+    if (record.status !== "success") {
+      await enqueueAcademicPptTask(taskId, { resume: true, requestOrigin: new URL(request.url).origin });
+      await scheduleAcademicPptQueue();
+    }
+    const nextRecord = await readAcademicPptTaskRecord(taskId).catch(() => record);
     const response: ResumeAcademicPptTaskResponse = {
-      taskId: record.taskId,
-      status: "queued",
-      task: toAcademicPptSnapshot(record)
+      taskId: nextRecord.taskId,
+      status: nextRecord.status,
+      task: toAcademicPptSnapshot(nextRecord)
     };
     return NextResponse.json(response, { status: 202 });
   } catch (error) {

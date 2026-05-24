@@ -1,9 +1,11 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  getAcademicPptTaskDir,
   getAcademicPptPreviewDir,
   writeAcademicPptPreviewManifest
 } from "@/lib/smart-tools/academic-ppt/server-task-store";
@@ -22,6 +24,18 @@ type RenderInput = {
   onLog?: (level: "info" | "warn", message: string) => void | Promise<void>;
 };
 
+async function describeFinalPptx(taskId: string, pptxPath: string) {
+  const buffer = await readFile(pptxPath);
+  const sha256 = createHash("sha256").update(buffer).digest("hex");
+  const fileStat = await stat(pptxPath);
+  const relativePath = path.relative(getAcademicPptTaskDir(taskId), pptxPath).replace(/\\/g, "/");
+  return {
+    finalPptxPath: relativePath.startsWith("..") ? path.basename(pptxPath) : relativePath,
+    finalPptxSha256: sha256,
+    finalPptxFileSize: fileStat.size
+  };
+}
+
 async function findConvertedPdf(previewDir: string, pptxPath: string) {
   const expectedName = `${path.basename(pptxPath, path.extname(pptxPath))}.pdf`;
   const expectedPath = path.join(previewDir, expectedName);
@@ -37,26 +51,34 @@ async function findConvertedPdf(previewDir: string, pptxPath: string) {
 
 async function readExistingAvailableManifest(
   taskId: string,
-  previewDir: string
+  previewDir: string,
+  finalPptx: Awaited<ReturnType<typeof describeFinalPptx>>
 ): Promise<{ manifest: AcademicPptPreviewManifest; manifestPath: string } | undefined> {
   const manifestPath = path.join(previewDir, "manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8").catch(() => "{}")) as Partial<AcademicPptPreviewManifest>;
   if (!manifest.available || !manifest.slides?.length) return undefined;
+  if (manifest.source !== "native_preview") return undefined;
+  if (manifest.finalPptxSha256 && manifest.finalPptxSha256 !== finalPptx.finalPptxSha256) return undefined;
+  if (manifest.finalPptxPath && manifest.finalPptxPath !== finalPptx.finalPptxPath) return undefined;
   return {
     manifest: {
       taskId,
       available: true,
-      type: manifest.type || "svg",
-      source: manifest.source || "svg_final",
+      type: manifest.type || "image",
+      source: "native_preview",
       slideCount: manifest.slideCount || manifest.slides.length,
       previewCount: manifest.previewCount || manifest.slides.length,
       slides: manifest.slides,
       status: "ready",
       pptxUrl: manifest.pptxUrl,
+      finalPptxPath: manifest.finalPptxPath || finalPptx.finalPptxPath,
+      finalPptxSha256: manifest.finalPptxSha256 || finalPptx.finalPptxSha256,
+      finalPptxFileSize: manifest.finalPptxFileSize || finalPptx.finalPptxFileSize,
       previewManifestUrl: manifest.previewManifestUrl,
       previewStoragePrefix: manifest.previewStoragePrefix,
       storageProvider: manifest.storageProvider || "local",
       fallbackReason: manifest.fallbackReason,
+      previewOutdated: false,
       diagnostics: manifest.diagnostics,
       createdAt: manifest.createdAt,
       updatedAt: manifest.updatedAt,
@@ -69,9 +91,10 @@ async function readExistingAvailableManifest(
 async function writeFallbackManifestUnlessExistingPreview(
   taskId: string,
   previewDir: string,
-  manifest: AcademicPptPreviewManifest
+  manifest: AcademicPptPreviewManifest,
+  finalPptx: Awaited<ReturnType<typeof describeFinalPptx>>
 ) {
-  return (await readExistingAvailableManifest(taskId, previewDir)) || {
+  return (await readExistingAvailableManifest(taskId, previewDir, finalPptx)) || {
     manifest,
     manifestPath: await writeAcademicPptPreviewManifest(taskId, manifest)
   };
@@ -110,7 +133,8 @@ async function collectPreviewImages(taskId: string, previewDir: string, expected
 function fallbackManifest(
   reason: string,
   expectedSlideCount: number,
-  diagnostics?: AcademicPptPreviewManifest["diagnostics"]
+  diagnostics?: AcademicPptPreviewManifest["diagnostics"],
+  finalPptx?: Awaited<ReturnType<typeof describeFinalPptx>>
 ): AcademicPptPreviewManifest {
   return {
     available: false,
@@ -120,6 +144,10 @@ function fallbackManifest(
     previewCount: 0,
     slides: [],
     fallbackReason: reason,
+    finalPptxPath: finalPptx?.finalPptxPath,
+    finalPptxSha256: finalPptx?.finalPptxSha256,
+    finalPptxFileSize: finalPptx?.finalPptxFileSize,
+    previewOutdated: false,
     diagnostics,
     generatedAt: new Date().toISOString()
   };
@@ -133,6 +161,7 @@ export async function renderAcademicPptNativePreview({
 }: RenderInput): Promise<{ manifest: AcademicPptPreviewManifest; manifestPath: string }> {
   const previewDir = getAcademicPptPreviewDir(taskId);
   await mkdir(previewDir, { recursive: true });
+  const finalPptx = await describeFinalPptx(taskId, pptxPath);
 
   await onLog?.("info", "正在检测 PPTX 预览工具。");
   const environment = await checkAcademicPptPreviewEnvironment();
@@ -142,10 +171,11 @@ export async function renderAcademicPptNativePreview({
     const manifest = fallbackManifest(
       ACADEMIC_PPT_PREVIEW_FALLBACK_REASONS.libreOfficeMissing,
       expectedSlideCount,
-      diagnostics
+      diagnostics,
+      finalPptx
     );
     await onLog?.("warn", "未检测到 LibreOffice / soffice，已降级结构化预览。");
-    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest);
+    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest, finalPptx);
   }
 
   try {
@@ -161,9 +191,9 @@ export async function renderAcademicPptNativePreview({
       ...diagnostics,
       nativePreview: "unavailable",
       reason
-    });
+    }, finalPptx);
     await onLog?.("warn", "PPTX 转 PDF 失败，已降级结构化预览。");
-    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest);
+    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest, finalPptx);
   }
 
   const pdfPath = await findConvertedPdf(previewDir, pptxPath);
@@ -173,9 +203,9 @@ export async function renderAcademicPptNativePreview({
       ...diagnostics,
       nativePreview: "unavailable",
       reason
-    });
+    }, finalPptx);
     await onLog?.("warn", "PPTX 转 PDF 未产生可用 PDF，已降级结构化预览。");
-    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest);
+    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest, finalPptx);
   }
 
   if (environment.pdftoppm.status === "missing") {
@@ -184,9 +214,9 @@ export async function renderAcademicPptNativePreview({
       ...diagnostics,
       nativePreview: "unavailable",
       reason
-    });
+    }, finalPptx);
     await onLog?.("warn", "未检测到 pdftoppm，已降级结构化预览。");
-    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest);
+    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest, finalPptx);
   }
 
   try {
@@ -217,6 +247,10 @@ export async function renderAcademicPptNativePreview({
       slideCount: slides.length,
       previewCount: slides.length,
       slides,
+      finalPptxPath: finalPptx.finalPptxPath,
+      finalPptxSha256: finalPptx.finalPptxSha256,
+      finalPptxFileSize: finalPptx.finalPptxFileSize,
+      previewOutdated: false,
       diagnostics: {
         ...diagnostics,
         nativePreview: "available",
@@ -225,15 +259,15 @@ export async function renderAcademicPptNativePreview({
       generatedAt: new Date().toISOString()
     };
     await onLog?.("info", `原生 PPTX 预览成功，已生成 ${slides.length} 页图片。`);
-    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest);
+    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest, finalPptx);
   } catch (error) {
     const reason = ACADEMIC_PPT_PREVIEW_FALLBACK_REASONS.pdfToPngFailed;
     const manifest = fallbackManifest(reason, expectedSlideCount, {
       ...diagnostics,
       nativePreview: "unavailable",
       reason
-    });
+    }, finalPptx);
     await onLog?.("warn", "PDF 转 PNG 失败，已降级结构化预览。");
-    return { manifest, manifestPath: await writeAcademicPptPreviewManifest(taskId, manifest) };
+    return writeFallbackManifestUnlessExistingPreview(taskId, previewDir, manifest, finalPptx);
   }
 }

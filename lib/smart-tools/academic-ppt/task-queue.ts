@@ -61,6 +61,9 @@ export async function enqueueAcademicPptTask(taskId: string, options?: { resume?
     const failed = await updateAcademicPptTaskRecord(taskId, {
       status: "failed",
       currentStep: "failed",
+      currentStage: "failed",
+      failedStage: "upload_received",
+      errorSummary: "上传文件缺失，无法加入生成队列，请重新上传。",
       progress: 100,
       error: "上传文件缺失，无法加入生成队列，请重新上传。",
       resumable: false,
@@ -74,6 +77,9 @@ export async function enqueueAcademicPptTask(taskId: string, options?: { resume?
     status: "queued",
     progress: Math.max(record.progress || 5, 5),
     cancelRequested: false,
+    failedStage: undefined,
+    errorSummary: undefined,
+    errorDetails: undefined,
     error: undefined,
     resumable: Boolean(options?.resume || record.resumable),
     timeoutAt: new Date(Date.now() + 30 * 60 * 1000).toISOString()
@@ -97,6 +103,9 @@ async function startQueuedTask(record: AcademicPptTaskRecord) {
     await updateAcademicPptTaskRecord(record.taskId, {
       status: "failed",
       currentStep: "failed",
+      currentStage: "failed",
+      failedStage: "upload_received",
+      errorSummary: "上传文件缺失，无法启动生成，请重新上传。",
       progress: 100,
       error: "上传文件缺失，无法启动生成，请重新上传。",
       resumable: false,

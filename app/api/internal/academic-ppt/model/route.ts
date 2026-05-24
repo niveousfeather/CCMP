@@ -5,6 +5,7 @@ import { isAgentProviderRequestError } from "@/lib/agent/router";
 import type { AgentChatMessage, AgentProvider } from "@/lib/agent/types";
 import {
   appendAcademicPptLog,
+  isAcademicPptPlaceholderTaskId,
   updateAcademicPptTaskRecord
 } from "@/lib/smart-tools/academic-ppt/server-task-store";
 import type {
@@ -28,7 +29,9 @@ type ModelBridgeRequest = {
   debug?: {
     simulatePrimaryFailure?: boolean;
     simulatePrimaryTransientFailures?: number;
+    simulatePrimaryStreamInterruptedFailures?: number;
     simulatePrimarySuccessAfterTransient?: boolean;
+    simulateFallbackSuccess?: boolean;
     retryBackoffMs?: number;
   };
 };
@@ -70,6 +73,16 @@ class AcademicPptProviderCallError extends Error {
     this.kind = kind;
     this.status = status;
     this.elapsedMs = elapsedMs;
+  }
+}
+
+class AcademicPptStreamInterruptedError extends Error {
+  partialLength: number;
+
+  constructor(message: string, partialLength: number) {
+    super(message);
+    this.name = "AcademicPptStreamInterruptedError";
+    this.partialLength = partialLength;
   }
 }
 
@@ -121,7 +134,58 @@ function stripHtmlProviderBody(raw: string) {
   const compact = title.replace(/\s+/g, " ").trim();
   if (/524|timeout|timed out/i.test(`${compact} ${raw}`)) return "provider timeout status=524";
   if (/504|gateway timeout/i.test(`${compact} ${raw}`)) return "provider timeout status=504";
+  if (/520|unknown error|web server is returning an unknown error/i.test(`${compact} ${raw}`)) return "provider transient status=520";
   return compact ? `provider returned HTML error: ${compact}` : "provider returned HTML error body";
+}
+
+function isTransientAcademicPptModelError(value: unknown, signal?: AbortSignal) {
+  if (signal?.aborted) return true;
+  if (value instanceof AcademicPptProviderCallError) {
+    if (value.kind === "server_timeout" || value.kind === "provider_504") return true;
+    if ([502, 503, 504, 520, 524].includes(value.status || 0)) return true;
+    if (value.kind === "network_error") return true;
+  }
+  if (isAgentProviderRequestError(value)) {
+    if (value.kind === "server_timeout" || value.kind === "provider_504" || value.kind === "network_error") return true;
+    if ([502, 503, 504, 520, 524].includes(value.status || 0)) return true;
+  }
+  const raw = value instanceof Error ? value.message : String(value || "");
+  const text = `${raw} ${sanitizeError(value)}`;
+  return /stream interrupted|terminated|UND_ERR_SOCKET|UND_ERR_CONNECT_TIMEOUT|fetch failed|network_error|network error|timeout|provider_504|provider timeout|provider_error_524|provider transient status=520|provider returned html error|web server is returning an unknown error|\b(?:524|520|504|503|502)\b/i.test(
+    text
+  );
+}
+
+function isStreamInterruptedAcademicPptError(value: unknown) {
+  const raw = value instanceof Error ? value.message : String(value || "");
+  const text = `${raw} ${sanitizeError(value)}`;
+  return /stream interrupted|terminated|UND_ERR_SOCKET/i.test(text);
+}
+
+function academicPptRetryableErrorType(value: unknown) {
+  if (isStreamInterruptedAcademicPptError(value)) return "stream_interrupted";
+  if (isTransientAcademicPptModelError(value)) return "transient_model_error";
+  return "model_unavailable";
+}
+
+function academicPptRetryableSummary(value: unknown) {
+  return academicPptRetryableErrorType(value) === "stream_interrupted"
+    ? "model stream interrupted, retryable"
+    : sanitizeError(value) || "model provider unavailable, retryable";
+}
+
+function academicPptRetryableFailureExtra(errorSummary: string | undefined, stage: string) {
+  const source = errorSummary || "model provider unavailable";
+  const errorType = academicPptRetryableErrorType(source);
+  const retryable = isTransientAcademicPptModelError(source);
+  const summary = retryable ? academicPptRetryableSummary(source) : sanitizeError(source) || "model provider unavailable";
+  return {
+    retryable,
+    errorType,
+    stage,
+    summary,
+    errorSummary: summary
+  };
 }
 
 function modelLabel(endpoint: AcademicPptBridgeEndpoint) {
@@ -181,17 +245,28 @@ function getAcademicPptModelEndpoints(): { primary: AcademicPptBridgeEndpoint; f
 function classifyAcademicPptModelBridgeFailure(error: unknown, signal?: AbortSignal) {
   if (error instanceof AcademicPptProviderCallError) {
     const status = error.status ? ` status=${error.status}` : "";
+    const message = sanitizeError(error.message);
+    if (error.kind === "network_error" && isStreamInterruptedAcademicPptError(error)) {
+      return `stream interrupted${message ? `: ${message}` : ""}${status}`;
+    }
+    if (error.kind === "network_error" && isTransientAcademicPptModelError(error, signal)) {
+      return `network_error${message ? `: ${message}` : ""}${status}`;
+    }
     if (error.kind === "server_timeout") return `timeout${status}`;
     if (error.kind === "provider_504" || error.status === 504 || error.status === 524) return `provider timeout${status}`;
+    if (error.status === 520) return `model provider unavailable${status}`;
     if (error.status === 502 || error.status === 503) return `model provider unavailable${status}`;
     if (error.kind === "bad_response") return `model response parse failed${status}`;
-    if (error.kind === "network_error") return `model provider unavailable${status}`;
+    if (error.kind === "network_error") return `model provider unavailable${message ? `: ${message}` : ""}${status}`;
     return `${error.kind}${status}`.trim();
   }
   if (isAgentProviderRequestError(error)) {
     const status = error.status ? ` status=${error.status}` : "";
+    if (error.kind === "network_error" && isStreamInterruptedAcademicPptError(error)) return `stream interrupted${status}`;
+    if (error.kind === "network_error" && isTransientAcademicPptModelError(error, signal)) return `network_error${status}`;
     if (error.kind === "server_timeout") return `timeout${status}`;
     if (error.kind === "provider_504" || error.status === 504 || error.status === 524) return `provider timeout${status}`;
+    if (error.status === 520) return `model provider unavailable${status}`;
     if (error.status === 502 || error.status === 503) return `model provider unavailable${status}`;
     if (error.kind === "bad_response") return `model response parse failed${status}`;
     if (error.kind === "network_error") return `model provider unavailable${status}`;
@@ -199,12 +274,17 @@ function classifyAcademicPptModelBridgeFailure(error: unknown, signal?: AbortSig
   }
   const message = sanitizeError(error);
   const lower = message.toLowerCase();
+  if (isStreamInterruptedAcademicPptError(message)) return `stream interrupted: ${message}`;
+  if (isTransientAcademicPptModelError(message, signal)) return message || "transient model provider error";
   if (signal?.aborted || lower.includes("timeout") || lower.includes("aborterror")) return `timeout${message ? `: ${message}` : ""}`;
   if (lower.includes("econnrefused") || lower.includes("connection refused") || lower.includes("fetch failed")) return `connection refused: ${message}`;
   if (lower.includes("404") || lower.includes("not found")) return `wrong port or route unavailable: ${message}`;
   if (lower.includes("invalid model bridge request") || lower.includes("messages are empty")) return `route schema invalid: ${message}`;
   if (lower.includes("missing_agent_task") || lower.includes("missing_kimi") || lower.includes("missing_")) return `auth missing: ${message}`;
   if (lower.includes("provider_error_524") || lower.includes("provider_504")) return `provider timeout: ${message}`;
+  if (lower.includes("provider transient status=520") || lower.includes("provider returned html error") || lower.includes("unknown error")) {
+    return `model provider unavailable: ${message}`;
+  }
   if (lower.includes("provider_error")) return `model provider unavailable: ${message}`;
   if (lower.includes("json") || lower.includes("parse")) return `model response parse failed: ${message}`;
   if (lower.includes("unsupported") && lower.includes("json")) return `unsupported json mode: ${message}`;
@@ -212,14 +292,7 @@ function classifyAcademicPptModelBridgeFailure(error: unknown, signal?: AbortSig
 }
 
 function isRetryablePrimaryFailure(error: unknown, summary: string, signal: AbortSignal) {
-  if (signal.aborted) return true;
-  if (error instanceof AcademicPptProviderCallError) {
-    return error.kind === "server_timeout" || error.kind === "provider_504" || [502, 503, 504, 524].includes(error.status || 0);
-  }
-  if (isAgentProviderRequestError(error)) {
-    return error.kind === "server_timeout" || error.kind === "provider_504" || [502, 503, 504, 524].includes(error.status || 0);
-  }
-  return /524|504|502|503|timeout|provider_504|provider_error_524|gateway|temporar/i.test(summary);
+  return isTransientAcademicPptModelError(error, signal) || isTransientAcademicPptModelError(summary, signal);
 }
 
 function sleep(ms: number) {
@@ -273,15 +346,26 @@ function diagnosticPatch(diagnostics: AcademicPptBridgeDiagnostics) {
 }
 
 async function updateBridgeDiagnostics(taskId: string, diagnostics: AcademicPptBridgeDiagnostics) {
+  if (isAcademicPptPlaceholderTaskId(taskId)) return;
   await updateAcademicPptTaskRecord(taskId, diagnosticPatch(diagnostics)).catch(() => undefined);
 }
 
 function bridgeResponse(
   diagnostics: AcademicPptBridgeDiagnostics,
-  extra?: { modelName?: string; content?: string; partial?: string }
+  extra?: {
+    modelName?: string;
+    content?: string;
+    partial?: string;
+    retryable?: boolean;
+    errorType?: string;
+    stage?: string;
+    summary?: string;
+  }
 ) {
+  const success = diagnostics.finalStatus === "success" || diagnostics.finalStatus === "fallback_success";
   return {
-    status: diagnostics.finalStatus === "success" || diagnostics.finalStatus === "fallback_success" ? "success" : "failed",
+    ok: success,
+    status: success ? "success" : "failed",
     finalStatus: diagnostics.finalStatus,
     primaryModel: diagnostics.primaryModel,
     primaryStatus: diagnostics.primaryStatus,
@@ -292,6 +376,10 @@ function bridgeResponse(
     modelName: extra?.modelName,
     content: extra?.content,
     partial: extra?.partial,
+    retryable: extra?.retryable,
+    errorType: extra?.errorType,
+    stage: extra?.stage,
+    summary: extra?.summary,
     errorSummary: diagnostics.errorSummary
   };
 }
@@ -376,18 +464,34 @@ function extractProviderStreamDelta(value: unknown) {
   return "";
 }
 
+function isCompleteJsonText(value: string) {
+  const trimmed = value.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = fenced ? fenced[1].trim() : trimmed;
+  try {
+    JSON.parse(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function readAcademicPptProviderStream(response: Response, signal: AbortSignal) {
-  if (!response.body) return "";
+  if (!response.body) return { content: "", completed: true };
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let content = "";
+  let completed = false;
 
   const processLine = (rawLine: string) => {
     const line = rawLine.trim();
     if (!line.startsWith("data:")) return false;
     const data = line.slice(5).trim();
-    if (!data || data === "[DONE]") return data === "[DONE]";
+    if (!data || data === "[DONE]") {
+      completed = data === "[DONE]";
+      return completed;
+    }
     try {
       content += extractProviderStreamDelta(JSON.parse(data));
     } catch {
@@ -396,20 +500,27 @@ async function readAcademicPptProviderStream(response: Response, signal: AbortSi
     return false;
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (signal.aborted) throw new Error("stream interrupted by timeout");
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      if (processLine(line)) return content.trim();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (signal.aborted) {
+        throw new AcademicPptStreamInterruptedError("stream interrupted by timeout", content.trim().length);
+      }
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (processLine(line)) return { content: content.trim(), completed };
+      }
+      if (done) break;
     }
-    if (done) break;
+  } catch (error) {
+    if (error instanceof AcademicPptStreamInterruptedError) throw error;
+    throw new AcademicPptStreamInterruptedError(`stream interrupted: ${sanitizeError(error)}`, content.trim().length);
   }
 
   if (buffer) processLine(buffer);
-  return content.trim();
+  return { content: content.trim(), completed };
 }
 
 async function callAcademicPptProviderModel({
@@ -418,7 +529,8 @@ async function callAcademicPptProviderModel({
   signal,
   stage,
   stream,
-  timeoutMs
+  timeoutMs,
+  jsonMode
 }: {
   endpoint: AcademicPptBridgeEndpoint;
   messages: AgentChatMessage[];
@@ -426,6 +538,7 @@ async function callAcademicPptProviderModel({
   stage: string;
   stream: boolean;
   timeoutMs: number;
+  jsonMode: boolean;
 }) {
   const config = getAcademicPptProviderConfig(endpoint.provider);
   if (!config.credential) {
@@ -478,15 +591,32 @@ async function callAcademicPptProviderModel({
   if (stream) {
     console.info(`[academic-ppt:model] provider=${endpoint.provider} model=${endpoint.model} stage=${stage} stream started.`);
     try {
-      const content = await readAcademicPptProviderStream(response, signal);
+      const streamResult = await readAcademicPptProviderStream(response, signal);
       console.info(
         `[academic-ppt:model] provider=${endpoint.provider} model=${endpoint.model} stage=${stage} stream completed elapsedMs=${Date.now() - startedAt}.`
       );
+      const content = streamResult.content;
+      if (!streamResult.completed && (!content || (jsonMode && !isCompleteJsonText(content)))) {
+        throw new AcademicPptProviderCallError({
+          elapsedMs: Date.now() - startedAt,
+          kind: "network_error",
+          message: `stream interrupted before provider done marker; discarded partialLength=${content.length}`,
+          status: response.status
+        });
+      }
       if (!content) {
         throw new AcademicPptProviderCallError({
           elapsedMs: Date.now() - startedAt,
-          kind: "bad_response",
-          message: "BAD_PROVIDER_STREAM_RESPONSE",
+          kind: "network_error",
+          message: "stream interrupted: empty provider stream response",
+          status: response.status
+        });
+      }
+      if (jsonMode && !isCompleteJsonText(content)) {
+        throw new AcademicPptProviderCallError({
+          elapsedMs: Date.now() - startedAt,
+          kind: "network_error",
+          message: `stream interrupted: incomplete JSON stream response; partial discarded length=${content.length}`,
           status: response.status
         });
       }
@@ -495,13 +625,14 @@ async function callAcademicPptProviderModel({
       if (error instanceof AcademicPptProviderCallError) throw error;
       const streamElapsedMs = Date.now() - startedAt;
       const summary = sanitizeError(error);
+      const partialLength = error instanceof AcademicPptStreamInterruptedError ? error.partialLength : 0;
       console.error(
-        `[academic-ppt:model] provider=${endpoint.provider} model=${endpoint.model} stage=${stage} stream interrupted elapsedMs=${streamElapsedMs} errorSummary=${summary}.`
+        `[academic-ppt:model] provider=${endpoint.provider} model=${endpoint.model} stage=${stage} stream interrupted elapsedMs=${streamElapsedMs} partialLength=${partialLength} errorSummary=${summary}.`
       );
       throw new AcademicPptProviderCallError({
         elapsedMs: streamElapsedMs,
         kind: signal.aborted ? "server_timeout" : "network_error",
-        message: summary,
+        message: `stream interrupted: ${summary}; partial discarded length=${partialLength}`,
         status: response.status
       });
     }
@@ -524,7 +655,7 @@ async function callAcademicPptProviderModel({
 }
 
 function isRelayableModelFailure(message: string, signal: AbortSignal) {
-  return signal.aborted || /timeout|PROVIDER_ERROR_5\d\d|gateway|temporar/i.test(message);
+  return isTransientAcademicPptModelError(message, signal) || /PROVIDER_ERROR_5\d\d|gateway|temporar|provider returned html error|status=520/i.test(message);
 }
 
 function formatAttemptFailureLog({
@@ -543,7 +674,7 @@ function formatAttemptFailureLog({
 }
 
 function attemptStatusFromFailure(summary: string, signal: AbortSignal): AcademicPptModelBridgeAttemptStatus {
-  return signal.aborted || /timeout|524|504|provider_504|provider_error_524/i.test(summary) ? "timeout" : "failed";
+  return signal.aborted || isTransientAcademicPptModelError(summary, signal) ? "timeout" : "failed";
 }
 
 export async function POST(request: Request) {
@@ -597,6 +728,14 @@ export async function POST(request: Request) {
         if (body.debug?.simulatePrimaryFailure) {
           throw new Error("SIMULATED_PRIMARY_FAILURE");
         }
+        if (attempt <= Number(body.debug?.simulatePrimaryStreamInterruptedFailures || 0)) {
+          throw new AcademicPptProviderCallError({
+            elapsedMs: 39538,
+            kind: "network_error",
+            message: "stream interrupted: terminated; partial discarded length=512",
+            status: 200
+          });
+        }
         if (attempt <= Number(body.debug?.simulatePrimaryTransientFailures || 0)) {
           throw new Error("PROVIDER_ERROR_524");
         }
@@ -608,7 +747,8 @@ export async function POST(request: Request) {
               signal: primaryTimeout.signal,
               stream: useProviderStream,
               stage,
-              timeoutMs
+              timeoutMs,
+              jsonMode: Boolean(body.jsonMode)
             });
         diagnostics.primaryStatus = "success";
         diagnostics.finalStatus = "success";
@@ -655,10 +795,14 @@ export async function POST(request: Request) {
   }
 
   if (!allowKimiFinalFallback) {
+    const primaryErrorSummary = diagnostics.errorSummary;
+    const retryableExtra = academicPptRetryableFailureExtra(primaryErrorSummary, stage);
     diagnostics.fallbackStatus = "skipped";
     diagnostics.finalStatus = "failed";
     diagnostics.errorSummary =
-      "GPT-5.4 visual generation stage is temporarily unavailable; strict visual mode did not generate a low-quality fallback deck.";
+      retryableExtra.retryable
+        ? retryableExtra.errorSummary
+        : "GPT-5.4 visual generation stage is temporarily unavailable; strict visual mode did not generate a low-quality fallback deck.";
     await appendAcademicPptLog(
       body.taskId,
       "error",
@@ -666,7 +810,13 @@ export async function POST(request: Request) {
     );
     await appendAcademicPptLog(body.taskId, "error", "Model bridge final failed.");
     await updateBridgeDiagnostics(body.taskId, diagnostics);
-    return NextResponse.json(bridgeResponse(diagnostics), { status: 503 });
+    return NextResponse.json(
+      bridgeResponse(
+        diagnostics,
+        retryableExtra
+      ),
+      { status: 503 }
+    );
   }
 
   const fallbackTimeout = withTimeout(timeoutMs);
@@ -678,14 +828,17 @@ export async function POST(request: Request) {
   await appendAcademicPptLog(body.taskId, "info", `Fallback model started: ${diagnostics.fallbackModel} stage=${stage}.`);
   await updateBridgeDiagnostics(body.taskId, diagnostics);
   try {
-    const content = await callAcademicPptProviderModel({
-      endpoint: endpoints.fallback,
-      messages,
-      signal: fallbackTimeout.signal,
-      stream: useProviderStream,
-      stage: `${stage}:fallback`,
-      timeoutMs
-    });
+    const content = body.debug?.simulateFallbackSuccess
+      ? JSON.stringify({ title: "Academic PPT model bridge check", bullets: ["fallback path verified"] })
+      : await callAcademicPptProviderModel({
+          endpoint: endpoints.fallback,
+          messages,
+          signal: fallbackTimeout.signal,
+          stream: useProviderStream,
+          stage: `${stage}:fallback`,
+          timeoutMs,
+          jsonMode: Boolean(body.jsonMode)
+        });
     diagnostics.fallbackStatus = "success";
     diagnostics.finalStatus = body.modelPreference === "fallback" ? "success" : "fallback_success";
     diagnostics.errorSummary = diagnostics.primaryStatus === "success" ? undefined : diagnostics.errorSummary;
@@ -700,7 +853,20 @@ export async function POST(request: Request) {
     await appendAcademicPptLog(body.taskId, "error", `Fallback model failed: ${diagnostics.errorSummary}.`);
     await appendAcademicPptLog(body.taskId, "error", "Model bridge final failed.");
     await updateBridgeDiagnostics(body.taskId, diagnostics);
-    return NextResponse.json(bridgeResponse(diagnostics), { status: isRelayableModelFailure(fallbackSummary, fallbackTimeout.signal) ? 503 : 200 });
+    const relayable = isRelayableModelFailure(fallbackSummary, fallbackTimeout.signal);
+    const retryableExtra = relayable ? academicPptRetryableFailureExtra(diagnostics.errorSummary, stage) : undefined;
+    return NextResponse.json(
+      bridgeResponse(
+        retryableExtra
+          ? {
+              ...diagnostics,
+              errorSummary: retryableExtra.errorSummary
+            }
+          : diagnostics,
+        retryableExtra
+      ),
+      { status: relayable ? 503 : 200 }
+    );
   } finally {
     fallbackTimeout.dispose();
   }

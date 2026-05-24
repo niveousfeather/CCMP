@@ -42,7 +42,8 @@ function styleLabel(style: AcademicPptSettings["templateStyle"]) {
     academic_clean: "academic clean",
     blue_tech: "blue-white technology",
     course_presentation: "course presentation",
-    research_report: "research report"
+    research_report: "research report",
+    school_academic_report: "school academic report"
   };
   return labels[style] || "academic clean";
 }

@@ -62,7 +62,12 @@ export type AcademicPptVisualType =
   | "process"
   | "swot";
 
-export type AcademicPptTemplateStyle = "academic_clean" | "blue_tech" | "research_report" | "course_presentation";
+export type AcademicPptTemplateStyle =
+  | "academic_clean"
+  | "blue_tech"
+  | "research_report"
+  | "course_presentation"
+  | "school_academic_report";
 export type AcademicPptAspectRatio = "16:9" | "4:3";
 export type AcademicPptOutputLanguage = "zh" | "en";
 export type AcademicPptDetailLevel = "concise" | "standard" | "detailed";
@@ -82,6 +87,11 @@ export type AcademicPptPipelineStep = {
   id: AcademicPptPipelineStepId;
   label: string;
   status: AcademicPptStepStatus;
+  error?: string;
+};
+
+export type AcademicPptTaskProgressState = {
+  steps: AcademicPptPipelineStep[];
 };
 
 export type AcademicPptRecentTask = {
@@ -201,10 +211,14 @@ export type AcademicPptPreviewManifest = {
   previewCount: number;
   slides: AcademicPptNativePreviewSlide[];
   pptxUrl?: string;
+  finalPptxPath?: string;
+  finalPptxSha256?: string;
+  finalPptxFileSize?: number;
   previewManifestUrl?: string;
   previewStoragePrefix?: string;
   storageProvider?: AcademicPptStorageProvider;
   fallbackReason?: string;
+  previewOutdated?: boolean;
   diagnostics?: AcademicPptPreviewDiagnostics;
   createdAt?: string;
   updatedAt?: string;
@@ -322,6 +336,22 @@ export type AcademicPptTaskRequestSnapshot = {
   generatorPreference: AcademicPptGeneratorPreference;
 };
 
+export type AcademicPptSelectedTemplateVariant = {
+  slideIndex: number;
+  role: string;
+  variantId: string;
+  sourceFile: string;
+  sourceSlideIndex: number;
+  templateSlideIndex: number;
+};
+
+export type AcademicPptTemplateRoleMapping = {
+  slideIndex: number;
+  role: string;
+  variantId?: string;
+  reason?: string;
+};
+
 export type AcademicPptTaskLog = {
   time: string;
   level: AcademicPptLogLevel;
@@ -333,6 +363,16 @@ export type AcademicPptTaskSnapshot = {
   status: Exclude<AcademicPptTaskStatus, "idle">;
   progress?: number;
   currentStep?: string;
+  currentStage?: AcademicPptTaskStep;
+  failedStage?: AcademicPptTaskStep;
+  errorSummary?: string;
+  errorDetails?: string;
+  lastSuccessfulStage?: AcademicPptTaskStep;
+  isResumed?: boolean;
+  resumedAt?: string;
+  resumedFromStage?: AcademicPptTaskStep;
+  previousFailedStage?: AcademicPptTaskStep;
+  progressState?: AcademicPptTaskProgressState;
   error?: string;
   resumable?: boolean;
   resumeFromStep?: AcademicPptTaskStep;
@@ -383,6 +423,8 @@ export type AcademicPptTaskSnapshot = {
   previewType?: AcademicPptPreviewType;
   previewSlideCount?: number;
   previewFallbackReason?: string;
+  selectedVariants?: AcademicPptSelectedTemplateVariant[];
+  roleMapping?: AcademicPptTemplateRoleMapping[];
   visualQaScore?: number;
   visualQaLevel?: AcademicPptQualityLevel;
   visualQaIssuesCount?: number;
@@ -460,6 +502,16 @@ export type AcademicPptTaskRecord = {
   status: Exclude<AcademicPptTaskStatus, "idle">;
   progress: number;
   currentStep: AcademicPptTaskStep;
+  currentStage?: AcademicPptTaskStep;
+  failedStage?: AcademicPptTaskStep;
+  errorSummary?: string;
+  errorDetails?: string;
+  lastSuccessfulStage?: AcademicPptTaskStep;
+  isResumed?: boolean;
+  resumedAt?: string;
+  resumedFromStage?: AcademicPptTaskStep;
+  previousFailedStage?: AcademicPptTaskStep;
+  progressState?: AcademicPptTaskProgressState;
   inputFileName: string;
   inputFilePath: string;
   outputFilePath?: string;
@@ -514,6 +566,8 @@ export type AcademicPptTaskRecord = {
   previewSlideCount?: number;
   previewFallbackReason?: string;
   previewManifestPath?: string;
+  selectedVariants?: AcademicPptSelectedTemplateVariant[];
+  roleMapping?: AcademicPptTemplateRoleMapping[];
   visualQaScore?: number;
   visualQaLevel?: AcademicPptQualityLevel;
   visualQaIssuesCount?: number;

@@ -34,6 +34,11 @@ export async function runAcademicPptTask(taskId: string, options?: { resume?: bo
       status: "pending",
       progress: Math.max(record.progress || 5, 5),
       currentStep: record.resumeFromStep || getAcademicPptResumeStep(record.lastCompletedStep),
+      currentStage: record.resumeFromStep || getAcademicPptResumeStep(record.lastCompletedStep),
+      failedStage: undefined,
+      errorSummary: undefined,
+      errorDetails: undefined,
+      error: undefined,
       startedAt: record.startedAt || new Date().toISOString(),
       timeoutAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
     });

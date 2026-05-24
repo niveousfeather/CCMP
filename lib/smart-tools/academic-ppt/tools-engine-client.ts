@@ -1,10 +1,12 @@
 import "server-only";
 
-import { stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import {
   appendAcademicPptLog,
+  ensureAcademicPptPptxDownloadable,
   getAcademicPptOutputDir,
   getAcademicPptTaskDir,
   readAcademicPptTaskRecord,
@@ -15,6 +17,8 @@ import { renderAcademicPptNativePreview } from "@/lib/smart-tools/academic-ppt/p
 import { normalizeAcademicPptSettings } from "@/lib/smart-tools/academic-ppt/task-api";
 import type {
   AcademicPptPreviewManifest,
+  AcademicPptSelectedTemplateVariant,
+  AcademicPptTemplateRoleMapping,
   AcademicPptTaskStep
 } from "@/lib/smart-tools/academic-ppt/types";
 
@@ -54,6 +58,8 @@ type ToolsEngineStatus = {
   previewManifestPath?: string;
   previewFallbackReason?: string;
   previewUpdatedAt?: string;
+  selectedVariants?: AcademicPptSelectedTemplateVariant[];
+  roleMapping?: AcademicPptTemplateRoleMapping[];
 };
 
 type ToolsEngineLog = {
@@ -107,6 +113,16 @@ function normalizeOrigin(value: string | null | undefined) {
   } catch {
     return undefined;
   }
+}
+
+async function describeFinalPptxForManifest(taskId: string, pptxPath: string) {
+  const buffer = await readFile(pptxPath);
+  const sha256 = createHash("sha256").update(buffer).digest("hex");
+  const relativePath = path.relative(getAcademicPptTaskDir(taskId), pptxPath).replace(/\\/g, "/");
+  return {
+    finalPptxPath: relativePath.startsWith("..") ? path.basename(pptxPath) : relativePath,
+    finalPptxSha256: sha256
+  };
 }
 
 export function getAcademicPptToolsEngineBaseUrl() {
@@ -215,7 +231,8 @@ async function syncEngineLogs(taskId: string, baseUrl: string, seenSeq: Set<numb
   }
 }
 
-async function markStructuredPreviewUnavailable(taskId: string, slideCount: number | undefined) {
+async function markStructuredPreviewUnavailable(taskId: string, slideCount: number | undefined, pptxPath: string) {
+  const finalPptx = await describeFinalPptxForManifest(taskId, pptxPath);
   const manifest: AcademicPptPreviewManifest = {
     available: false,
     type: "outline",
@@ -224,6 +241,9 @@ async function markStructuredPreviewUnavailable(taskId: string, slideCount: numb
     previewCount: 0,
     slides: [],
     fallbackReason: "Image preview is unavailable. Structured preview is shown instead.",
+    finalPptxPath: finalPptx.finalPptxPath,
+    finalPptxSha256: finalPptx.finalPptxSha256,
+    previewOutdated: false,
     generatedAt: new Date().toISOString()
   };
   const manifestPath = await writeAcademicPptPreviewManifest(taskId, manifest);
@@ -280,20 +300,23 @@ async function completeFromEngineStatus(taskId: string, status: ToolsEngineStatu
   const primaryStatus = preferIncomingMeaningful(current.modelBridgePrimaryStatus, status.modelBridgePrimaryStatus, ["not_started"]);
   const fallbackStatus = preferIncomingMeaningful(current.modelBridgeFallbackStatus, status.modelBridgeFallbackStatus, ["not_started"]);
   const outputFilePath = path.join(getAcademicPptOutputDir(taskId), status.outputFileName);
+  await ensureAcademicPptPptxDownloadable(outputFilePath);
   const outputStat = await stat(outputFilePath);
-  const previewAvailable = Boolean(status.previewAvailable && status.previewType);
   const nativePreviewResult = await tryRenderNativePreview(taskId, outputFilePath, status.slideCount);
-  const finalPreviewAvailable = nativePreviewResult?.manifest.available || previewAvailable;
-  const finalPreviewType = nativePreviewResult?.manifest.type || (previewAvailable ? status.previewType : undefined);
-  const finalPreviewSlideCount = nativePreviewResult?.manifest.slideCount || (previewAvailable ? status.previewSlideCount : undefined);
-  const finalPreviewManifestPath = nativePreviewResult?.manifestPath || (previewAvailable ? status.previewManifestPath : undefined);
-  const finalPreviewFallbackReason = nativePreviewResult?.manifest.fallbackReason || (previewAvailable ? status.previewFallbackReason : undefined);
-  const finalPreviewUpdatedAt = nativePreviewResult?.manifest.generatedAt || (previewAvailable ? status.previewUpdatedAt : undefined);
+  const finalPreviewAvailable = Boolean(nativePreviewResult?.manifest.available);
+  const finalPreviewType = nativePreviewResult?.manifest.type;
+  const finalPreviewSlideCount = nativePreviewResult?.manifest.slideCount;
+  const finalPreviewManifestPath = nativePreviewResult?.manifestPath;
+  const finalPreviewFallbackReason = nativePreviewResult?.manifest.fallbackReason;
+  const finalPreviewUpdatedAt = nativePreviewResult?.manifest.generatedAt;
   if (isBasicFallback) {
     await updateAcademicPptTaskRecord(taskId, {
       status: "failed",
       progress: 100,
       currentStep: "failed",
+      currentStage: "failed",
+      failedStage: "generating_slides",
+      errorSummary: fallbackReason || "Visual pipeline degraded; full paper-ppt-agent result was not produced.",
       modelSource: "local-fallback",
       generatorSource: "tools-engine",
       modelName: "Generation service",
@@ -315,6 +338,8 @@ async function completeFromEngineStatus(taskId: string, status: ToolsEngineStatu
       slideCount: status.slideCount || undefined,
       resumeFromStep: current.resumeFromStep || "generating_slides",
       resumable: true,
+      lastCompletedStep: current.lastCompletedStep || "upload_received",
+      lastSuccessfulStage: current.lastSuccessfulStage || current.lastCompletedStep || "upload_received",
       error: fallbackReason || "Visual pipeline degraded; full paper-ppt-agent result was not produced.",
       failedAt: new Date().toISOString()
     });
@@ -326,47 +351,21 @@ async function completeFromEngineStatus(taskId: string, status: ToolsEngineStatu
     throw new ToolsEngineTaskFailedError(fallbackReason || "Visual pipeline degraded.");
   }
   if (isVisualDegraded) {
-    await updateAcademicPptTaskRecord(taskId, {
-      status: "failed",
-      progress: 100,
-      currentStep: "failed",
-      modelSource: "paper-ppt-agent-degraded",
-      generatorSource: "tools-engine",
-      modelName: "Generation service",
-      fallbackReason: fallbackReason || "Visual pipeline quality checks did not pass.",
-      generationMode: status.generationMode || "paper-ppt-agent",
-      visualPipelineStatus: "degraded",
-      modelBridgeStatus,
-      modelBridgePrimaryModel: status.modelBridgePrimaryModel || current.modelBridgePrimaryModel,
-      modelBridgePrimaryStatus: primaryStatus,
-      modelBridgeFallbackModel: status.modelBridgeFallbackModel || current.modelBridgeFallbackModel,
-      modelBridgeFallbackStatus: fallbackStatus,
-      modelBridgeErrorSummary: status.modelBridgeErrorSummary || current.modelBridgeErrorSummary,
-      searchStatus: status.searchStatus,
-      researchStatus: status.researchStatus,
-      researchSourcesCount: status.researchSourcesCount,
-      researchFallbackReason: status.researchFallbackReason,
-      previewAvailable: finalPreviewAvailable ? true : undefined,
-      previewType: finalPreviewType,
-      previewSlideCount: finalPreviewSlideCount,
-      previewManifestPath: finalPreviewManifestPath,
-      previewFallbackReason: finalPreviewFallbackReason,
-      previewUpdatedAt: finalPreviewUpdatedAt,
-      outputFilePath,
-      outputFileSize: outputStat.size,
-      slideCount: status.slideCount || undefined,
-      resumeFromStep: current.resumeFromStep || "generating_slides",
-      resumable: true,
-      error: fallbackReason || "Visual pipeline quality checks did not pass.",
-      failedAt: new Date().toISOString()
-    });
-    await appendAcademicPptLog(taskId, "error", fallbackReason || "Visual pipeline quality checks did not pass.");
-    throw new ToolsEngineTaskFailedError(fallbackReason || "Visual pipeline quality checks did not pass.");
+    await appendAcademicPptLog(
+      taskId,
+      "warn",
+      `Visual pipeline completed with warnings; keeping validated final PPTX. ${fallbackReason || "Visual pipeline quality checks did not fully pass."}`
+    );
   }
   await updateAcademicPptTaskRecord(taskId, {
     status: "success",
     progress: 100,
     currentStep: "completed",
+    currentStage: "completed",
+    failedStage: undefined,
+    errorSummary: undefined,
+    errorDetails: undefined,
+    error: undefined,
     modelSource: "paper-ppt-agent",
     generatorSource: "tools-engine",
     modelName: "Generation service",
@@ -389,6 +388,8 @@ async function completeFromEngineStatus(taskId: string, status: ToolsEngineStatu
     previewManifestPath: finalPreviewManifestPath,
     previewFallbackReason: finalPreviewFallbackReason,
     previewUpdatedAt: finalPreviewUpdatedAt,
+    selectedVariants: status.selectedVariants,
+    roleMapping: status.roleMapping,
     outputFilePath,
     outputFileSize: outputStat.size,
     outputStorageProvider: "local",
@@ -398,12 +399,13 @@ async function completeFromEngineStatus(taskId: string, status: ToolsEngineStatu
     previewAssetsReady: Boolean(finalPreviewManifestPath),
     slideCount: status.slideCount || undefined,
     lastCompletedStep: "completed",
+    lastSuccessfulStage: "completed",
     resumeFromStep: undefined,
     resumable: false,
     completedAt: new Date().toISOString()
   });
   if (!finalPreviewAvailable) {
-    await markStructuredPreviewUnavailable(taskId, status.slideCount);
+    await markStructuredPreviewUnavailable(taskId, status.slideCount, outputFilePath);
   }
   await appendAcademicPptLog(taskId, "info", `PPTX generated. File size: ${Math.round(outputStat.size / 1024)} KB.`);
 }
@@ -438,9 +440,14 @@ export async function runAcademicPptToolsEngineTask(taskId: string, options?: { 
   await appendAcademicPptLog(taskId, "info", `Model bridge URL resolved from ${modelBridge.source}.`);
   await appendAcademicPptLog(taskId, "info", "Connecting generation service.");
   await updateAcademicPptTaskRecord(taskId, {
-    status: "running",
-    currentStep: "generating_slides",
-    progress: Math.max(record.progress || 8, 8),
+      status: "running",
+      currentStep: "generating_slides",
+      currentStage: "generating_slides",
+      progress: Math.max(record.progress || 8, 8),
+      failedStage: undefined,
+      errorSummary: undefined,
+      errorDetails: undefined,
+      error: undefined,
     modelSource: "paper-ppt-agent",
     generatorSource: "tools-engine",
     modelName: "Generation service",
@@ -530,9 +537,10 @@ export async function runAcademicPptToolsEngineTask(taskId: string, options?: { 
       }
       if (status.status === "cancelled") {
         await updateAcademicPptTaskRecord(taskId, {
-          status: "cancelled",
-          currentStep: "cancelled",
-          progress: 100,
+        status: "cancelled",
+        currentStep: "cancelled",
+        currentStage: "cancelled",
+        progress: 100,
           cancelRequested: true,
           resumable: false,
           cancelledAt: new Date().toISOString()
@@ -544,6 +552,7 @@ export async function runAcademicPptToolsEngineTask(taskId: string, options?: { 
       await updateAcademicPptTaskRecord(taskId, {
         status: "running",
         currentStep: mapEngineStep(status.currentStep),
+        currentStage: mapEngineStep(status.currentStep),
         progress: toProgress(status.progress, current.progress || 10),
         lastCompletedStep: current.lastCompletedStep || "upload_received",
         resumeFromStep: mapEngineStep(status.currentStep),
@@ -566,6 +575,8 @@ export async function runAcademicPptToolsEngineTask(taskId: string, options?: { 
         previewManifestPath: status.previewManifestPath || current.previewManifestPath,
         previewFallbackReason: status.previewFallbackReason || current.previewFallbackReason,
         previewUpdatedAt: status.previewUpdatedAt || current.previewUpdatedAt,
+        selectedVariants: status.selectedVariants || current.selectedVariants,
+        roleMapping: status.roleMapping || current.roleMapping,
         timeoutAt: new Date(Date.now() + STALE_HEARTBEAT_MS).toISOString()
       });
     } catch (error) {

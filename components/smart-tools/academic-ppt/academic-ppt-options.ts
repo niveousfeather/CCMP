@@ -10,7 +10,8 @@ export const templateStyleOptions: Array<{ label: string; value: AcademicPptTemp
   { label: "学术简洁", value: "academic_clean" },
   { label: "蓝白科技", value: "blue_tech" },
   { label: "研究报告", value: "research_report" },
-  { label: "课程汇报", value: "course_presentation" }
+  { label: "课程汇报", value: "course_presentation" },
+  { label: "电子科技大学", value: "school_academic_report" }
 ];
 
 export const aspectRatioOptions: Array<{ label: string; value: AcademicPptAspectRatio; disabled?: boolean }> = [

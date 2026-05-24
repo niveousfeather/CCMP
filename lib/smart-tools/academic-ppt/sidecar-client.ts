@@ -16,6 +16,7 @@ import {
   appendAcademicPptLog,
   assertAcademicPptTaskNotCancelled,
   buildAcademicPptSlidesPreview,
+  ensureAcademicPptPptxDownloadable,
   getAcademicPptOutputDir,
   getAcademicPptPreviewDir,
   readAcademicPptTaskRecord,
@@ -37,11 +38,79 @@ import type {
   AcademicPptQualityReport,
   AcademicPptResearchBrief,
   AcademicPptSettings,
+  AcademicPptTaskRecord,
+  AcademicPptTaskStep,
   AcademicPptVisualQaReport
 } from "@/lib/smart-tools/academic-ppt/types";
 
 const MAX_REPAIR_ROUNDS = 2;
 const MAX_MODEL_CRITIC_REPAIR_ROUNDS = 1;
+
+function inferPreviousFailedStage(record: AcademicPptTaskRecord): AcademicPptTaskStep | undefined {
+  if (record.failedStage) return record.failedStage;
+  if (record.currentStep !== "failed" && record.currentStep !== "completed") return record.currentStep;
+  const failureText = `${record.errorSummary || ""} ${record.error || ""} ${record.fallbackReason || ""}`.toLowerCase();
+  if (/visual composition|visual[_ -]?qa|quality gate|svg pages|preview/.test(failureText)) return "visual_qa";
+  if (/repair/.test(failureText)) return "repairing_slides";
+  if (/export|pptx|openxml|powerpoint/.test(failureText)) return "exporting_pptx";
+  if (/research|search/.test(failureText)) return "research_enhancement";
+  if (/outline|strategy|plan/.test(failureText)) return "planning_outline";
+  if (/parse|source|upload/.test(failureText)) return "parsing_source";
+  if (record.previousFailedStage && record.previousFailedStage !== "completed") return record.previousFailedStage;
+  if (record.resumeFromStep && record.resumeFromStep !== "completed") return record.resumeFromStep;
+  const fallbackStage = record.lastSuccessfulStage || record.lastCompletedStep;
+  return fallbackStage && fallbackStage !== "completed" ? fallbackStage : undefined;
+}
+
+async function resumeCompletedTaskIfOutputIsValid(
+  taskId: string,
+  record: AcademicPptTaskRecord & { settings?: AcademicPptSettings },
+  previousFailedStage: AcademicPptTaskStep | undefined
+) {
+  if (!record.outputFilePath || record.lastCompletedStep !== "completed") return undefined;
+  try {
+    await ensureAcademicPptPptxDownloadable(record.outputFilePath);
+    const completedAt = new Date().toISOString();
+    await appendAcademicPptLog(
+      taskId,
+      "info",
+      `Resume detected a valid final PPTX; cleared stale error state. taskId=${taskId} previousFailedStage=${previousFailedStage || "unknown"} resumedFromStage=completed`
+    );
+    return updateAcademicPptTaskRecord(taskId, {
+      status: "success",
+      progress: 100,
+      currentStep: "completed",
+      currentStage: "completed",
+      failedStage: undefined,
+      errorSummary: undefined,
+      errorDetails: undefined,
+      error: undefined,
+      modelSource: record.modelSource === "paper-ppt-agent-degraded" ? "paper-ppt-agent" : record.modelSource,
+      generatorSource: record.generatorSource || "tools-engine",
+      generationMode: record.generationMode || "paper-ppt-agent",
+      isResumed: true,
+      resumedAt: completedAt,
+      resumedFromStage: "completed",
+      previousFailedStage,
+      lastCompletedStep: "completed",
+      lastSuccessfulStage: "completed",
+      resumeFromStep: undefined,
+      resumable: false,
+      completedAt,
+      pptxUrl: `/api/smart-tools/academic-ppt/tasks/${encodeURIComponent(taskId)}/download`,
+      previewManifestUrl: `/api/smart-tools/academic-ppt/tasks/${encodeURIComponent(taskId)}/preview`,
+      outputStorageProvider: record.outputStorageProvider || "local",
+      previewStoragePrefix: record.previewStoragePrefix || `academic-ppt/tasks/${taskId}/previews`
+    });
+  } catch (error) {
+    await appendAcademicPptLog(
+      taskId,
+      "warn",
+      `Existing PPTX is not valid during resume; requeueing from checkpoint. ${summarizeError(error)}`
+    );
+    return undefined;
+  }
+}
 
 type SourceCheckpoint = Awaited<ReturnType<typeof extractAcademicPptSourceText>>;
 type ResearchBriefCheckpoint = AcademicPptResearchBrief;
@@ -861,6 +930,21 @@ export async function runAcademicPptGenerationPipeline(taskId: string, resume = 
 
 export async function resumeAcademicPptGeneration(taskId: string) {
   const record = await readAcademicPptTaskRecord(taskId);
+  if (record.status === "success") {
+    const normalizedPreviousFailedStage =
+      record.previousFailedStage === "completed" ? inferPreviousFailedStage(record) : record.previousFailedStage;
+    if (record.failedStage || record.error || record.errorSummary || normalizedPreviousFailedStage !== record.previousFailedStage) {
+      return updateAcademicPptTaskRecord(taskId, {
+        failedStage: undefined,
+        errorSummary: undefined,
+        errorDetails: undefined,
+        error: undefined,
+        previousFailedStage: normalizedPreviousFailedStage
+      });
+    }
+    return record;
+  }
+  const previousFailedStage = inferPreviousFailedStage(record);
   if (record.status === "cancelled" || record.cancelRequested) {
     throw new Error("Task was cancelled and cannot be resumed.");
   }
@@ -871,6 +955,8 @@ export async function resumeAcademicPptGeneration(taskId: string) {
   if (!record.resumable && record.status !== "failed" && record.status !== "running") {
     throw new Error("Current task cannot be resumed.");
   }
+  const completedRecord = await resumeCompletedTaskIfOutputIsValid(taskId, record, previousFailedStage);
+  if (completedRecord) return completedRecord;
   const lastCompletedStep = await inferAcademicPptLastCompletedStep(taskId, record.lastCompletedStep);
   const resumeFromStep = record.resumeFromStep || getAcademicPptResumeStep(lastCompletedStep);
   if (!lastCompletedStep || resumeFromStep === "completed") {
@@ -882,6 +968,9 @@ export async function resumeAcademicPptGeneration(taskId: string) {
     await updateAcademicPptTaskRecord(taskId, {
       status: "failed",
       currentStep: "failed",
+      currentStage: "failed",
+      failedStage: previousFailedStage || resumeFromStep,
+      errorSummary: "Uploaded file is missing; please upload again.",
       progress: 100,
       error: "Uploaded file is missing; please upload again.",
       resumable: false,
@@ -895,14 +984,27 @@ export async function resumeAcademicPptGeneration(taskId: string) {
     status: "queued",
     progress: Math.max(record.progress || 5, 5),
     currentStep: resumeFromStep,
+    currentStage: resumeFromStep,
+    failedStage: undefined,
+    errorSummary: undefined,
+    errorDetails: undefined,
     error: undefined,
+    isResumed: true,
+    resumedAt: new Date().toISOString(),
+    resumedFromStage: resumeFromStep,
+    previousFailedStage,
     lastCompletedStep,
+    lastSuccessfulStage: lastCompletedStep,
     resumeFromStep,
     resumable: true,
     startedAt: record.startedAt || new Date().toISOString(),
     timeoutAt: new Date(Date.now() + 30 * 60 * 1000).toISOString()
   });
-  await appendAcademicPptLog(taskId, "info", `Task requeued and will resume from ${resumeFromStep}.`);
+  await appendAcademicPptLog(
+    taskId,
+    "info",
+    `Task requeued and will resume from ${resumeFromStep}; cleared stale error state. taskId=${taskId} previousFailedStage=${previousFailedStage || "unknown"} resumedFromStage=${resumeFromStep}`
+  );
   return readAcademicPptTaskRecord(taskId);
 }
 

@@ -79,9 +79,13 @@ export async function reconcileAcademicPptTaskRecovery(taskId: string) {
   const next = await updateAcademicPptTaskRecord(taskId, {
     status: "failed",
     currentStep: "failed",
+    currentStage: "failed",
+    failedStage: record.currentStep === "failed" ? record.resumeFromStep || resumeFromStep : record.currentStep,
     progress: Math.max(record.progress || 0, 5),
     error: resumable ? "Task was interrupted and can be resumed." : "Task was interrupted. Please upload again.",
+    errorSummary: resumable ? "Task was interrupted and can be resumed." : "Task was interrupted. Please upload again.",
     lastCompletedStep,
+    lastSuccessfulStage: lastCompletedStep,
     resumeFromStep: resumable ? resumeFromStep : undefined,
     resumable,
     failedAt: new Date().toISOString()

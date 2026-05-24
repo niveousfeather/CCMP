@@ -28,7 +28,9 @@ export async function GET(_request: Request, context: RouteContext) {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "Content-Length": String(fileStat.size),
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
+        "X-Academic-Ppt-Sha256": info.sha256 || "",
+        ETag: info.sha256 ? `"${info.sha256}"` : ""
       }
     });
   } catch (error) {
