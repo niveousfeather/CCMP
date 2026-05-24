@@ -1,6 +1,8 @@
 node_modules/
 .next/
 .gitnexus/
+.claude/
+agent-runtime-v2-current.patch
 dist/
 build/
 coverage/
