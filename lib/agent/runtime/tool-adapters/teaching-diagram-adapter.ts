@@ -6,7 +6,7 @@ async function createTeachingDiagramTask(
 ): Promise<{ result: AgentRunResult; taskId: string; title: string }> {
   const formData = new FormData();
   formData.set("sourceType", "text");
-  formData.set("diagramType", "framework");
+  formData.set("diagramType", "auto");
   formData.set("textPrompt", context.userText);
 
   const response = await fetch(new URL("/api/smart-tools/teaching-architecture-diagram", context.origin), {

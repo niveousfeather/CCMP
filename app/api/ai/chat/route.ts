@@ -87,6 +87,11 @@ type AsyncAgentTaskPlan = {
   requiresGeneratedFile: boolean;
 };
 
+function shouldUseLegacyAsyncTask(agentRuntimePlan: AgentRuntimePlan | null) {
+  const targetTool = agentRuntimePlan?.decision.targetTool;
+  return targetTool === "ppt-simple" || targetTool === "word";
+}
+
 type AgentRuntimePublicStatus = {
   label: string;
   steps: string[];
@@ -830,6 +835,9 @@ function buildAdapterTaskCard(input: {
   const rawTaskType = typeof input.resultCard?.taskType === "string" ? input.resultCard.taskType : null;
   const taskType = taskTypeFromTarget(rawTaskType || input.targetTool) || taskTypeFromTarget(input.targetTool);
   if (!taskType || !input.resultCard) return null;
+  if (taskType === "file-analysis" && input.targetTool === "file-analysis" && !input.resultCard.taskId && !input.generatedAttachment) {
+    return null;
+  }
   const imageTask =
     input.imageGeneration && typeof input.imageGeneration === "object"
       ? (input.imageGeneration as { generationId?: string; status?: string; failureReason?: string | null })
@@ -1871,7 +1879,7 @@ async function streamChatResponse({
 
         writer.toolStatus("正在创建任务");
         const asyncTaskPlan =
-          parsed.mode === "agent" && agentRuntimePlan?.decision.nextAction === "run_legacy_tool"
+          parsed.mode === "agent" && agentRuntimePlan?.decision.nextAction === "run_legacy_tool" && shouldUseLegacyAsyncTask(agentRuntimePlan)
             ? getAsyncAgentTaskPlan({
                 text: userText,
                 files: parsed.files,
@@ -2298,7 +2306,7 @@ export async function POST(request: NextRequest) {
         conversationSummaryCache
       );
     const asyncTaskPlan =
-      parsed.mode === "agent" && agentRuntimePlan?.decision.nextAction === "run_legacy_tool"
+      parsed.mode === "agent" && agentRuntimePlan?.decision.nextAction === "run_legacy_tool" && shouldUseLegacyAsyncTask(agentRuntimePlan)
         ? getAsyncAgentTaskPlan({
             text: userText,
             files: parsed.files,

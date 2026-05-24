@@ -1112,3 +1112,74 @@ Agent Runtime V2 regression passed.
 - 不覆盖 taskCard 真实下载/跳转；
 - 不覆盖 Academic PPT 业务内部；
 - 不覆盖 `services/**`。
+
+## 27. 第十七阶段 真实工具端到端验收
+
+### 阶段目标
+
+本阶段不扩展 Runtime 规则，不新增 adapter，不改工具底层生成器。目标是通过真实 `/api/ai/chat` 请求验证聊天触发工具后的端到端体验，重点观察 taskCard、下载/打开入口、失败文案和当前对话 activeTask 行为。
+
+### 本阶段修复范围
+
+只修改允许层：
+
+- `app/api/ai/chat/route.ts`
+- `lib/agent/runtime/tool-adapters/teaching-diagram-adapter.ts`
+
+修复点：
+
+- 非流式 chat route 中，旧 `getAsyncAgentTaskPlan` 只继续接管 `ppt-simple` 和 `word`，避免抢占 Excel、图片、教学架构图、知识图谱等 Tool Adapter。
+- `file-analysis` 的即时总结不再展示 taskCard，避免把普通文件总结误呈现成后台任务。
+- 教学架构图 adapter 调用现有 smart-tools API 时，将 `diagramType` 从无效的 `framework` 改为现有 API 支持的 `auto`。
+
+未修改：
+
+- Academic PPT 业务代码；
+- `services/**`；
+- `data/**` 运行产物；
+- 教学架构图内部业务逻辑；
+- Word / Excel / PPT / 图片底层生成器。
+
+### 真实 API 验收结果
+
+使用临时脚本在系统临时目录启动 dev server、登录 admin 测试账号，并对 `/api/ai/chat` 发起真实请求。脚本不写入仓库。
+
+| 用例 | 结果 | 说明 |
+| --- | --- | --- |
+| `PPT怎么做？` | 通过 | 只聊天，无 taskCard。当前模型服务返回“模型服务暂时不可用”，但没有误调用工具。 |
+| `帮我生成一个10页PPT，主题是AI教育` | 通过 | `ppt` taskCard 正常显示，任务轮询完成后有 `.pptx` 附件和下载入口；未进入 Academic PPT。 |
+| `帮我生成一份AI教育培训方案Word文档` | 通过 | `word` taskCard 正常显示，任务轮询完成后有 `.docx` 附件和下载入口。 |
+| `把这些数据导出成Excel：姓名，成绩；张三，90；李四，85` | 通过 | `excel` taskCard 正常显示，生成 `.xlsx` 附件，下载入口可用。 |
+| `这个Excel公式怎么写？` | 通过 | 只聊天，无 taskCard，不生成 xlsx。当前模型服务返回暂不可用文案。 |
+| `生成一张科技感教学场景图片` | 通过 | `image` taskCard 正常显示，包含图片任务 ID，进入图片生成状态。 |
+| 上传 txt 后 `根据这个文件总结一下` | 部分通过 | 没有生成文件，也没有误显示 taskCard；当前返回用户可读失败“文件分析失败，请确认文件格式受支持后重试。”需要后续继续排查 multipart 文件分析适配。 |
+| `生成教学架构图，主题是数字赋能课程改革` | 通过 | `teaching-diagram` taskCard 正常显示，包含 smart-tools taskId、打开入口和 png 下载入口。 |
+| `生成知识图谱，主题是人工智能发展史` | 通过 | `knowledge-graph` taskCard 正常显示，包含 taskId 和打开入口。 |
+| `继续刚才的PPT，改成正式一点` | 未通过 | Runtime 能识别当前对话 PPT activeTask，但旧 simple PPT 生成链路无法基于“改成正式一点”直接修改/续写已有 PPT，返回用户可读失败。 |
+
+### taskCard 和入口情况
+
+- simple PPT：taskCard 正常，完成后 `.pptx` 下载入口正常。
+- Word：taskCard 正常，完成后 `.docx` 下载入口正常。
+- Excel：taskCard 正常，完成后 `.xlsx` 下载入口正常。
+- 图片：taskCard 正常，显示图片任务状态；本阶段未等待图片 provider 完成预览。
+- 教学架构图：taskCard 正常，打开入口和 png 下载入口已返回。
+- 知识图谱：taskCard 正常，打开入口已返回。
+- 文件分析：按当前产品预期不显示 taskCard；本轮发现 txt 文件分析仍返回失败文案。
+
+### 失败项和原因
+
+- 文件分析：真实 multipart txt 请求进入 file-analysis adapter 后返回失败，当前判断是文件分析适配/解析链路未成功消费该上传文件；本阶段未改 `lib/document-processing` 或旧解析器，建议后续专门排查。
+- PPT 当前任务延续：activeTask 识别存在，但 simple PPT 旧生成器没有“基于上一个 PPT 修改风格”的真实编辑能力；建议后续做 PPT continuation adapter 或明确追问“是否基于原主题重新生成一版正式风格 PPT”。
+
+### 验证命令
+
+- `npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts`：通过，16/16 PASS。
+- `npm.cmd exec -- tsc --noEmit`：通过。
+
+### 后续建议
+
+- 补一个只读/临时目录的真实 chat API E2E 脚本，避免手工复跑临时脚本。
+- 单独修复文件分析 multipart 端到端链路，确认是否走 `lib/document-processing` 或旧 `parse-document`。
+- 为“继续刚才的 PPT，改成正式一点”设计明确的 continuation 语义：重新生成、修改已有文件、还是追问用户选择。
+- 若前端改动较多，再补一次浏览器 UI 验收，检查单气泡、taskCard 刷新恢复和入口点击。
