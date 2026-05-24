@@ -156,6 +156,8 @@ assertNotIncludes(workbench, "[applyTaskSnapshot, slidesPreview]", "success prev
 assertNotIncludes(workbench, "[refreshSuccessfulTaskPreview, taskId, status]", "completed tasks must not refetch preview from a success-state effect");
 assertNotIncludes(workbench, "getAcademicPptTask(finishedTaskId", "completed preview refresh must not request the task snapshot a second time");
 assertIncludes(workbench, "RECENT_TASKS_HIDDEN_STORAGE_KEY", "workbench should persist hidden recent task ids locally");
+assertIncludes(workbench, "ACADEMIC_PPT_PLACEHOLDER_TASK_ID", "workbench should know the placeholder academic-ppt task id");
+assertIncludes(workbench, "isAcademicPptPlaceholderTaskId", "workbench should clean placeholder task ids from local history");
 assertIncludes(workbench, "dismissRecentTask", "workbench should hide recent tasks without deleting task directories");
 assertIncludes(workbench, "setSelectedTaskId(null)", "dismissing the selected task should clear selection");
 assertIncludes(workbench, 'snapshot.status === "success"', "workbench should refresh preview manifest after loading a completed history task");
@@ -176,6 +178,7 @@ assertIncludes(modelBridge, "fallbackModel", "model bridge response should inclu
 assertIncludes(modelBridge, "modelBridgePrimaryStatus", "model bridge should persist primary status");
 assertIncludes(modelBridge, "simulatePrimaryFailure", "model bridge check should be able to force fallback");
 assertIncludes(modelBridge, "simulatePrimarySuccessAfterTransient", "model bridge check should verify retry policy independent of live provider availability");
+assertIncludes(modelBridge, "simulateFallbackSuccess", "model bridge check should verify fallback diagnostics independent of live fallback provider availability");
 assertIncludes(modelBridge, "ACADEMIC_PPT_STRICT_VISUAL_PIPELINE", "model bridge should expose strict visual mode");
 assertIncludes(modelBridge, "ACADEMIC_PPT_ALLOW_KIMI_FINAL_FALLBACK", "model bridge should gate Kimi final fallback");
 assertIncludes(modelBridge, "STRATEGY_PRIMARY_MAX_ATTEMPTS = readPositiveIntEnv(\"ACADEMIC_PPT_MAX_PRIMARY_RETRIES_STRATEGY\", 6)", "strategy/design-spec should allow six GPT-5.4 attempts");
@@ -190,6 +193,12 @@ assertIncludes(modelBridge, "Kimi fallback disabled for strict visual stage", "s
 assertIncludes(modelBridge, "body.stream !== false", "academic-ppt model bridge should default to provider streaming for long calls");
 assertIncludes(modelBridge, "stream completed", "academic-ppt model bridge should log safe stream completion");
 assertIncludes(modelBridge, "isRetryablePrimaryFailure", "model bridge should identify retryable provider failures");
+assertIncludes(modelBridge, "isTransientAcademicPptModelError", "model bridge should classify stream interruptions as transient");
+assertIncludes(modelBridge, "stream_interrupted", "model bridge should return structured stream interruption errors");
+assertIncludes(modelBridge, "model stream interrupted, retryable", "model bridge should summarize retryable stream interruptions safely");
+assertIncludes(modelBridge, "terminated", "model bridge should retry terminated provider streams");
+assertIncludes(modelBridge, "UND_ERR_SOCKET", "model bridge should retry undici socket interruptions");
+assertIncludes(modelBridge, "simulatePrimaryStreamInterruptedFailures", "model bridge check should simulate interrupted primary streams");
 assertIncludes(modelBridge, "stripHtmlProviderBody", "model bridge should strip HTML provider errors");
 assertIncludes(modelBridge, "Internal model bridge only accepts local requests", "model bridge local-only guard");
 assertNotIncludes(modelBridge, "apiKey", "model bridge must not expose api keys");
@@ -226,6 +235,8 @@ assertIncludes(serverTaskStore, "structured_placeholder", "structured preview mu
 assertIncludes(serverTaskStore, "findAcademicPptSvgFinalFiles", "preview route should recover actual svg_final count from task artifacts");
 assertIncludes(serverTaskStore, "buildSvgFinalPreviewManifest", "preview route should fall back to actual svg_final artifacts");
 assertIncludes(serverTaskStore, "readStoredAcademicPptPreviewManifest", "preview route should inspect stored native manifest before SVG fallback");
+assertIncludes(serverTaskStore, "ACADEMIC_PPT_PLACEHOLDER_TASK_IDS", "task store should identify placeholder task ids");
+assertIncludes(serverTaskStore, "isAcademicPptPlaceholderTaskId", "task store should skip placeholder task ids before reading task.json");
 assertIncludes(serverTaskStore, 'previewPending ? "pending"', "preview manifest should report pending instead of 404 while running assets are not ready");
 assertIncludes(serverTaskStore, "record.previewAssetsReady &&", "task snapshots must not synthesize /preview/page assets before durable preview assets are ready");
 assertOrdered(
@@ -441,13 +452,14 @@ assertIncludes(workbenchPreview, "preview?.slides.length", "workbench should der
 assertNotIncludes(workbenchPreview, "preview.previewCount || preview.slides.length || preview.slideCount", "workbench must not synthesize preview pages from slideCount");
 
 const templateOptions = readWorkspaceFile("components/smart-tools/academic-ppt/academic-ppt-options.ts");
-assertIncludes(templateOptions, "学校学术汇报", "front-end template dropdown should expose the builtin school template");
+assertIncludes(templateOptions, "电子科技大学", "front-end template dropdown should expose the builtin school template display name");
 
 const academicPptTypes = readWorkspaceFile("lib/smart-tools/academic-ppt/types.ts");
 assertIncludes(academicPptTypes, '"school_academic_report"', "template style enum should include the builtin school template");
 
 const templateRegistry = readWorkspaceFile("lib/smart-tools/academic-ppt/template-registry.ts");
 assertIncludes(templateRegistry, 'id: "school_academic_report"', "template registry should include the builtin school template");
+assertIncludes(templateRegistry, 'name: "电子科技大学"', "template registry should use the school template display name");
 assertIncludes(templateRegistry, 'school_academic_report: "school_academic_report"', "template style should map to the builtin school template id");
 
 const paperPptAdapter = readWorkspaceFile("services/ai-tools-engine/app/tools/academic_ppt/paper_ppt_adapter.py");
@@ -455,6 +467,11 @@ assertIncludes(paperPptAdapter, "BUILTIN_TEMPLATE_ID = \"school_academic_report\
 assertIncludes(paperPptAdapter, "_builtin_template_metadata", "adapter should read builtin template metadata");
 assertIncludes(paperPptAdapter, "_builtin_template_instruction", "adapter should inject builtin template constraints");
 assertIncludes(paperPptAdapter, "school_academic_report", "adapter should map the school template style");
+assertIncludes(
+  paperPptAdapter,
+  "_assess_builtin_template_role_plan",
+  "adapter should let final builtin template role mapping validate blueprint PPTX output"
+);
 
 assertFile("services/ai-tools-engine/app/tools/academic_ppt/templates/builtin/school_academic_report/template.pptx");
 assertFile("services/ai-tools-engine/app/tools/academic_ppt/templates/builtin/school_academic_report/template.json");
@@ -462,20 +479,143 @@ const schoolTemplateMetadata = JSON.parse(
   readWorkspaceFile("services/ai-tools-engine/app/tools/academic_ppt/templates/builtin/school_academic_report/template.json")
 ) as {
   templateId?: string;
+  displayName?: string;
+  templateFamily?: string;
+  theme?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    gradientStartColor?: string;
+    gradientEndColor?: string;
+    accentColor?: string;
+  };
+  coordinateSystem?: { type?: string; width?: number; height?: number; unit?: string };
   sanitized?: boolean;
   source?: string;
-  fontPolicy?: { preserveEmbeddedFonts?: boolean };
+  fontPolicy?: {
+    preserveEmbeddedFonts?: boolean;
+    headingFontFamily?: string;
+    bodyFontFamily?: string;
+    fallbackFonts?: string[];
+  };
+  layoutPolicy?: {
+    preserveMasterHeader?: boolean;
+    preserveLogoPosition?: boolean;
+    preserveOriginalTextBoxPosition?: boolean;
+    preserveOriginalFontSize?: boolean;
+    disableGeneratedFooterPageNumber?: boolean;
+    doNotMoveSchoolLogo?: boolean;
+    doNotRedrawHeader?: boolean;
+  };
+  layoutTypes?: {
+    cover?: unknown[];
+    toc?: unknown[];
+    section?: unknown[];
+    content?: unknown[];
+    imageText?: unknown[];
+    chart?: unknown[];
+    summary?: unknown[];
+  };
+  variants?: Record<
+    string,
+    Array<{
+      variantId?: string;
+      sourceFile?: string;
+      sourceSlideIndex?: number;
+      templateSlideIndex?: number;
+      role?: string;
+      slots?: Record<string, { x?: number; y?: number; w?: number; h?: number; fontSize?: number; color?: string }>;
+    }>
+  >;
+  placeholderPolicy?: {
+    replaceOnlyKnownPlaceholders?: boolean;
+    removePowerPointDefaultPrompts?: boolean;
+    removeUnfilledPlaceholders?: boolean;
+  };
 };
 if (schoolTemplateMetadata.templateId !== "school_academic_report" || schoolTemplateMetadata.sanitized !== true) {
   throw new Error("builtin school template metadata should be sanitized and use stable templateId=school_academic_report");
 }
+if (schoolTemplateMetadata.displayName !== "电子科技大学") {
+  throw new Error("builtin school template metadata should use displayName=电子科技大学");
+}
+if (schoolTemplateMetadata.templateFamily !== "cqupt-purple-academic") {
+  throw new Error("builtin school template metadata should define templateFamily=cqupt-purple-academic");
+}
+if (
+  schoolTemplateMetadata.coordinateSystem?.type !== "inches" ||
+  schoolTemplateMetadata.coordinateSystem.width !== 13.333 ||
+  schoolTemplateMetadata.coordinateSystem.height !== 7.5
+) {
+  throw new Error("builtin school template metadata should define a single 16:9 inch coordinate system");
+}
 if (schoolTemplateMetadata.source !== "builtin-pptx-template" || schoolTemplateMetadata.fontPolicy?.preserveEmbeddedFonts !== true) {
   throw new Error("builtin school template metadata should preserve embedded font policy and source type");
+}
+if (
+  schoolTemplateMetadata.theme?.primaryColor !== "#801C80" ||
+  schoolTemplateMetadata.theme.secondaryColor !== "#9D229D" ||
+  schoolTemplateMetadata.theme.gradientStartColor !== "#811C81" ||
+  schoolTemplateMetadata.theme.gradientEndColor !== "#9D229D" ||
+  schoolTemplateMetadata.theme.accentColor !== "#801C80"
+) {
+  throw new Error("builtin school template metadata should use the required purple theme #801C80 and gradient #811C81 -> #9D229D");
+}
+if (
+  schoolTemplateMetadata.fontPolicy?.headingFontFamily !== "SimSun" ||
+  schoolTemplateMetadata.fontPolicy.bodyFontFamily !== "SimHei" ||
+  !schoolTemplateMetadata.fontPolicy.fallbackFonts?.includes("SimSun") ||
+  !schoolTemplateMetadata.fontPolicy.fallbackFonts?.includes("SimHei")
+) {
+  throw new Error("builtin school template metadata should prefer bold Songti headings and Heiti body text");
+}
+const schoolLayoutPolicy = schoolTemplateMetadata.layoutPolicy;
+if (
+  !schoolLayoutPolicy?.preserveMasterHeader ||
+  !schoolLayoutPolicy.preserveLogoPosition ||
+  !schoolLayoutPolicy.preserveOriginalTextBoxPosition ||
+  !schoolLayoutPolicy.preserveOriginalFontSize ||
+  !schoolLayoutPolicy.disableGeneratedFooterPageNumber ||
+  !schoolLayoutPolicy.doNotMoveSchoolLogo ||
+  !schoolLayoutPolicy.doNotRedrawHeader
+) {
+  throw new Error("builtin school template metadata should lock master header, logo, geometry, font size, and generated page numbers");
+}
+for (const layoutType of ["cover", "toc", "section", "content", "imageText", "chart", "summary"] as const) {
+  if (!Array.isArray(schoolTemplateMetadata.layoutTypes?.[layoutType]) || !schoolTemplateMetadata.layoutTypes[layoutType]?.length) {
+    throw new Error(`builtin school template metadata should map ${layoutType} layouts`);
+  }
+}
+for (const role of ["cover", "toc", "section", "content", "imageText", "chart", "summary", "ending"] as const) {
+  const variants = schoolTemplateMetadata.variants?.[role];
+  if (!Array.isArray(variants) || variants.length === 0) {
+    throw new Error(`builtin school template blueprint should include ${role} variants`);
+  }
+  for (const variant of variants) {
+    if (!variant.variantId || !variant.sourceFile || !variant.sourceSlideIndex || !variant.templateSlideIndex || variant.role !== role) {
+      throw new Error(`builtin school template ${role} variant should preserve source and template slide identity`);
+    }
+    const slots = variant.slots || {};
+    if (!slots.title && role !== "toc") {
+      throw new Error(`builtin school template ${variant.variantId} should define a title slot`);
+    }
+    const requiredSlot = role === "cover" ? "subtitle" : role === "toc" ? "tocItems" : role === "section" ? "sectionTitle" : role === "ending" ? "closingText" : "body";
+    if (!slots[requiredSlot]) {
+      throw new Error(`builtin school template ${variant.variantId} should define ${requiredSlot} slot`);
+    }
+  }
+}
+if (
+  !schoolTemplateMetadata.placeholderPolicy?.replaceOnlyKnownPlaceholders ||
+  !schoolTemplateMetadata.placeholderPolicy.removePowerPointDefaultPrompts ||
+  !schoolTemplateMetadata.placeholderPolicy.removeUnfilledPlaceholders
+) {
+  throw new Error("builtin school template metadata should define placeholder cleanup policy");
 }
 assertPythonPasses(
   `
 import json, re, zipfile
 from pathlib import Path
+from pptx import Presentation
 template = Path("services/ai-tools-engine/app/tools/academic_ppt/templates/builtin/school_academic_report/template.pptx")
 forbidden = [
     "学校简介", "学校概况", "重电实践", "申报准备", "建设探索", "时代背景", "重电举措", "未来计划",
@@ -483,24 +623,208 @@ forbidden = [
     "Artificial Intelligence", "达特茅斯", "国家战略有要求", "数字化重塑"
 ]
 placeholders = {"{{TITLE}}", "{{SUBTITLE}}", "{{AUTHOR}}", "{{DATE}}", "{{SECTION_TITLE}}", "{{SLIDE_TITLE}}", "{{BODY}}", "{{KEY_POINTS}}", "{{CHART}}", "{{IMAGE}}", "{{FOOTER}}"}
+forbidden = [
+    "学校简介", "学校概况", "重电实践", "申报准备", "建设探索", "时代背景", "重电举措", "未来计划", "未来规划",
+    "人工智能赋能", "博士", "二级教授", "博导", "姓名", "职务", "Artificial Intelligence", "达特茅斯",
+    "国家战略有要求", "数字化重塑", "新双高、新内涵", "双高计划", "DeepSeek", "OBE+AI", "谢谢"
+]
 with zipfile.ZipFile(template) as z:
     names = z.namelist()
     assert any(name.startswith("ppt/slideMasters/") for name in names), "masters missing"
     assert any(name.startswith("ppt/slideLayouts/") for name in names), "layouts missing"
     assert any(name.startswith("ppt/media/") for name in names), "media missing"
     assert any(name.startswith("ppt/fonts/") for name in names), "embedded font files missing"
+    assert not any(name.startswith("ppt/notesSlides/") for name in names), "template should not contain notes slide parts"
+    assert not any(name.startswith("ppt/notesMasters/") for name in names), "template should not contain notes master parts"
     xml_text = "\\n".join(
         z.read(name).decode("utf-8", "ignore")
         for name in names
         if name.endswith(".xml") and (name.startswith("ppt/") or name.startswith("docProps/"))
     )
-    leaked = [item for item in forbidden if item in xml_text]
+    rel_text = "\\n".join(
+        z.read(name).decode("utf-8", "ignore")
+        for name in names
+        if name.endswith(".rels")
+    )
+    content_types = z.read("[Content_Types].xml").decode("utf-8", "ignore")
+    assert "notesSlide" not in rel_text + content_types, "template relationships/content types should not reference notes slides"
+    assert "notesMaster" not in rel_text + content_types, "template relationships/content types should not reference notes masters"
+    upper_xml = xml_text.upper()
+    assert "801C80" in upper_xml, "template XML should include required primary purple #801C80"
+    assert "9D229D" in upper_xml, "template XML should include required gradient purple #9D229D"
+    for stale_color in ["156082", "0F9ED5", "4EA72E", "801C44", "801D7F", "92278F", "9B32A7"]:
+        assert stale_color not in upper_xml, f"template XML should not retain stale theme color {stale_color}"
+    visible_text = "\\n".join(
+        match.group(1)
+        for match in re.finditer(
+            r"<(?:[A-Za-z0-9_]+:)?(?:t|v|title|subject|creator|keywords|description|lastModifiedBy|category|contentStatus|version|lpstr|lpwstr)(?:\\s+[^>]*)?>(.*?)</(?:[A-Za-z0-9_]+:)?(?:t|v|title|subject|creator|keywords|description|lastModifiedBy|category|contentStatus|version|lpstr|lpwstr)>",
+            xml_text,
+            flags=re.S,
+        )
+    )
+    leaked = [item for item in forbidden if item in visible_text]
     assert not leaked, "template still contains source example text: " + ", ".join(leaked)
     found_placeholders = {item for item in placeholders if item in xml_text}
-    assert len(found_placeholders) >= 8, "not enough standardized placeholders found"
+    assert not found_placeholders, "template should not contain visible control placeholders: " + ", ".join(sorted(found_placeholders))
+    placeholder_instances = re.findall(r"\\{\\{[A-Z_]+\\}\\}", xml_text)
+    assert not placeholder_instances, f"template contains explicit placeholders: {len(placeholder_instances)}"
+    assert not re.search(r'(?:name|fmla|x|y|cxn|gd)="[^"]*\\{\\{', xml_text), "template placeholders must not appear in geometry attributes"
+    assert "单击此处添加标题" not in xml_text, "PowerPoint default Chinese title prompt should be removed"
+    assert "Click to add title" not in xml_text, "PowerPoint default English title prompt should be removed"
+    doc_props_text = "\\n".join(
+        z.read(name).decode("utf-8", "ignore")
+        for name in names
+        if name.startswith("docProps/") and name.endswith(".xml")
+    )
+    assert "NexusAI" not in doc_props_text, "template package metadata should not contain generated author names"
+    doc_prop_placeholders = sorted({item for item in placeholders if item in doc_props_text})
+    assert not doc_prop_placeholders, "template package metadata should not contain placeholders: " + ", ".join(doc_prop_placeholders)
+presentation = Presentation(str(template))
+assert len(presentation.slides) >= 8, "template should be parseable and contain the blueprint slide family"
 `,
   "sanitized builtin school template"
 );
+assertIncludes(
+  paperPptAdapter,
+  "_remove_unfilled_pptx_placeholders",
+  "adapter should remove unfilled builtin placeholders from exported PPTX"
+);
+assertIncludes(
+  paperPptAdapter,
+  "_recompose_builtin_template_pptx",
+  "adapter should recompose builtin school PPTX on top of the source template"
+);
+assertIncludes(
+  paperPptAdapter,
+  "_builtin_template_select_variants",
+  "adapter should select builtin school template variants from the blueprint"
+);
+assertIncludes(
+  paperPptAdapter,
+  "_fill_builtin_template_slot",
+  "adapter should fill explicit blueprint slots instead of relying on visible placeholders"
+);
+assertIncludes(
+  paperPptAdapter,
+  "from pptx.oxml.xmlchemy import OxmlElement",
+  "adapter should use the python-pptx OxmlElement import path available in the runtime"
+);
+assertPythonPasses(
+  `
+from pathlib import Path
+import sys
+import zipfile
+from pptx import Presentation
+from pptx.util import Inches
+
+sys.path.insert(0, str(Path("services/ai-tools-engine").resolve()))
+from app.tools.academic_ppt.paper_ppt_adapter import _set_pptx_shape_text
+
+target = Path("tmp/check-school-template-fonts.pptx")
+target.parent.mkdir(parents=True, exist_ok=True)
+presentation = Presentation()
+slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+title_shape = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(5), Inches(1))
+body_shape = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(5), Inches(1))
+_set_pptx_shape_text(title_shape, "标题字体检查", font_size=30, font_family="SimSun", color="801C80", bold=True)
+_set_pptx_shape_text(body_shape, "正文字体检查", font_size=16, font_family="SimHei", color="3F3F3F", bold=False)
+presentation.save(str(target))
+with zipfile.ZipFile(target) as archive:
+    xml_text = "\\n".join(
+        archive.read(name).decode("utf-8", "ignore")
+        for name in archive.namelist()
+        if name.startswith("ppt/slides/") and name.endswith(".xml")
+    )
+assert "SimSun" in xml_text, "generated title text should write SimSun into PPTX XML"
+assert "SimHei" in xml_text, "generated body text should write SimHei into PPTX XML"
+assert "801C80" in xml_text, "generated title text should write the required purple color"
+target.unlink(missing_ok=True)
+`,
+  "builtin school generated font writing"
+);
+assertPythonPasses(
+  `
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path("services/ai-tools-engine").resolve()))
+from app.tools.academic_ppt.paper_ppt_adapter import _builtin_template_metadata, _builtin_template_select_variants
+
+metadata = _builtin_template_metadata()
+generated_texts = [
+    ["Cover title"],
+    ["Contents"],
+    ["Section divider"],
+    ["comparison body"],
+    ["comparison body"],
+    ["comparison body"],
+    ["comparison body"],
+    ["Summary"],
+]
+selected, role_mapping = _builtin_template_select_variants(
+    metadata,
+    generated_texts,
+    {"targetSlides": 8, "taskId": "stability-duplicate-variant-plan"},
+)
+template_slide_indexes = [item["templateSlideIndex"] for item in selected]
+assert len(selected) == 8, "selectedVariants should match target slide count"
+assert len(role_mapping) == 8, "roleMapping should match target slide count"
+assert len(template_slide_indexes) == len(set(template_slide_indexes)), "variant selection should avoid duplicate templateSlideIndex values when unused body slides are available"
+`,
+  "builtin school unique variant selection"
+);
+assertIncludes(
+  paperPptAdapter,
+  "selectedVariants",
+  "adapter should report selected builtin school template variants"
+);
+assertIncludes(
+  paperPptAdapter,
+  "roleMapping",
+  "adapter should report builtin school template role mapping"
+);
+assertIncludes(
+  paperPptAdapter,
+  "_delete_presentation_slides_except",
+  "adapter should preserve selected source template slides instead of creating a second template"
+);
+assertIncludes(
+  paperPptAdapter,
+  "_sanitize_powerpoint_default_prompts",
+  "adapter should remove PowerPoint default placeholder prompts from exported PPTX"
+);
+assertNotIncludes(
+  paperPptAdapter,
+  "_apply_builtin_template_chrome(project_dir, settings)",
+  "adapter must not redraw builtin school SVG chrome"
+);
+assertNotIncludes(
+  paperPptAdapter,
+  "_apply_builtin_template_pptx_chrome(output_file, settings)",
+  "adapter must not redraw builtin school PPTX chrome or add page numbers"
+);
+assertNotIncludes(
+  paperPptAdapter,
+  "{slide_index:02d}/{slide_count:02d}",
+  "adapter must not add generated footer page numbers to builtin school template"
+);
+assertNotIncludes(
+  paperPptAdapter,
+  "_add_builtin_template_textbox(slide, 0.55, 1.08",
+  "adapter must not add a duplicate body-slide title over the template header/title placeholder"
+);
+assertNotIncludes(
+  paperPptAdapter,
+  "_add_builtin_template_textbox(slide, x, 1.9",
+  "adapter should not render body cards by bypassing existing template text boxes"
+);
+const academicPptTypesSource = readWorkspaceFile("lib/smart-tools/academic-ppt/types.ts");
+assertIncludes(academicPptTypesSource, "selectedVariants", "task types should expose selected template variants");
+assertIncludes(academicPptTypesSource, "roleMapping", "task types should expose role mapping");
+
+const toolsEngineClientSource = readWorkspaceFile("lib/smart-tools/academic-ppt/tools-engine-client.ts");
+assertIncludes(toolsEngineClientSource, "selectedVariants", "tools-engine client should persist selected template variants");
+assertIncludes(toolsEngineClientSource, "roleMapping", "tools-engine client should persist role mapping");
 
 const searchBridge = readWorkspaceFile("services/ai-tools-engine/app/core/search_bridge.py");
 assertIncludes(searchBridge, "SEARCH_BASE_URL", "search bridge should use server-side endpoint config");
@@ -520,6 +844,8 @@ const pythonModelBridge = readWorkspaceFile("services/ai-tools-engine/app/core/m
 assertIncludes(pythonModelBridge, "model_bridge_request_timeout_seconds", "Python model bridge should wait across primary retries and fallback");
 assertIncludes(pythonModelBridge, "\"stream\": True", "Python model bridge should ask Next internal bridge to use stream aggregation");
 assertIncludes(pythonModelBridge, "strictVisualPipeline", "Python model bridge should tell Next about strict visual mode");
+assertIncludes(pythonModelBridge, "_is_retryable_bridge_error", "Python model bridge should recognize structured retryable errors from Next");
+assertIncludes(pythonModelBridge, "retryable", "Python model bridge should inspect retryable structured errors");
 
 const readme = readWorkspaceFile("lib/smart-tools/academic-ppt/README.md");
 assertIncludes(readme, "Python Tools Engine", "README tools engine architecture");
@@ -565,12 +891,15 @@ assertIncludes(modelBridgeCheck, "/api/internal/academic-ppt/model", "model brid
 assertIncludes(modelBridgeCheck, "x-forwarded-for", "model bridge check local header");
 assertIncludes(modelBridgeCheck, "Return a JSON object with title and bullets", "model bridge check should call a real minimal prompt");
 assertIncludes(modelBridgeCheck, "simulatePrimaryFailure", "model bridge check should validate fallback path");
+assertIncludes(modelBridgeCheck, "simulateFallbackSuccess", "model bridge check should validate fallback diagnostics without requiring live fallback provider availability");
 assertIncludes(modelBridgeCheck, "simulatePrimaryTransientFailures", "model bridge check should validate primary retry path");
 assertIncludes(modelBridgeCheck, "simulatePrimarySuccessAfterTransient", "model bridge check should validate retry behavior even when the live primary provider is unavailable");
 assertIncludes(modelBridgeCheck, "primaryAttempts", "model bridge check output should include primary attempts");
 assertIncludes(modelBridgeCheck, "fallbackAttempts", "model bridge check output should include fallback attempts");
 assertIncludes(modelBridgeCheck, "simulatePrimaryTransientFailures: 3", "model bridge check should validate strategy retry success path");
 assertIncludes(modelBridgeCheck, "simulatePrimaryTransientFailures: 6", "model bridge check should validate strategy six-attempt retry exhaustion");
+assertIncludes(modelBridgeCheck, "simulatePrimaryStreamInterruptedFailures", "model bridge check should validate stream interruption retry behavior");
+assertIncludes(modelBridgeCheck, "stream_interrupted", "model bridge check should validate structured stream interruption error type");
 assertIncludes(modelBridgeCheck, 'fallbackStatus !== "skipped"', "model bridge check should verify strict visual Kimi fallback is skipped");
 assertIncludes(modelBridgeCheck, "primaryModel", "model bridge check output should include primary model");
 assertIncludes(modelBridgeCheck, "fallbackModel", "model bridge check output should include fallback model");

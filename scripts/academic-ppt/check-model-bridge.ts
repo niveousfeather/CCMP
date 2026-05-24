@@ -2,6 +2,7 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
 const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.ACADEMIC_PPT_TEST_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
 
 type BridgeResponse = {
+  ok?: boolean;
   status?: string;
   finalStatus?: string;
   primaryModel?: string;
@@ -13,6 +14,10 @@ type BridgeResponse = {
   modelName?: string;
   content?: string;
   errorSummary?: string;
+  retryable?: boolean;
+  errorType?: string;
+  summary?: string;
+  stage?: string;
 };
 
 function sanitize(value: unknown) {
@@ -37,7 +42,9 @@ async function callBridge(
   debug?: {
     simulatePrimaryFailure?: boolean;
     simulatePrimaryTransientFailures?: number;
+    simulatePrimaryStreamInterruptedFailures?: number;
     simulatePrimarySuccessAfterTransient?: boolean;
+    simulateFallbackSuccess?: boolean;
     retryBackoffMs?: number;
   }
 ) {
@@ -79,6 +86,7 @@ async function callBridge(
   const output = {
     label,
     httpStatus: response.status,
+    ok: data.ok,
     primaryModel: data.primaryModel || "unknown",
     primaryStatus: data.primaryStatus || "unknown",
     fallbackModel: data.fallbackModel || "unknown",
@@ -87,6 +95,10 @@ async function callBridge(
     fallbackAttempts: data.fallbackAttempts ?? 0,
     finalStatus: data.finalStatus || data.status || "unknown",
     modelName: data.modelName || "none",
+    retryable: data.retryable,
+    errorType: data.errorType,
+    summary: sanitize(data.summary || ""),
+    stage: data.stage,
     errorSummary: summary || undefined
   };
   assertNoSensitiveOutput(JSON.stringify(output));
@@ -115,7 +127,7 @@ async function main() {
     );
   }
 
-  const fallback = await callBridge("check-fallback", { simulatePrimaryFailure: true });
+  const fallback = await callBridge("check-fallback", { simulatePrimaryFailure: true, simulateFallbackSuccess: true });
   if (fallback.data.primaryStatus !== "failed") {
     throw new Error(`expected simulated primary failure, got ${fallback.data.primaryStatus || "unknown"}`);
   }
@@ -170,6 +182,22 @@ async function main() {
     throw new Error(`expected strategy retry to avoid fallback, got fallbackStatus=${strategyRetry.data.fallbackStatus || "unknown"}`);
   }
 
+  const streamInterruptedRetry = await callBridge("strategy", {
+    simulatePrimaryStreamInterruptedFailures: 1,
+    simulatePrimarySuccessAfterTransient: true,
+    retryBackoffMs: 0
+  });
+  if (streamInterruptedRetry.data.primaryStatus !== "success" || streamInterruptedRetry.data.primaryAttempts !== 2) {
+    throw new Error(
+      `expected stream interrupted strategy retry to recover on GPT-5.4 attempt 2, got status=${
+        streamInterruptedRetry.data.primaryStatus || "unknown"
+      } attempts=${streamInterruptedRetry.data.primaryAttempts || "unknown"}`
+    );
+  }
+  if (streamInterruptedRetry.data.fallbackStatus !== "not_started") {
+    throw new Error(`expected stream interrupted retry to avoid Kimi fallback, got fallbackStatus=${streamInterruptedRetry.data.fallbackStatus || "unknown"}`);
+  }
+
   const strictVisualBlockedFallback = await callBridge("strategy", {
     simulatePrimaryTransientFailures: 6,
     simulatePrimarySuccessAfterTransient: true,
@@ -193,6 +221,38 @@ async function main() {
       `expected strict visual exhausted retry to fail without fallback deck, got status=${
         strictVisualBlockedFallback.data.status || "unknown"
       } final=${strictVisualBlockedFallback.data.finalStatus || "unknown"}`
+    );
+  }
+
+  const streamInterruptedBlockedFallback = await callBridge("strategy", {
+    simulatePrimaryStreamInterruptedFailures: 6,
+    simulatePrimarySuccessAfterTransient: true,
+    retryBackoffMs: 0
+  });
+  if (streamInterruptedBlockedFallback.response.status !== 503) {
+    throw new Error(`expected exhausted stream interruption retries to return 503, got ${streamInterruptedBlockedFallback.response.status}`);
+  }
+  if (streamInterruptedBlockedFallback.data.primaryAttempts !== 6) {
+    throw new Error(`expected stream interruption strategy to exhaust 6 GPT-5.4 attempts, got ${streamInterruptedBlockedFallback.data.primaryAttempts || "unknown"}`);
+  }
+  if (streamInterruptedBlockedFallback.data.retryable !== true || streamInterruptedBlockedFallback.data.errorType !== "stream_interrupted") {
+    throw new Error(
+      `expected structured stream_interrupted retryable error, got retryable=${String(streamInterruptedBlockedFallback.data.retryable)} errorType=${
+        streamInterruptedBlockedFallback.data.errorType || "unknown"
+      }`
+    );
+  }
+  if (streamInterruptedBlockedFallback.data.ok !== false) {
+    throw new Error(`expected structured stream interruption response to set ok=false, got ok=${String(streamInterruptedBlockedFallback.data.ok)}`);
+  }
+  if ((streamInterruptedBlockedFallback.data.summary || "") !== "model stream interrupted, retryable") {
+    throw new Error(`expected safe stream interrupted summary, got ${streamInterruptedBlockedFallback.data.summary || "unknown"}`);
+  }
+  if (streamInterruptedBlockedFallback.data.fallbackStatus !== "skipped" || streamInterruptedBlockedFallback.data.fallbackAttempts !== 0) {
+    throw new Error(
+      `expected exhausted stream interruption retries to skip Kimi final fallback, got status=${
+        streamInterruptedBlockedFallback.data.fallbackStatus || "unknown"
+      } attempts=${streamInterruptedBlockedFallback.data.fallbackAttempts || "unknown"}`
     );
   }
 
