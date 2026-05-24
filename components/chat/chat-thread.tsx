@@ -14,6 +14,8 @@ export function ChatThread({
   messages,
   loading,
   loadingLabel = "Nexus AI 正在思考",
+  runtimeStatusSteps = [],
+  agentDebugTrace,
   onPreviewAttachment,
   onOpenFile,
   onRetryImageGeneration,
@@ -22,6 +24,16 @@ export function ChatThread({
   messages: ChatMessageType[];
   loading: boolean;
   loadingLabel?: string;
+  runtimeStatusSteps?: string[];
+  agentDebugTrace?: {
+    intent?: string;
+    targetTool?: string;
+    confidence?: number;
+    nextAction?: string;
+    adapterId?: string | null;
+    missingInputs?: string[];
+    activeTaskId?: string | null;
+  } | null;
   onPreviewAttachment: (attachment: ChatAttachment) => void;
   onOpenFile: (attachment: ChatAttachment) => void;
   onRetryImageGeneration?: (imageGeneration: ChatImageGenerationMeta) => void;
@@ -79,7 +91,7 @@ export function ChatThread({
         <div className="mx-auto grid w-full max-w-5xl gap-5">
           {messages.map((message) => (
             <ChatMessage
-              key={message.id}
+              key={message.clientKey || message.id}
               message={message}
               onPreviewAttachment={onPreviewAttachment}
               onOpenFile={onOpenFile}
@@ -88,7 +100,7 @@ export function ChatThread({
               onRevealTick={handleRevealTick}
             />
           ))}
-          {loading ? <ThinkingStatus label={loadingLabel} /> : null}
+          {loading ? <ThinkingStatus label={loadingLabel} runtimeStatusSteps={runtimeStatusSteps} agentDebugTrace={agentDebugTrace} /> : null}
           <div ref={endRef} />
         </div>
       </div>
@@ -132,9 +144,28 @@ function getThinkingDetails(mode: ThinkingMode) {
   return ["正在理解你的问题", "正在整理上下文与回答结构", "正在生成最终回复"];
 }
 
-function ThinkingStatus({ label }: { label: string }) {
+function ThinkingStatus({
+  label,
+  runtimeStatusSteps,
+  agentDebugTrace
+}: {
+  label: string;
+  runtimeStatusSteps?: string[];
+  agentDebugTrace?: {
+    intent?: string;
+    targetTool?: string;
+    confidence?: number;
+    nextAction?: string;
+    adapterId?: string | null;
+    missingInputs?: string[];
+    activeTaskId?: string | null;
+  } | null;
+}) {
   const mode = getThinkingMode(label);
-  const details = useMemo(() => getThinkingDetails(mode), [mode]);
+  const details = useMemo(() => {
+    const cleaned = (runtimeStatusSteps || []).map((item) => item.trim()).filter(Boolean);
+    return cleaned.length ? cleaned : getThinkingDetails(mode);
+  }, [mode, runtimeStatusSteps]);
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
@@ -190,6 +221,15 @@ function ThinkingStatus({ label }: { label: string }) {
             />
           ))}
         </div>
+        {agentDebugTrace ? (
+          <div className="mt-2 max-w-md rounded-md border border-dashed border-[color:var(--color-border)] bg-[var(--color-soft)] px-3 py-2 text-[11px] leading-5 text-[var(--color-text-muted)]">
+            <span>debug: {agentDebugTrace.intent || "unknown"}</span>
+            <span className="mx-1">/</span>
+            <span>{agentDebugTrace.targetTool || "none"}</span>
+            <span className="mx-1">/</span>
+            <span>{agentDebugTrace.nextAction || "pending"}</span>
+          </div>
+        ) : null}
       </div>
     </div>
   );

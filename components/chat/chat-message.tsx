@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, Copy, Download, ExternalLink, Globe2, ImageIcon, Loader2, RotateCcw, Sparkles, User } from "lucide-react";
+import { Check, ChevronRight, Copy, Download, ExternalLink, FileText, Globe2, GraduationCap, ImageIcon, Loader2, Network, Presentation, RotateCcw, Sparkles, Table2, User } from "lucide-react";
 
 import { BrandLogo } from "@/components/brand-logo";
 import { ChatAttachment, ChatMessage as ChatMessageType } from "@/components/chat/chat-data";
@@ -52,16 +52,36 @@ export function ChatMessage({
         )}
       >
         {message.fallback ? <Badge className="mb-3">Nexus AI</Badge> : null}
+        {!isUser && message.statusText ? (
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[var(--color-soft)] px-3 py-1 text-xs text-[var(--color-text-muted)]">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            {message.statusText}
+          </div>
+        ) : null}
+        {!isUser && (message.streamStatus === "interrupted" || message.streamStatus === "failed") && message.streamError ? (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">
+            <p>{message.streamError}</p>
+            <button
+              type="button"
+              className="mt-2 rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-medium text-amber-800"
+              disabled
+              title="继续生成入口将在后续阶段接入"
+            >
+              继续生成
+            </button>
+          </div>
+        ) : null}
         {leadContent ? <MessageText content={leadContent} reveal={shouldRevealText} onRevealTick={onRevealTick} /> : null}
-        {message.imageGeneration ? (
+        {message.taskCard ? <UnifiedTaskCard taskCard={message.taskCard} /> : null}
+        {message.imageGeneration && (!message.taskCard || message.imageGeneration.images?.length) ? (
           <ImageGenerationCard
             imageGeneration={message.imageGeneration}
             onPreviewAttachment={onPreviewAttachment}
             onRetryImageGeneration={onRetryImageGeneration}
           />
         ) : null}
-        {message.pendingFileGeneration ? <PendingFileGenerationCard pending={message.pendingFileGeneration} /> : null}
-        {message.pendingAgentTask ? <PendingAgentTaskCard pending={message.pendingAgentTask} /> : null}
+        {!message.taskCard && message.pendingFileGeneration ? <PendingFileGenerationCard pending={message.pendingFileGeneration} /> : null}
+        {!message.taskCard && message.pendingAgentTask ? <PendingAgentTaskCard pending={message.pendingAgentTask} /> : null}
         {generatedFileAttachments.length ? (
           <div className="mt-4 grid gap-3">
             {generatedFileAttachments.map((attachment) => (
@@ -617,6 +637,97 @@ function ImageGenerationCard({
       )}
     </div>
   );
+}
+
+function UnifiedTaskCard({ taskCard }: { taskCard: NonNullable<ChatMessageType["taskCard"]> }) {
+  const isRunning = taskCard.status === "queued" || taskCard.status === "running";
+  const isCompleted = taskCard.status === "completed";
+  const isFailed = taskCard.status === "failed";
+  const Icon = getTaskCardIcon(taskCard.taskType);
+  const statusLabel = isCompleted ? "已完成" : isFailed ? "生成失败" : taskCard.status === "queued" ? "正在创建任务" : "正在生成";
+  const accent = getTaskCardAccent(taskCard.taskType, isFailed);
+
+  return (
+    <div className={cn("mt-4 w-full max-w-[560px] rounded-2xl border bg-white/95 p-4 shadow-sm", accent.border)}>
+      <div className="flex items-start gap-3">
+        <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl", accent.bg, accent.text)}>
+          {isRunning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Icon className="h-5 w-5" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-semibold text-[var(--color-text)]">{taskCard.title}</p>
+            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", accent.badge)}>
+              {statusLabel}
+            </span>
+          </div>
+          {taskCard.description ? (
+            <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">{taskCard.description}</p>
+          ) : null}
+          {isFailed && taskCard.failureReason ? (
+            <p className="mt-2 text-xs leading-5 text-red-600">{taskCard.failureReason}</p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {taskCard.downloadUrl && isCompleted ? (
+              <a
+                href={taskCard.downloadUrl}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[var(--color-primary)] px-3 text-xs font-medium text-white transition hover:opacity-90"
+              >
+                <Download className="h-3.5 w-3.5" />
+                下载
+              </a>
+            ) : null}
+            {taskCard.openUrl ? (
+              <a
+                href={taskCard.openUrl}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] bg-white px-3 text-xs font-medium text-[var(--color-text)] transition hover:bg-[var(--color-soft)]"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                打开
+              </a>
+            ) : null}
+            {taskCard.retryable ? (
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] bg-white px-3 text-xs font-medium text-[var(--color-text-muted)]"
+                title="重试入口将在后续阶段接入"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                重试
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getTaskCardIcon(taskType: NonNullable<ChatMessageType["taskCard"]>["taskType"]) {
+  if (taskType === "ppt") return Presentation;
+  if (taskType === "word") return FileText;
+  if (taskType === "excel") return Table2;
+  if (taskType === "image") return ImageIcon;
+  if (taskType === "teaching-diagram") return GraduationCap;
+  if (taskType === "knowledge-graph") return Network;
+  return Sparkles;
+}
+
+function getTaskCardAccent(taskType: NonNullable<ChatMessageType["taskCard"]>["taskType"], failed: boolean) {
+  if (failed) {
+    return {
+      border: "border-red-200",
+      bg: "bg-red-50",
+      text: "text-red-600",
+      badge: "bg-red-50 text-red-700"
+    };
+  }
+  if (taskType === "ppt") return { border: "border-orange-200", bg: "bg-orange-50", text: "text-orange-600", badge: "bg-orange-50 text-orange-700" };
+  if (taskType === "word") return { border: "border-blue-200", bg: "bg-blue-50", text: "text-blue-600", badge: "bg-blue-50 text-blue-700" };
+  if (taskType === "excel") return { border: "border-emerald-200", bg: "bg-emerald-50", text: "text-emerald-600", badge: "bg-emerald-50 text-emerald-700" };
+  if (taskType === "image") return { border: "border-violet-200", bg: "bg-violet-50", text: "text-violet-600", badge: "bg-violet-50 text-violet-700" };
+  if (taskType === "teaching-diagram") return { border: "border-teal-200", bg: "bg-teal-50", text: "text-teal-600", badge: "bg-teal-50 text-teal-700" };
+  return { border: "border-sky-200", bg: "bg-sky-50", text: "text-sky-600", badge: "bg-sky-50 text-sky-700" };
 }
 
 function UploadedImageCard({

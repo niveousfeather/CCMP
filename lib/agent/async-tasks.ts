@@ -1,5 +1,6 @@
 import { enqueueGenerationExecution } from "@/lib/generation/concurrency";
 import { prisma } from "@/lib/db";
+import { planAgentRuntimeTurn } from "@/lib/agent/runtime";
 import { runAgent } from "@/lib/agent/router";
 import type { AgentChatMessage, AgentToolSelection, GeneratedAgentFile, WebContextResult } from "@/lib/agent/types";
 
@@ -89,6 +90,36 @@ function buildAsyncTaskMetadata(
     requiresGeneratedFile: payload.requiresGeneratedFile,
     updatedAt: new Date().toISOString(),
     ...patch
+  };
+}
+
+function buildTaskCardMetadata({
+  assistantMessageId,
+  kind,
+  label,
+  pendingFileName,
+  requiresGeneratedFile,
+  status,
+  downloadUrl,
+  failureReason
+}: Pick<AgentAsyncTaskPayload, "assistantMessageId" | "kind" | "label" | "pendingFileName" | "requiresGeneratedFile"> & {
+  status: "queued" | "running" | "completed" | "failed";
+  downloadUrl?: string | null;
+  failureReason?: string | null;
+}) {
+  const taskType = kind === "ppt" ? "ppt" : kind === "word" ? "word" : "file-analysis";
+  return {
+    kind: "task_card",
+    taskType,
+    status,
+    title: pendingFileName || label || (taskType === "ppt" ? "PPT 生成任务" : taskType === "word" ? "Word 生成任务" : "文件分析"),
+    description: taskType === "file-analysis" ? "正在分析文件并整理结果" : `正在生成 ${taskType === "ppt" ? "PPT" : "Word"} 文件`,
+    taskId: assistantMessageId,
+    downloadUrl: downloadUrl || null,
+    openUrl: `/api/ai/chat/tasks/${encodeURIComponent(assistantMessageId)}`,
+    retryable: status === "failed",
+    failureReason: failureReason || null,
+    requiresGeneratedFile
   };
 }
 
@@ -194,7 +225,15 @@ async function runAgentChatTask({
                   progressMessage: getWordProgressMessage(taskStartedAt),
                   heartbeatAt: new Date().toISOString()
                 }
-              )
+              ),
+              taskCard: buildTaskCardMetadata({
+                assistantMessageId,
+                kind,
+                label,
+                pendingFileName,
+                requiresGeneratedFile,
+                status: "running"
+              })
             }
           })
             .catch((error) => {
@@ -216,7 +255,15 @@ async function runAgentChatTask({
             status: "processing",
             progressMessage: kind === "word" ? "正在理解需求" : undefined
           }
-        )
+        ),
+        taskCard: buildTaskCardMetadata({
+          assistantMessageId,
+          kind,
+          label,
+          pendingFileName,
+          requiresGeneratedFile,
+          status: "running"
+        })
       }
     });
 
@@ -229,6 +276,12 @@ async function runAgentChatTask({
       tools,
       signal: controller.signal
     });
+    const agentRuntimePlan = planAgentRuntimeTurn({
+      messages,
+      files: files.map((file) => ({ name: file.name, type: file.type, size: file.size })),
+      pendingTask: null,
+      tools
+    });
 
     await saveGeneratedFiles({
       files: result.generatedFiles,
@@ -239,6 +292,7 @@ async function runAgentChatTask({
 
     const generatedFile = result.generatedFiles[0] || null;
     const completed = requiresGeneratedFile ? result.generatedFiles.length > 0 : true;
+    const downloadUrl = generatedFile?.url || null;
     await updateAssistantMessage({
       assistantMessageId,
       content: result.content,
@@ -247,6 +301,7 @@ async function runAgentChatTask({
         providerUsed: result.providerUsed,
         routeReason: result.routeReason,
         fallbackUsed: result.fallbackUsed,
+        agentRuntimeV2: agentRuntimePlan,
         generatedFileCount: result.generatedFiles.length,
         agentTask: result.agentTask || null,
         pendingTask: result.pendingTask || null,
@@ -264,7 +319,17 @@ async function runAgentChatTask({
             status: completed ? "completed" : "failed",
             errorMessage: completed ? null : result.content
           }
-        )
+        ),
+        taskCard: buildTaskCardMetadata({
+          assistantMessageId,
+          kind: generatedFile ? toPendingKind(generatedFile.fileName) : kind,
+          label,
+          pendingFileName: generatedFile?.fileName || pendingFileName,
+          requiresGeneratedFile,
+          status: completed ? "completed" : "failed",
+          downloadUrl,
+          failureReason: completed ? null : result.content
+        })
       }
     });
 
@@ -285,7 +350,16 @@ async function runAgentChatTask({
             status: "failed",
             errorMessage: message
           }
-        )
+        ),
+        taskCard: buildTaskCardMetadata({
+          assistantMessageId,
+          kind,
+          label,
+          pendingFileName,
+          requiresGeneratedFile,
+          status: "failed",
+          failureReason: message
+        })
       }
     });
   } finally {

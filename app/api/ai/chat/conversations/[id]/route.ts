@@ -62,6 +62,17 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       const isAsyncFailed = asyncTask?.status === "failed";
       const asyncKind = asyncTask?.kind === "ppt" ? "ppt" : asyncTask?.kind === "word" ? "word" : "agent";
       const requiresGeneratedFile = asyncTask?.requiresGeneratedFile !== false;
+      const isPartialStream = metadata?.partial === true;
+      const metadataStreamStatus = typeof metadata?.streamStatus === "string" ? metadata.streamStatus : null;
+      const requestId = typeof metadata?.requestId === "string" ? metadata.requestId : undefined;
+      const streamStatus = isPartialStream ? "interrupted" : metadataStreamStatus || undefined;
+      const streamError =
+        isPartialStream || streamStatus === "interrupted" || streamStatus === "failed"
+          ? typeof metadata?.streamError === "string"
+            ? metadata.streamError
+            : "回复中断，已保留已生成内容，可以重试。"
+          : undefined;
+      const taskCard = metadata?.taskCard && typeof metadata.taskCard === "object" ? metadata.taskCard : null;
       const pendingFileGeneration =
         asyncTask && (isAsyncPending || isAsyncFailed) && requiresGeneratedFile && (asyncKind === "ppt" || asyncKind === "word")
           ? {
@@ -87,6 +98,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         content: message.content,
         createdAt: formatTime(message.createdAt),
         fallback: metadata?.fallback === true || metadata?.fallbackUsed === true,
+        requestId,
+        streamStatus,
+        streamError,
+        taskCard,
         imageGeneration:
           metadata?.imageGeneration && typeof metadata.imageGeneration === "object" ? metadata.imageGeneration : null,
         webContext: metadata?.webContext && typeof metadata.webContext === "object" ? metadata.webContext : null,

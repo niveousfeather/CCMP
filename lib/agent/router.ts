@@ -856,6 +856,8 @@ export async function callChatModel({
   model,
   messages,
   maxTokens,
+  stream = false,
+  onToken,
   signal,
   timeoutMs
 }: {
@@ -864,6 +866,8 @@ export async function callChatModel({
   model: string;
   messages: AgentChatMessage[];
   maxTokens?: number;
+  stream?: boolean;
+  onToken?: (token: string) => void;
   signal: AbortSignal;
   timeoutMs?: number;
 }) {
@@ -892,7 +896,7 @@ export async function callChatModel({
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ model, messages: messages.slice(-20), stream: false, ...(maxTokens ? { max_tokens: maxTokens } : {}) }),
+      body: JSON.stringify({ model, messages: messages.slice(-20), stream: Boolean(stream), ...(maxTokens ? { max_tokens: maxTokens } : {}) }),
       signal
     });
   } catch (error) {
@@ -946,6 +950,47 @@ export async function callChatModel({
       status: response.status,
       timeoutMs
     });
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (stream && /text\/event-stream|stream/i.test(contentType)) {
+    const reader = response.body?.getReader();
+    if (reader) {
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamedContent = "";
+      const consumeLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) return;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === "[DONE]") return;
+        try {
+          const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta) {
+            streamedContent += delta;
+            onToken?.(delta);
+          }
+        } catch {
+          // Ignore malformed stream chunks and continue consuming the response.
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        lines.forEach(consumeLine);
+      }
+      if (buffer) consumeLine(buffer);
+      if (streamedContent.trim()) {
+        console.info(
+          `[agent:chat] stage=${stage} provider=${provider} model=${model} endpoint=${endpoint} stream_succeeded requestId=${requestId || "-"} elapsedMs=${Date.now() - startedAt}`
+        );
+        return streamedContent.trim();
+      }
+    }
   }
 
   const data = await response.json().catch(() => null);

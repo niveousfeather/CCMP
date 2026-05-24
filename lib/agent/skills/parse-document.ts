@@ -1,6 +1,8 @@
 import type { ExtractedDocument, ExtractedDocumentFact, ExtractedDocumentFactKind } from "@/lib/agent/types";
+import { parseDocuments } from "@/lib/document-processing/parser";
 
 const documentExtensions = new Set(["pdf", "txt", "md", "doc", "docx", "xls", "xlsx", "csv"]);
+const publicParserExtensions = new Set(["pdf", "txt", "md", "docx", "pptx"]);
 
 export type KimiFilePurpose = "file-extract" | "image" | "video";
 
@@ -14,6 +16,10 @@ function getExtension(fileName: string) {
 
 export function isDocumentFile(file: File) {
   return documentExtensions.has(getExtension(file.name));
+}
+
+function canUsePublicDocumentParser(file: File) {
+  return publicParserExtensions.has(getExtension(file.name));
 }
 
 export function getKimiBaseUrl() {
@@ -190,6 +196,28 @@ async function parseDocumentsLocallyForTest(files: File[]): Promise<ExtractedDoc
   return documents;
 }
 
+async function parseDocumentsWithPublicParser(files: File[]): Promise<ExtractedDocument[] | null> {
+  const supportedFiles = files.filter((file) => isDocumentFile(file) && canUsePublicDocumentParser(file));
+  if (!supportedFiles.length || supportedFiles.length !== files.filter(isDocumentFile).length) return null;
+
+  const parsed = await parseDocuments({
+    files: supportedFiles,
+    maxChars: 80_000
+  });
+  if (parsed.status !== "parsed" && parsed.status !== "partial") return null;
+
+  const documents = parsed.files
+    .filter((file) => file.status === "parsed" && file.normalizedText)
+    .map((file) => ({
+      fileName: file.fileName,
+      fileId: `document-processing-${file.fileName}`,
+      content: file.normalizedText || file.text || "",
+      extractedMarkdown: toMarkdown(file.fileName, file.normalizedText || file.text || ""),
+      structuredFacts: extractStructuredDocumentFacts(file.fileName, file.normalizedText || file.text || "")
+    }));
+  return documents.length ? documents : null;
+}
+
 export async function callKimiChat({
   messages,
   model = getKimiSummaryModel(),
@@ -233,6 +261,12 @@ export async function callKimiChat({
 
 export async function parseDocumentsWithKimi(files: File[], signal: AbortSignal): Promise<ExtractedDocument[]> {
   if (shouldUseLocalFileParseForTest()) return parseDocumentsLocallyForTest(files);
+
+  const publicParsed = await parseDocumentsWithPublicParser(files).catch((error) => {
+    console.warn(`[agent:document-processing] public parser failed, falling back to Kimi error=${error instanceof Error ? error.message : "unknown"}`);
+    return null;
+  });
+  if (publicParsed) return publicParsed;
 
   const documents: ExtractedDocument[] = [];
   for (const file of files.filter(isDocumentFile)) {

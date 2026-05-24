@@ -8,6 +8,8 @@ export type AgentModelEndpoint = {
 export type AgentModelConfig = {
   chat: AgentModelEndpoint;
   fastChatTimeoutMs: number;
+  planner: AgentModelEndpoint;
+  reasoning: AgentModelEndpoint;
   taskFallback: AgentModelEndpoint;
   taskFallbackTimeoutMs: number;
   taskPrimary: AgentModelEndpoint;
@@ -35,12 +37,21 @@ function readProviderEnv(name: string, fallback: AgentProvider): AgentProvider {
 }
 
 export function getAgentModelConfig(): AgentModelConfig {
+  const chat = {
+    model: readEnv("AGENT_CHAT_MODEL", "gpt-5.4"),
+    provider: "xheai" as AgentProvider
+  };
   return {
-    chat: {
-      model: readEnv("AGENT_CHAT_MODEL", "gpt-5.4"),
-      provider: "xheai"
-    },
+    chat,
     fastChatTimeoutMs: Math.max(readPositiveIntEnv("AGENT_FAST_CHAT_TIMEOUT_MS", 90_000), 60_000),
+    planner: {
+      model: readEnv("AGENT_PLANNER_MODEL", chat.model),
+      provider: readProviderEnv("AGENT_PLANNER_PROVIDER", chat.provider)
+    },
+    reasoning: {
+      model: readEnv("AGENT_REASONING_MODEL", chat.model),
+      provider: readProviderEnv("AGENT_REASONING_PROVIDER", chat.provider)
+    },
     taskPrimary: {
       model: readEnv("AGENT_TASK_MODEL", "gpt-5.4"),
       provider: readProviderEnv("AGENT_TASK_PROVIDER", "subrouter")

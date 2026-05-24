@@ -91,6 +91,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const requiresGeneratedFile = asyncTask.requiresGeneratedFile !== false;
   const status = normalizeAsyncStatus(asyncTask.status, requiresGeneratedFile, attachments.length > 0);
+  const taskCard = metadata?.taskCard && typeof metadata.taskCard === "object" ? metadata.taskCard : null;
   return NextResponse.json({
     task: {
       taskId: message.id,
@@ -101,6 +102,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       content: message.content,
       failureReason: typeof asyncTask.errorMessage === "string" ? asyncTask.errorMessage : null,
       attachments,
+      taskCard,
       webContext: metadata?.webContext && typeof metadata.webContext === "object" ? metadata.webContext : null,
       updatedAt: typeof asyncTask.updatedAt === "string" ? asyncTask.updatedAt : message.createdAt.toISOString()
     }

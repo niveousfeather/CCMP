@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 
 import { enqueueAgentChatTask } from "@/lib/agent/async-tasks";
+import { planAgentRuntimeTurn, type AgentRuntimePlan } from "@/lib/agent/runtime";
+import { buildAgentRuntimeContextPack, buildRuntimeChatMessagesFromContextPack } from "@/lib/agent/runtime/context-pack";
+import { executeRuntimeTool } from "@/lib/agent/runtime/tool-executor";
+import type { AgentActiveTask } from "@/lib/agent/runtime/tool-adapters";
 import { callChatModel, extractAgentTask, isAgentProviderRequestError, runAgent } from "@/lib/agent/router";
 import { isFunctionalAgentTask, shouldUseFastChatRoute } from "@/lib/agent/task-router";
 import type {
@@ -33,6 +37,8 @@ type ParsedRequest = {
   model: string;
   messages: ChatMessage[];
   files: File[];
+  requestId: string;
+  stream?: boolean;
   tools?: AgentToolSelection;
 };
 
@@ -81,6 +87,40 @@ type AsyncAgentTaskPlan = {
   requiresGeneratedFile: boolean;
 };
 
+type AgentRuntimePublicStatus = {
+  label: string;
+  steps: string[];
+  events: Array<{
+    stage: string;
+    label: string;
+    visible: boolean;
+  }>;
+  completedLabel: string;
+};
+
+type ChatStreamWriter = {
+  runtimeStatus: (stage: string, message: string) => void;
+  token: (text: string) => void;
+  toolStatus: (message: string) => void;
+  final: (data: Record<string, unknown>) => void;
+  error: (message: string) => void;
+};
+
+type ChatTaskCardType = "ppt" | "word" | "excel" | "image" | "file-analysis" | "teaching-diagram" | "knowledge-graph";
+
+type ChatTaskCard = {
+  kind: "task_card";
+  taskType: ChatTaskCardType;
+  status: "queued" | "running" | "completed" | "failed";
+  title: string;
+  description?: string;
+  taskId?: string;
+  downloadUrl?: string | null;
+  openUrl?: string | null;
+  retryable?: boolean;
+  failureReason?: string | null;
+};
+
 class ChatRouteError extends Error {
   code: string;
   status: number;
@@ -111,6 +151,29 @@ const modelProviders: Record<string, AgentProvider> = {
 
 function jsonError(code: string, message: string, status: number) {
   return NextResponse.json({ code, message }, { status });
+}
+
+function wantsStream(request: NextRequest) {
+  if (request.nextUrl.searchParams.get("stream") === "1") return true;
+  return (request.headers.get("accept") || "").includes("text/event-stream");
+}
+
+function createSseEncoder(controller: ReadableStreamDefaultController<Uint8Array>) {
+  const encoder = new TextEncoder();
+  return (event: string, data: Record<string, unknown>) => {
+    controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+  };
+}
+
+function streamResponse(stream: ReadableStream<Uint8Array>) {
+  return new Response(stream, {
+    headers: {
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "X-Accel-Buffering": "no"
+    }
+  });
 }
 
 function normalizeMessages(value: unknown): ChatMessage[] {
@@ -559,12 +622,14 @@ async function parseRequest(request: NextRequest): Promise<ParsedRequest> {
     const mode = formData.get("mode") === "manual" ? "manual" : "agent";
     const model = String(formData.get("model") || "gpt-5.4");
     const conversationId = String(formData.get("conversationId") || "").trim() || null;
+    const requestId = String(formData.get("requestId") || "").trim() || randomUUID();
     const rawMessages = String(formData.get("messages") || "[]");
     const rawTools = String(formData.get("tools") || "");
+    const stream = String(formData.get("stream") || "") === "true";
     const messages = normalizeMessages(JSON.parse(rawMessages || "[]"));
     const tools = normalizeTools(parseJsonObject(rawTools));
     const files = formData.getAll("files").filter((item): item is File => item instanceof File);
-    return { mode, conversationId, model, messages, files, tools };
+    return { mode, conversationId, model, messages, files, requestId, stream, tools };
   }
 
   const body = (await request.json().catch(() => null)) as {
@@ -572,6 +637,8 @@ async function parseRequest(request: NextRequest): Promise<ParsedRequest> {
     conversationId?: string | null;
     model?: string;
     messages?: unknown;
+    requestId?: unknown;
+    stream?: unknown;
     tools?: unknown;
   } | null;
 
@@ -581,6 +648,8 @@ async function parseRequest(request: NextRequest): Promise<ParsedRequest> {
     model: body?.model || "gpt-5.4",
     messages: normalizeMessages(body?.messages),
     files: [],
+    requestId: typeof body?.requestId === "string" && body.requestId.trim() ? body.requestId.trim() : randomUUID(),
+    stream: body?.stream === true,
     tools: normalizeTools(body?.tools)
   };
 }
@@ -661,6 +730,136 @@ function compactWebContext(webContext?: WebContextResult | null) {
       searchDepth: webContext.rawMeta?.searchDepth
     }
   };
+}
+
+function normalizeTaskCardStatus(status?: string): ChatTaskCard["status"] {
+  if (status === "completed") return "completed";
+  if (status === "failed" || status === "timeout") return "failed";
+  if (status === "queued" || status === "pending") return "queued";
+  return "running";
+}
+
+function taskTypeFromTarget(targetTool?: string | null): ChatTaskCardType | null {
+  if (targetTool === "ppt-simple" || targetTool === "ppt") return "ppt";
+  if (targetTool === "word") return "word";
+  if (targetTool === "excel") return "excel";
+  if (targetTool === "image") return "image";
+  if (targetTool === "file-analysis") return "file-analysis";
+  if (targetTool === "teaching-diagram") return "teaching-diagram";
+  if (targetTool === "knowledge-graph") return "knowledge-graph";
+  return null;
+}
+
+function getTaskTypeTitle(taskType: ChatTaskCardType) {
+  if (taskType === "ppt") return "PPT 生成任务";
+  if (taskType === "word") return "Word 生成任务";
+  if (taskType === "excel") return "Excel 任务";
+  if (taskType === "image") return "图片任务";
+  if (taskType === "file-analysis") return "文件分析";
+  if (taskType === "teaching-diagram") return "教学架构图";
+  return "知识图谱";
+}
+
+function buildTaskCard(input: {
+  taskType: ChatTaskCardType;
+  status?: ChatTaskCard["status"] | string;
+  title?: string;
+  description?: string;
+  taskId?: string;
+  downloadUrl?: string | null;
+  openUrl?: string | null;
+  retryable?: boolean;
+  failureReason?: string | null;
+}): ChatTaskCard {
+  return {
+    kind: "task_card",
+    taskType: input.taskType,
+    status: typeof input.status === "string" ? normalizeTaskCardStatus(input.status) : input.status || "running",
+    title: input.title || getTaskTypeTitle(input.taskType),
+    description: input.description,
+    taskId: input.taskId,
+    downloadUrl: input.downloadUrl || null,
+    openUrl: input.openUrl || null,
+    retryable: input.retryable,
+    failureReason: input.failureReason || null
+  };
+}
+
+function buildAsyncTaskCard(input: {
+  kind: "agent" | "ppt" | "word";
+  label: string;
+  taskId: string;
+  fileName?: string;
+  requiresGeneratedFile: boolean;
+  status?: ChatTaskCard["status"] | string;
+  failureReason?: string | null;
+}): ChatTaskCard {
+  const taskType: ChatTaskCardType = input.kind === "ppt" ? "ppt" : input.kind === "word" ? "word" : "file-analysis";
+  return buildTaskCard({
+    taskType,
+    status: input.status || "queued",
+    title: input.fileName || input.label || getTaskTypeTitle(taskType),
+    description:
+      taskType === "file-analysis"
+        ? "正在分析文件并整理结果"
+        : `正在生成 ${taskType === "ppt" ? "PPT" : "Word"} 文件`,
+    taskId: input.taskId,
+    downloadUrl: null,
+    openUrl: input.taskId ? `/api/ai/chat/tasks/${encodeURIComponent(input.taskId)}` : null,
+    retryable: input.status === "failed",
+    failureReason: input.failureReason || null
+  });
+}
+
+function buildAdapterTaskCard(input: {
+  targetTool?: string | null;
+  resultCard?: {
+    title: string;
+    description: string;
+    status: string;
+    taskType?: string;
+    taskId?: string;
+    downloadUrl?: string | null;
+    openUrl?: string | null;
+    retryable?: boolean;
+    failureReason?: string | null;
+  } | null;
+  generatedAttachment?: { downloadUrl?: string; url?: string | null; name?: string } | null;
+  imageGeneration?: unknown | null;
+}): ChatTaskCard | null {
+  const rawTaskType = typeof input.resultCard?.taskType === "string" ? input.resultCard.taskType : null;
+  const taskType = taskTypeFromTarget(rawTaskType || input.targetTool) || taskTypeFromTarget(input.targetTool);
+  if (!taskType || !input.resultCard) return null;
+  const imageTask =
+    input.imageGeneration && typeof input.imageGeneration === "object"
+      ? (input.imageGeneration as { generationId?: string; status?: string; failureReason?: string | null })
+      : null;
+  const generatedDownloadUrl = input.generatedAttachment?.downloadUrl || input.generatedAttachment?.url || null;
+  return buildTaskCard({
+    taskType,
+    status: generatedDownloadUrl ? "completed" : imageTask?.status || input.resultCard.status,
+    title: input.resultCard.title || input.generatedAttachment?.name || getTaskTypeTitle(taskType),
+    description: input.resultCard.description,
+    taskId: input.resultCard.taskId || imageTask?.generationId,
+    downloadUrl: generatedDownloadUrl || input.resultCard.downloadUrl || null,
+    openUrl: input.resultCard.openUrl || null,
+    retryable: input.resultCard.retryable ?? true,
+    failureReason: input.resultCard.failureReason || imageTask?.failureReason || null
+  });
+}
+
+async function getConversationSummaryCache(conversationId: string, userId: string) {
+  const latestAssistant = await prisma.chatMessage.findFirst({
+    where: {
+      role: "assistant",
+      conversation: { id: conversationId, userId }
+    },
+    orderBy: { createdAt: "desc" },
+    select: { metadata: true }
+  });
+  const metadata = parseJsonObject(latestAssistant?.metadata || null);
+  const summary = metadata?.conversationSummaryCache;
+  return typeof summary === "string" && summary.trim() ? summary.slice(0, 1200) : null;
 }
 
 function getAsyncPendingKind(text: string, tools?: AgentToolSelection): "ppt" | "word" | null {
@@ -754,6 +953,50 @@ async function getPendingAgentTask(conversationId: string, userId: string) {
     (pendingTask as AgentTask).type === "clarify";
 
   return isActiveClarification ? (pendingTask as AgentTask) : null;
+}
+
+function inferActiveTaskKind(metadata: Record<string, unknown> | null, attachments: Array<{ fileName: string }>): AgentActiveTask["kind"] | null {
+  const imageGeneration = metadata?.imageGeneration;
+  if (imageGeneration && typeof imageGeneration === "object") return "image";
+  const asyncTask = metadata?.asyncTask;
+  if (asyncTask && typeof asyncTask === "object") {
+    const kind = (asyncTask as Record<string, unknown>).kind;
+    if (kind === "ppt") return "ppt";
+    if (kind === "word") return "word";
+    if (kind === "agent") return "file-analysis";
+  }
+  const routeReason = typeof metadata?.routeReason === "string" ? metadata.routeReason : "";
+  if (routeReason.includes("teaching_diagram")) return "teaching-diagram";
+  if (routeReason.includes("knowledge_graph")) return "knowledge-graph";
+  const fileName = attachments[0]?.fileName?.toLowerCase() || "";
+  if (fileName.endsWith(".pptx")) return "ppt";
+  if (fileName.endsWith(".docx")) return "word";
+  if (fileName.endsWith(".xlsx") || fileName.endsWith(".csv")) return "excel";
+  return null;
+}
+
+async function getActiveConversationTask(conversationId: string, userId: string): Promise<AgentActiveTask | null> {
+  const latestAssistant = await prisma.chatMessage.findFirst({
+    where: {
+      role: "assistant",
+      conversation: { id: conversationId, userId }
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      attachments: { orderBy: { createdAt: "desc" }, take: 1 }
+    }
+  });
+  if (!latestAssistant) return null;
+  const metadata = parseJsonObject(latestAssistant.metadata || null);
+  const kind = inferActiveTaskKind(metadata, latestAssistant.attachments);
+  if (!kind) return null;
+  return {
+    id: latestAssistant.id,
+    kind,
+    title: latestAssistant.attachments[0]?.fileName || latestAssistant.content.slice(0, 32),
+    status: "active",
+    source: "conversation"
+  };
 }
 
 async function saveUserAttachments({
@@ -892,9 +1135,9 @@ function getChatErrorInfo(error: unknown, timeoutMs?: number): ChatErrorInfo {
     }
     if (error.kind === "client_abort") {
       return {
-        code: "CLIENT_ABORT",
-        kind: "client_abort",
-        message: "请求已取消。",
+        code: "STREAM_INTERRUPTED",
+        kind: "stream_interrupted",
+        message: "回复中断，已保留已生成内容，可以重试。",
         providerRequest,
         status: 499
       };
@@ -929,6 +1172,9 @@ function getChatErrorInfo(error: unknown, timeoutMs?: number): ChatErrorInfo {
     }
     if (error.message === "VISION_IMAGE_EXTRACT_FAILED") {
       return { code: "VISION_IMAGE_EXTRACT_FAILED", kind: "provider_error", message: "图片内容解析失败，请换一张更清晰的图片或稍后重试。", status: 502 };
+    }
+    if (error.message === "DEBUG_STREAM_ABORT" || error.message === "client_abort") {
+      return { code: "STREAM_INTERRUPTED", kind: "stream_interrupted", message: "回复中断，已保留已生成内容，可以重试。", status: 499 };
     }
     if (error.message === "IMAGE_FILE_TOO_LARGE") {
       return { code: "IMAGE_FILE_TOO_LARGE", kind: "validation_error", message: "图片文件过大，请上传 8MB 以内的图片。", status: 400 };
@@ -974,11 +1220,160 @@ function providerErrorFromException(error: unknown, timeoutMs?: number) {
   return jsonError(info.code, info.message, info.status);
 }
 
+function isAgentDebugRequest(request: NextRequest) {
+  return process.env.NODE_ENV === "development" || request.nextUrl.searchParams.get("debugAgent") === "1";
+}
+
+function getRuntimeToolLabel(targetTool?: string) {
+  if (targetTool === "file-analysis") return "文件分析";
+  if (targetTool === "word") return "Word 生成";
+  if (targetTool === "excel") return "Excel 处理";
+  if (targetTool === "ppt-simple") return "PPT 生成";
+  if (targetTool === "image") return "图片修改";
+  if (targetTool === "teaching-diagram") return "教学架构图";
+  if (targetTool === "knowledge-graph") return "知识图谱";
+  return "普通聊天";
+}
+
+function buildRuntimePublicStatus(plan: AgentRuntimePlan | null): AgentRuntimePublicStatus | null {
+  if (!plan) return null;
+  const targetLabel = getRuntimeToolLabel(plan.decision.targetTool);
+  const stageLabels: Record<string, string> = {
+    analyzing_context: "正在整理上下文",
+    planning_intent: "正在理解你的需求",
+    selecting_skill: `已识别为：${targetLabel}`,
+    checking_execution_gate: "正在判断是否需要工具",
+    calling_model: "正在生成回复",
+    calling_tool: "正在创建任务",
+    completed: "已完成"
+  };
+  const events = plan.decision.progressStages.map((stage) => ({
+    stage,
+    label: stageLabels[stage] || "正在处理",
+    visible: true
+  }));
+  const steps = events.map((event) => event.label);
+  return {
+    label:
+      plan.decision.nextAction === "run_legacy_tool"
+        ? `已识别为：${targetLabel}`
+      : plan.decision.nextAction === "ask_clarification"
+          ? "正在检查输入"
+          : "正在生成回复",
+    steps,
+    events,
+    completedLabel: "已完成"
+  };
+}
+
+function compactRuntimeDebugTrace(plan: AgentRuntimePlan | null, activeTask: AgentActiveTask | null, adapterId?: string | null) {
+  if (!plan) return null;
+  return {
+    intent: plan.decision.intent,
+    targetTool: plan.decision.targetTool,
+    confidence: plan.decision.confidence,
+    nextAction: plan.decision.nextAction,
+    adapterId: adapterId || null,
+    missingInputs: plan.decision.missingInputs,
+    activeTaskId: activeTask?.id || null
+  };
+}
+
+function createConversationSummaryCache(messages: AgentChatMessage[], previousSummary?: string | null) {
+  const normalized = messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => `${message.role === "user" ? "用户" : "助手"}：${message.content.replace(/\s+/g, " ").trim().slice(0, 180)}`)
+    .filter(Boolean);
+  if (normalized.length <= 10 && !previousSummary) return null;
+  const base = previousSummary ? [`既有摘要：${previousSummary.slice(0, 500)}`] : [];
+  return [...base, ...normalized.slice(-10)].join("\n").slice(0, 1200);
+}
+
+function buildFileAnswerSummary(documents: ExtractedFile[]) {
+  return documents
+    .map((file) => {
+      const clean = file.content.replace(/\s+/g, " ").trim();
+      return `文件：${file.fileName}\n摘要片段：${clean.slice(0, 1200)}`;
+    })
+    .join("\n\n---\n\n");
+}
+
+function streamPlanStages(writer: ChatStreamWriter, plan: AgentRuntimePlan | null) {
+  const status = buildRuntimePublicStatus(plan);
+  if (!status?.events.length) {
+    writer.runtimeStatus("planning_intent", "正在理解你的需求");
+    return;
+  }
+  status.events
+    .filter((event) => event.visible && event.stage !== "calling_model" && event.stage !== "calling_tool" && event.stage !== "completed")
+    .forEach((event) => writer.runtimeStatus(event.stage, event.label));
+}
+
+function toStreamAssistantMessage(message: {
+  id: string;
+  content: string;
+  createdAt: Date;
+}, extras?: Partial<{
+  attachments: unknown[];
+  imageGeneration: unknown | null;
+  pendingFileGeneration: unknown | null;
+  pendingAgentTask: unknown | null;
+  requestId: string | null;
+  streamError: string | null;
+  streamStatus: string | null;
+  taskCard: ChatTaskCard | null;
+  webContext: unknown | null;
+}>) {
+  return {
+    id: message.id,
+    role: "assistant",
+    content: message.content,
+    createdAt: formatTime(message.createdAt),
+    requestId: extras?.requestId || undefined,
+    streamStatus: extras?.streamStatus || undefined,
+    streamError: extras?.streamError || undefined,
+    taskCard: extras?.taskCard || null,
+    attachments: extras?.attachments || [],
+    imageGeneration: extras?.imageGeneration || null,
+    pendingFileGeneration: extras?.pendingFileGeneration || null,
+    pendingAgentTask: extras?.pendingAgentTask || null,
+    webContext: extras?.webContext || null
+  };
+}
+
+function createClarificationResult({
+  agentRuntimePlan,
+  content,
+  routeReason
+}: {
+  agentRuntimePlan: AgentRuntimePlan | null;
+  content: string;
+  routeReason: string;
+}): AgentRunResult {
+  return {
+    content,
+    modelUsed: "NexusAI Runtime V2",
+    providerUsed: "xheai",
+    routeReason,
+    fallbackUsed: false,
+    extractedDocuments: [],
+    generatedFiles: [],
+    agentTask: agentRuntimePlan?.trace.legacyTask,
+    pendingTask: agentRuntimePlan?.trace.legacyTask || null,
+    defaultsApplied: [],
+    webContext: null
+  };
+}
+
 async function runManualChat(parsed: ParsedRequest, signal: AbortSignal, timeoutMs?: number): Promise<AgentRunResult> {
   const provider = modelProviders[parsed.model];
   if (!provider) throw new Error("INVALID_MODEL");
 
-  let messages = parsed.messages as AgentChatMessage[];
+  const contextPack = buildAgentRuntimeContextPack({
+    messages: parsed.messages as AgentChatMessage[],
+    files: parsed.files.map((file) => ({ name: file.name, type: file.type, size: file.size }))
+  });
+  let messages = buildRuntimeChatMessagesFromContextPack(contextPack) as AgentChatMessage[];
   let extractedFiles: ExtractedFile[] = [];
 
   if (parsed.files.some(isDocumentFile)) {
@@ -988,20 +1383,30 @@ async function runManualChat(parsed: ParsedRequest, signal: AbortSignal, timeout
       fileId: file.fileId,
       content: file.content
     }));
-    const context = extractedDocuments
-      .map((file) => `文件名：${file.fileName}\n文件内容：\n${file.extractedMarkdown.slice(0, 24_000)}`)
-      .join("\n\n---\n\n");
     messages = [
       {
         role: "system",
-        content: "以下是用户上传文档的内容抽取结果。请基于文档和用户问题回答，不要声称已读取图片或视频。"
+        content: "以下是用户上传文档的压缩摘要。请基于摘要和用户问题回答；如果摘要不足以支持结论，说明需要用户提供更具体片段或文件。"
       },
-      { role: "system", content: context },
-      ...messages.slice(-18)
+      { role: "system", content: buildFileAnswerSummary(extractedFiles) },
+      ...buildRuntimeChatMessagesFromContextPack({
+        ...contextPack,
+        attachmentSummaries: extractedFiles.map((file) => ({
+          name: file.fileName,
+          kind: "document",
+          summary: `已解析文档：${file.fileName}`
+        })),
+        tokenBudgetHint: {
+          mode: "file_summary",
+          maxRecentMessages: 8,
+          maxAttachmentChars: 1800,
+          reason: "document_content_summarized_before_model_call"
+        }
+      }).slice(-2)
     ];
   }
 
-  const content = await callChatModel({ stage: "manual_chat", provider, model: parsed.model, messages, signal, timeoutMs });
+  const content = await callChatModel({ stage: "manual_chat", provider, model: parsed.model, messages, maxTokens: 1600, signal, timeoutMs });
 
   return {
     content,
@@ -1021,16 +1426,66 @@ async function runManualChat(parsed: ParsedRequest, signal: AbortSignal, timeout
   };
 }
 
+async function runRuntimeChatAnswer(
+  parsed: ParsedRequest,
+  signal: AbortSignal,
+  timeoutMs?: number,
+  options?: { conversationSummary?: string | null; activeTask?: AgentActiveTask | null; onToken?: (token: string) => void; stream?: boolean }
+): Promise<AgentRunResult> {
+  const model = parsed.model in modelProviders ? parsed.model : "gpt-5.4";
+  const runtimeParsed = { ...parsed, mode: "manual" as const, model, tools: { ...parsed.tools, contentMode: null } };
+  const contextPack = buildAgentRuntimeContextPack({
+    messages: runtimeParsed.messages as AgentChatMessage[],
+    files: runtimeParsed.files.map((file) => ({ name: file.name, type: file.type, size: file.size })),
+    activeTask: options?.activeTask
+      ? {
+          id: options.activeTask.id,
+          kind: options.activeTask.kind,
+          title: options.activeTask.title,
+          status: options.activeTask.status
+        }
+      : null,
+    cachedConversationSummary: options?.conversationSummary || null
+  });
+  const provider = modelProviders[model];
+  const messages = buildRuntimeChatMessagesFromContextPack(contextPack) as AgentChatMessage[];
+  const content = await callChatModel({
+    stage: "runtime_chat_answer",
+    provider,
+    model,
+    messages,
+    maxTokens: 1400,
+    stream: options?.stream === true,
+    onToken: options?.onToken,
+    signal,
+    timeoutMs
+  });
+
+  return {
+    content,
+    modelUsed: model,
+    providerUsed: provider,
+    routeReason: `runtime_v2:answer_chat:${contextPack.tokenBudgetHint.mode}`,
+    fallbackUsed: false,
+    extractedDocuments: [],
+    generatedFiles: [],
+    pendingTask: null,
+    defaultsApplied: [`context_pack:${contextPack.tokenBudgetHint.mode}`]
+  };
+}
+
 async function saveAssistantErrorMessage({
   conversationId,
   conversationModel,
   errorInfo,
+  agentRuntimePlan,
   mode,
   tools
 }: {
   conversationId: string;
   conversationModel: string;
   errorInfo: ChatErrorInfo;
+  agentRuntimePlan?: AgentRuntimePlan | null;
   mode: ChatMode;
   tools?: AgentToolSelection;
 }) {
@@ -1046,10 +1501,656 @@ async function saveAssistantErrorMessage({
         error: true,
         errorCode: errorInfo.code,
         errorKind: errorInfo.kind,
+        agentRuntimeV2: agentRuntimePlan || null,
+        conversationSummaryCache:
+          agentRuntimePlan?.trace.contextPack.recentSummary || agentRuntimePlan?.trace.memory.conversationSummary || null,
         providerRequest: errorInfo.providerRequest || null
       })
     }
   });
+}
+
+async function savePartialAssistantMessage({
+  accumulatedText,
+  agentRuntimePlan,
+  conversationId,
+  conversationModel,
+  errorCode,
+  mode,
+  requestId,
+  runtimeStage,
+  tools,
+  userMessage
+}: {
+  accumulatedText: string;
+  agentRuntimePlan?: AgentRuntimePlan | null;
+  conversationId: string;
+  conversationModel: string;
+  errorCode?: string;
+  mode: ChatMode;
+  requestId: string;
+  runtimeStage: string;
+  tools?: AgentToolSelection;
+  userMessage: string;
+}) {
+  const fallbackContent = "回复中断，已保留已生成内容，可以重试。";
+  const content = accumulatedText.trim() || fallbackContent;
+  return prisma.chatMessage.create({
+    data: {
+      conversationId,
+      role: "assistant",
+      content,
+      model: conversationModel,
+      metadata: JSON.stringify({
+        mode,
+        tools: tools || null,
+        streamStatus: "interrupted",
+        partial: true,
+        requestId,
+        runtimeStage,
+        accumulatedText: content,
+        errorCode: errorCode || "STREAM_INTERRUPTED",
+        fallback: !accumulatedText.trim(),
+        agentRuntimeV2: agentRuntimePlan || null,
+        conversationSummaryCache:
+          agentRuntimePlan?.trace.contextPack.recentSummary ||
+          agentRuntimePlan?.trace.memory.conversationSummary ||
+          createConversationSummaryCache([{ role: "user", content: userMessage }, { role: "assistant", content }])
+      })
+    }
+  });
+}
+
+async function streamChatResponse({
+  parsed,
+  request,
+  userId
+}: {
+  parsed: ParsedRequest;
+  request: NextRequest;
+  userId: string;
+}) {
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = createSseEncoder(controller);
+      const requestId = parsed.requestId || randomUUID();
+      let runtimeStage = "planning_intent";
+      let serverSideFullText = "";
+      let finalSent = false;
+      let streamWriteFailed = false;
+      let debugAbortAfterChars = 0;
+      const sendEvent = (event: string, data: Record<string, unknown>) => {
+        try {
+          send(event, { requestId, ...data });
+        } catch {
+          streamWriteFailed = true;
+        }
+      };
+      const writer: ChatStreamWriter = {
+        runtimeStatus: (stage, message) => {
+          runtimeStage = stage;
+          sendEvent("runtime_status", { stage, message });
+        },
+        token: (text) => {
+          if (!text) return;
+          serverSideFullText += text;
+          sendEvent("token", { text });
+          if (streamWriteFailed) throw new Error("client_abort");
+          if (debugAbortAfterChars > 0 && serverSideFullText.length >= debugAbortAfterChars) {
+            throw new Error("DEBUG_STREAM_ABORT");
+          }
+        },
+        toolStatus: (message) => {
+          runtimeStage = "calling_tool";
+          sendEvent("tool_status", { message });
+        },
+        final: (data) => {
+          finalSent = true;
+          sendEvent("final", data);
+        },
+        error: (message) => sendEvent("error", { message })
+      };
+      const abortController = new AbortController();
+      request.signal.addEventListener("abort", () => abortController.abort(new Error("client_abort")), { once: true });
+      const timeoutMs = getChatTimeoutMs(parsed);
+      const timer = setTimeout(() => abortController.abort(new Error(`server_timeout:${timeoutMs}`)), timeoutMs);
+      let conversation: { id: string; title: string; createdAt: Date } | null = null;
+      let savedUserMessage: { id: string; content: string; createdAt: Date } | null = null;
+      let agentRuntimePlan: AgentRuntimePlan | null = null;
+      let activeTask: AgentActiveTask | null = null;
+      let assistantMessageSaved = false;
+      let userAttachmentsSaved = false;
+      const conversationModel = parsed.mode === "agent" ? "Nexus AI" : parsed.model;
+      const debugAgent = isAgentDebugRequest(request);
+      debugAbortAfterChars = debugAgent ? Number(request.nextUrl.searchParams.get("debugStreamAbortAfterChars") || 0) : 0;
+
+      try {
+        writer.runtimeStatus("planning_intent", "正在理解你的需求");
+        const userMessage = [...parsed.messages].reverse().find((message) => message.role === "user");
+        const userText = userMessage?.content || parsed.messages[parsed.messages.length - 1]?.content || "";
+        conversation = await getOrCreateConversation({
+          conversationId: parsed.conversationId,
+          userId,
+          model: conversationModel,
+          firstMessage: userText
+        });
+        const earlyTitle = conversation.title === "新对话" ? makeTitle(userText) : conversation.title;
+        savedUserMessage = await prisma.chatMessage.create({
+          data: {
+            conversationId: conversation.id,
+            role: "user",
+            content: userText,
+            model: conversationModel,
+            metadata: JSON.stringify({ mode: parsed.mode, pendingAssistant: true, requestId, stream: true })
+          }
+        });
+        await prisma.chatConversation.update({
+          where: { id: conversation.id },
+          data: { title: earlyTitle, model: conversationModel, updatedAt: new Date() }
+        });
+
+        const pendingAgentTask = parsed.mode === "agent" ? await getPendingAgentTask(conversation.id, userId) : null;
+        activeTask = parsed.mode === "agent" ? await getActiveConversationTask(conversation.id, userId) : null;
+        const conversationSummaryCache = await getConversationSummaryCache(conversation.id, userId);
+        agentRuntimePlan =
+          parsed.mode === "agent"
+            ? planAgentRuntimeTurn({
+                messages: parsed.messages as AgentChatMessage[],
+                files: parsed.files.map((file) => ({ name: file.name, type: file.type, size: file.size })),
+                pendingTask: pendingAgentTask,
+                activeTask,
+                cachedConversationSummary: conversationSummaryCache,
+                tools: parsed.tools
+              })
+            : null;
+        streamPlanStages(writer, agentRuntimePlan);
+        const runtimePublicStatus = buildRuntimePublicStatus(agentRuntimePlan);
+        const nextConversationSummaryCache = (assistantContent: string) =>
+          createConversationSummaryCache(
+            [...(parsed.messages as AgentChatMessage[]), { role: "assistant", content: assistantContent }],
+            conversationSummaryCache
+          );
+        const runtimeAction = parsed.mode === "agent" ? agentRuntimePlan?.decision.nextAction || "answer_chat" : "run_legacy_tool";
+
+        const saveAttachmentsForResult = async (result: AgentRunResult) => {
+          const savedUserAttachments = await saveUserAttachments({
+            files: parsed.files,
+            userId,
+            conversationId: conversation!.id,
+            messageId: savedUserMessage!.id,
+            extractedFiles: result.extractedDocuments.map((file) => ({
+              fileName: file.fileName,
+              fileId: file.fileId,
+              content: file.extractedMarkdown || file.content
+            }))
+          });
+          userAttachmentsSaved = true;
+          const userAttachments = await Promise.all(savedUserAttachments.map(toClientAttachment));
+          return { savedUserAttachments, userAttachments };
+        };
+
+        if (parsed.mode === "agent" && runtimeAction === "ask_clarification") {
+          const content =
+            agentRuntimePlan?.decision.clarificationQuestion || "我先确认一下：你希望我现在直接执行，还是先给你方案和建议？";
+          writer.runtimeStatus("completed", "已完成");
+          writer.token(content);
+          const finalContent = serverSideFullText || content;
+          const savedAssistantMessage = await prisma.chatMessage.create({
+            data: {
+              conversationId: conversation.id,
+              role: "assistant",
+              content: finalContent,
+              model: conversationModel,
+              metadata: JSON.stringify({
+                mode: parsed.mode,
+                tools: parsed.tools || null,
+                requestId,
+                streamStatus: "completed",
+                routeReason: "runtime_v2:clarification",
+                agentRuntimeV2: agentRuntimePlan,
+                runtimePublicStatus,
+                conversationSummaryCache: nextConversationSummaryCache(finalContent),
+                ...(debugAgent ? { agentRuntimeDebug: compactRuntimeDebugTrace(agentRuntimePlan, activeTask) } : {})
+              })
+            }
+          });
+          assistantMessageSaved = true;
+          const { userAttachments } = await saveAttachmentsForResult(createClarificationResult({ agentRuntimePlan, content: finalContent, routeReason: "runtime_v2:clarification" }));
+          writer.final({
+            messageId: savedAssistantMessage.id,
+            conversationId: conversation.id,
+            content: finalContent,
+            conversation: {
+              userId,
+              conversationId: conversation.id,
+              type: "chat",
+              title: earlyTitle,
+              summary: finalContent,
+              status: "活跃",
+              model: conversationModel,
+              createdAt: conversation.createdAt.toISOString(),
+              updatedAt: new Date().toISOString()
+            },
+            userMessage: {
+              id: savedUserMessage.id,
+              role: "user",
+              content: savedUserMessage.content,
+              createdAt: formatTime(savedUserMessage.createdAt),
+              attachments: userAttachments
+            },
+            assistantMessage: toStreamAssistantMessage(savedAssistantMessage, { requestId, streamStatus: "completed" }),
+            ...(debugAgent ? { agentRuntimeTrace: compactRuntimeDebugTrace(agentRuntimePlan, activeTask) } : {})
+          });
+          return;
+        }
+
+        if (parsed.mode === "agent" && runtimeAction === "answer_chat") {
+          writer.runtimeStatus("calling_model", "正在生成回复");
+          let streamedText = "";
+          const result = await runRuntimeChatAnswer(parsed, abortController.signal, timeoutMs, {
+            conversationSummary: conversationSummaryCache,
+            activeTask,
+            stream: true,
+            onToken: (token) => {
+              streamedText += token;
+              writer.token(token);
+            }
+          });
+          if (!streamedText.trim()) writer.token(result.content);
+          const finalContent = serverSideFullText || result.content;
+          const savedAssistantMessage = await prisma.chatMessage.create({
+            data: {
+              conversationId: conversation.id,
+              role: "assistant",
+              content: finalContent,
+              model: conversationModel,
+              metadata: JSON.stringify({
+                mode: parsed.mode,
+                tools: parsed.tools || null,
+                requestId,
+                streamStatus: "completed",
+                routeReason: result.routeReason,
+                fallbackUsed: result.fallbackUsed,
+                agentRuntimeV2: agentRuntimePlan,
+                runtimePublicStatus,
+                conversationSummaryCache: nextConversationSummaryCache(finalContent),
+                ...(debugAgent ? { agentRuntimeDebug: compactRuntimeDebugTrace(agentRuntimePlan, activeTask) } : {})
+              })
+            }
+          });
+          assistantMessageSaved = true;
+          const { userAttachments } = await saveAttachmentsForResult(result);
+          await prisma.chatConversation.update({
+            where: { id: conversation.id },
+            data: { title: earlyTitle, model: conversationModel, updatedAt: new Date() }
+          });
+          writer.runtimeStatus("completed", "已完成");
+          writer.final({
+            messageId: savedAssistantMessage.id,
+            conversationId: conversation.id,
+            content: finalContent,
+            conversation: {
+              userId,
+              conversationId: conversation.id,
+              type: "chat",
+              title: earlyTitle,
+              summary: finalContent,
+              status: "活跃",
+              model: conversationModel,
+              createdAt: conversation.createdAt.toISOString(),
+              updatedAt: new Date().toISOString()
+            },
+            userMessage: {
+              id: savedUserMessage.id,
+              role: "user",
+              content: savedUserMessage.content,
+              createdAt: formatTime(savedUserMessage.createdAt),
+              attachments: userAttachments
+            },
+            assistantMessage: toStreamAssistantMessage(savedAssistantMessage, { requestId, streamStatus: "completed" }),
+            ...(debugAgent ? { agentRuntimeTrace: compactRuntimeDebugTrace(agentRuntimePlan, activeTask) } : {})
+          });
+          return;
+        }
+
+        writer.toolStatus("正在创建任务");
+        const asyncTaskPlan =
+          parsed.mode === "agent" && agentRuntimePlan?.decision.nextAction === "run_legacy_tool"
+            ? getAsyncAgentTaskPlan({
+                text: userText,
+                files: parsed.files,
+                pendingTask: pendingAgentTask,
+                tools: parsed.tools
+              })
+            : null;
+        if (asyncTaskPlan) {
+          const finalContent = asyncTaskPlan.pendingContent;
+          const taskCard = buildAsyncTaskCard({
+            kind: asyncTaskPlan.kind,
+            label: asyncTaskPlan.label,
+            taskId: "",
+            fileName: asyncTaskPlan.pendingFileName,
+            requiresGeneratedFile: asyncTaskPlan.requiresGeneratedFile,
+            status: "queued"
+          });
+          const savedAssistantMessage = await prisma.chatMessage.create({
+            data: {
+              conversationId: conversation.id,
+              role: "assistant",
+              content: finalContent,
+              model: conversationModel,
+              metadata: JSON.stringify({
+                mode: parsed.mode,
+                tools: parsed.tools || null,
+                requestId,
+                streamStatus: "completed",
+                agentRuntimeV2: agentRuntimePlan,
+                runtimePublicStatus,
+                conversationSummaryCache: nextConversationSummaryCache(finalContent),
+                taskCard,
+                asyncTask: {
+                  id: "",
+                  status: "queued",
+                  kind: asyncTaskPlan.kind,
+                  label: asyncTaskPlan.label,
+                  fileName: asyncTaskPlan.pendingFileName,
+                  requiresGeneratedFile: asyncTaskPlan.requiresGeneratedFile,
+                  updatedAt: new Date().toISOString()
+                }
+              })
+            }
+          });
+          assistantMessageSaved = true;
+          const savedTaskCard = { ...taskCard, taskId: savedAssistantMessage.id, openUrl: `/api/ai/chat/tasks/${encodeURIComponent(savedAssistantMessage.id)}` };
+          await prisma.chatMessage.update({
+            where: { id: savedAssistantMessage.id },
+            data: {
+              metadata: JSON.stringify({
+                mode: parsed.mode,
+                tools: parsed.tools || null,
+                requestId,
+                streamStatus: "completed",
+                agentRuntimeV2: agentRuntimePlan,
+                runtimePublicStatus,
+                conversationSummaryCache: nextConversationSummaryCache(finalContent),
+                taskCard: savedTaskCard,
+                asyncTask: {
+                  id: savedAssistantMessage.id,
+                  status: "queued",
+                  kind: asyncTaskPlan.kind,
+                  label: asyncTaskPlan.label,
+                  fileName: asyncTaskPlan.pendingFileName,
+                  requiresGeneratedFile: asyncTaskPlan.requiresGeneratedFile,
+                  updatedAt: new Date().toISOString()
+                }
+              })
+            }
+          });
+          const savedUserAttachments = await saveUserAttachments({
+            files: parsed.files,
+            userId,
+            conversationId: conversation.id,
+            messageId: savedUserMessage.id,
+            extractedFiles: []
+          });
+          userAttachmentsSaved = true;
+          const userAttachments = await Promise.all(savedUserAttachments.map(toClientAttachment));
+          enqueueAgentChatTask({
+            assistantMessageId: savedAssistantMessage.id,
+            conversationId: conversation.id,
+            files: parsed.files,
+            kind: asyncTaskPlan.kind,
+            label: asyncTaskPlan.label,
+            messages: parsed.messages as AgentChatMessage[],
+            pendingFileName: asyncTaskPlan.pendingFileName,
+            requiresGeneratedFile: asyncTaskPlan.requiresGeneratedFile,
+            tools: parsed.tools,
+            userId
+          });
+          writer.token(finalContent);
+          const streamedFinalContent = serverSideFullText || finalContent;
+          writer.runtimeStatus("completed", "已完成");
+          writer.final({
+            messageId: savedAssistantMessage.id,
+            conversationId: conversation.id,
+            taskId: savedAssistantMessage.id,
+            content: streamedFinalContent,
+            conversation: {
+              userId,
+              conversationId: conversation.id,
+              type: "chat",
+              title: earlyTitle,
+              summary: streamedFinalContent,
+              status: "活跃",
+              model: conversationModel,
+              createdAt: conversation.createdAt.toISOString(),
+              updatedAt: new Date().toISOString()
+            },
+            userMessage: {
+              id: savedUserMessage.id,
+              role: "user",
+              content: savedUserMessage.content,
+              createdAt: formatTime(savedUserMessage.createdAt),
+              attachments: userAttachments
+            },
+            assistantMessage: toStreamAssistantMessage(savedAssistantMessage, {
+              requestId,
+              streamStatus: "completed",
+              taskCard: savedTaskCard,
+              pendingFileGeneration:
+                asyncTaskPlan.requiresGeneratedFile && (asyncTaskPlan.kind === "ppt" || asyncTaskPlan.kind === "word")
+                  ? {
+                      taskId: savedAssistantMessage.id,
+                      kind: asyncTaskPlan.kind,
+                      fileName: asyncTaskPlan.pendingFileName || getPendingFileName(asyncTaskPlan.kind),
+                      status: "generating"
+                    }
+                  : null,
+              pendingAgentTask: !asyncTaskPlan.requiresGeneratedFile
+                ? {
+                    taskId: savedAssistantMessage.id,
+                    label: asyncTaskPlan.label,
+                    status: "generating"
+                  }
+                : null
+            }),
+            ...(debugAgent ? { agentRuntimeTrace: compactRuntimeDebugTrace(agentRuntimePlan, activeTask) } : {})
+          });
+          return;
+        }
+
+        const runLegacyAgent = () =>
+          runAgent({
+            userId,
+            messages: parsed.messages as AgentChatMessage[],
+            files: parsed.files,
+            preferences: null,
+            pendingTask: pendingAgentTask,
+            tools: parsed.tools,
+            signal: abortController.signal
+          });
+        const runImageGeneration = () =>
+          runChatImageGeneration({
+            request,
+            userText,
+            files: parsed.files,
+            signal: abortController.signal
+          });
+        const adapterRun =
+          parsed.mode === "agent" && runtimeAction === "run_legacy_tool" && agentRuntimePlan
+            ? await executeRuntimeTool(agentRuntimePlan.decision, {
+                request,
+                origin: request.nextUrl.origin,
+                userId,
+                conversationId: conversation.id,
+                userText,
+                messages: parsed.messages as AgentChatMessage[],
+                files: parsed.files,
+                tools: parsed.tools,
+                signal: abortController.signal,
+                timeoutMs,
+                activeTask,
+                runLegacyAgent,
+                runImageGeneration,
+                runChatAnswer: () =>
+                  runRuntimeChatAnswer(parsed, abortController.signal, timeoutMs, {
+                    conversationSummary: conversationSummaryCache,
+                    activeTask
+                  })
+              })
+            : null;
+        const adapterId = adapterRun && "adapterId" in adapterRun ? adapterRun.adapterId : null;
+        const result = adapterRun ? adapterRun.result : parsed.mode === "agent" ? await runLegacyAgent() : await runManualChat(parsed, abortController.signal, timeoutMs);
+        const imageGeneration = adapterRun && "imageGeneration" in adapterRun ? adapterRun.imageGeneration || null : null;
+        const adapterResultCard = adapterRun && "resultCard" in adapterRun ? adapterRun.resultCard || null : null;
+        const baseTaskCard = buildAdapterTaskCard({
+          targetTool: agentRuntimePlan?.decision.targetTool,
+          resultCard: adapterResultCard,
+          imageGeneration
+        });
+        writer.token(result.content);
+        const finalContent = serverSideFullText || result.content;
+        const { userAttachments, savedUserAttachments } = await saveAttachmentsForResult(result);
+        const savedAssistantMessage = await prisma.chatMessage.create({
+          data: {
+            conversationId: conversation.id,
+            role: "assistant",
+            content: finalContent,
+            model: conversationModel,
+            metadata: JSON.stringify({
+              mode: parsed.mode,
+              tools: parsed.tools || null,
+              requestId,
+              streamStatus: "completed",
+              routeReason: result.routeReason,
+              fallbackUsed: result.fallbackUsed,
+              generatedFileCount: result.generatedFiles.length,
+              agentTask: result.agentTask || null,
+              pendingTask: result.pendingTask || null,
+              defaultsApplied: result.defaultsApplied || [],
+              agentRuntimeV2: agentRuntimePlan,
+              runtimePublicStatus,
+              conversationSummaryCache: nextConversationSummaryCache(finalContent),
+              taskCard: baseTaskCard,
+              ...(debugAgent ? { agentRuntimeDebug: compactRuntimeDebugTrace(agentRuntimePlan, activeTask, adapterId) } : {}),
+              webContext: compactWebContext(result.webContext),
+              imageGeneration
+            })
+          }
+        });
+        assistantMessageSaved = true;
+        const generatedAttachments = await saveGeneratedFiles({
+          files: result.generatedFiles,
+          userId,
+          conversationId: conversation.id,
+          messageId: savedAssistantMessage.id
+        });
+        const assistantAttachments = await Promise.all(generatedAttachments.map(toClientAttachment));
+        const taskCard = buildAdapterTaskCard({
+          targetTool: agentRuntimePlan?.decision.targetTool,
+          resultCard: adapterResultCard,
+          generatedAttachment: assistantAttachments[0] || null,
+          imageGeneration
+        }) || baseTaskCard;
+        if (taskCard && JSON.stringify(taskCard) !== JSON.stringify(baseTaskCard)) {
+          const existingMetadata = parseJsonObject(savedAssistantMessage.metadata || null) || {};
+          await prisma.chatMessage.update({
+            where: { id: savedAssistantMessage.id },
+            data: {
+              metadata: JSON.stringify({ ...existingMetadata, taskCard })
+            }
+          });
+        }
+        await prisma.chatConversation.update({
+          where: { id: conversation.id },
+          data: { title: earlyTitle, model: conversationModel, updatedAt: new Date() }
+        });
+        writer.runtimeStatus("completed", "已完成");
+        writer.final({
+          messageId: savedAssistantMessage.id,
+          conversationId: conversation.id,
+          content: finalContent,
+          attachments: assistantAttachments,
+          conversation: {
+            userId,
+            conversationId: conversation.id,
+            type: "chat",
+            title: earlyTitle,
+            summary: finalContent,
+            status: "活跃",
+            model: conversationModel,
+            createdAt: conversation.createdAt.toISOString(),
+            updatedAt: new Date().toISOString()
+          },
+          userMessage: {
+            id: savedUserMessage.id,
+            role: "user",
+            content: savedUserMessage.content,
+            createdAt: formatTime(savedUserMessage.createdAt),
+            attachments: userAttachments
+          },
+          assistantMessage: toStreamAssistantMessage(savedAssistantMessage, {
+            requestId,
+            streamStatus: "completed",
+            taskCard,
+            attachments: assistantAttachments,
+            imageGeneration,
+            webContext: compactWebContext(result.webContext)
+          }),
+          ...(debugAgent ? { agentRuntimeTrace: compactRuntimeDebugTrace(agentRuntimePlan, activeTask, adapterId) } : {})
+        });
+      } catch (error) {
+        const errorInfo = getChatErrorInfo(error, timeoutMs);
+        console.error(`[ai:chat:stream:error] code=${errorInfo.code} kind=${errorInfo.kind} status=${errorInfo.status}`);
+        if (!finalSent) writer.error(errorInfo.message);
+        if (conversation && savedUserMessage && !assistantMessageSaved) {
+          if (!userAttachmentsSaved && parsed.files.length) {
+            await saveUserAttachments({
+              files: parsed.files,
+              userId,
+              conversationId: conversation.id,
+              messageId: savedUserMessage.id,
+              extractedFiles: []
+            });
+          }
+          const savedAssistantMessage = await savePartialAssistantMessage({
+            conversationId: conversation.id,
+            conversationModel,
+            accumulatedText: serverSideFullText,
+            errorCode: streamWriteFailed ? "STREAM_WRITE_FAILED" : errorInfo.code,
+            agentRuntimePlan,
+            mode: parsed.mode,
+            requestId,
+            runtimeStage,
+            tools: parsed.tools,
+            userMessage: savedUserMessage.content
+          });
+          assistantMessageSaved = true;
+          writer.final({
+            messageId: savedAssistantMessage.id,
+            conversationId: conversation.id,
+            content: savedAssistantMessage.content,
+            assistantMessage: {
+              ...toStreamAssistantMessage(savedAssistantMessage, {
+                requestId,
+                streamStatus: "interrupted",
+                streamError: "回复中断，已保留已生成内容，可以重试。"
+              }),
+              fallback: true
+            }
+          });
+        }
+      } finally {
+        clearTimeout(timer);
+        try {
+          controller.close();
+        } catch {
+          streamWriteFailed = true;
+        }
+      }
+    }
+  });
+  return streamResponse(stream);
 }
 
 export async function POST(request: NextRequest) {
@@ -1062,6 +2163,7 @@ export async function POST(request: NextRequest) {
   } catch {
     return jsonError("INVALID_REQUEST", "请求格式不正确。", 400);
   }
+  const streamEnabled = parsed.stream === true || wantsStream(request);
 
   if (!parsed.messages.length) return jsonError("INVALID_MESSAGES", "消息内容不能为空。", 400);
   const invalidModel = parsed.mode === "manual" && !modelProviders[parsed.model];
@@ -1069,6 +2171,8 @@ export async function POST(request: NextRequest) {
 
   const fileError = validateFiles(parsed.files, parsed.mode, parsed.model);
   if (fileError) return fileError;
+
+  if (streamEnabled) return streamChatResponse({ parsed, request, userId: user!.id });
 
   const controller = new AbortController();
   const timeoutMs = getChatTimeoutMs(parsed);
@@ -1081,6 +2185,10 @@ export async function POST(request: NextRequest) {
   let userAttachmentsSaved = false;
   let userText = "";
   let assistantMessageSaved = false;
+  let agentRuntimePlan: AgentRuntimePlan | null = null;
+  let activeTask: AgentActiveTask | null = null;
+  let conversationSummaryCache: string | null = null;
+  const debugAgent = isAgentDebugRequest(request);
 
   try {
     const userMessage = [...parsed.messages].reverse().find((message) => message.role === "user");
@@ -1109,8 +2217,32 @@ export async function POST(request: NextRequest) {
 
     const pendingAgentTask =
       parsed.mode === "agent" ? await getPendingAgentTask(conversation.id, user!.id) : null;
-    const asyncTaskPlan =
+    activeTask = parsed.mode === "agent" ? await getActiveConversationTask(conversation.id, user!.id) : null;
+    conversationSummaryCache = await getConversationSummaryCache(conversation.id, user!.id);
+    agentRuntimePlan =
       parsed.mode === "agent"
+        ? planAgentRuntimeTurn({
+            messages: parsed.messages as AgentChatMessage[],
+            files: parsed.files.map((file) => ({ name: file.name, type: file.type, size: file.size })),
+            pendingTask: pendingAgentTask,
+            activeTask,
+            cachedConversationSummary: conversationSummaryCache,
+            tools: parsed.tools
+          })
+        : null;
+    if (agentRuntimePlan) {
+      console.info(
+        `[agent:runtime:v2] stages=${agentRuntimePlan.decision.progressStages.join(">")} nextAction=${agentRuntimePlan.decision.nextAction} intent=${agentRuntimePlan.decision.intent} targetTool=${agentRuntimePlan.decision.targetTool} confidence=${agentRuntimePlan.decision.confidence}`
+      );
+    }
+    const runtimePublicStatus = buildRuntimePublicStatus(agentRuntimePlan);
+    const nextConversationSummaryCache = (assistantContent: string) =>
+      createConversationSummaryCache(
+        [...(parsed.messages as AgentChatMessage[]), { role: "assistant", content: assistantContent }],
+        conversationSummaryCache
+      );
+    const asyncTaskPlan =
+      parsed.mode === "agent" && agentRuntimePlan?.decision.nextAction === "run_legacy_tool"
         ? getAsyncAgentTaskPlan({
             text: userText,
             files: parsed.files,
@@ -1120,6 +2252,14 @@ export async function POST(request: NextRequest) {
         : null;
 
     if (asyncTaskPlan) {
+      const taskCard = buildAsyncTaskCard({
+        kind: asyncTaskPlan.kind,
+        label: asyncTaskPlan.label,
+        taskId: "",
+        fileName: asyncTaskPlan.pendingFileName,
+        requiresGeneratedFile: asyncTaskPlan.requiresGeneratedFile,
+        status: "queued"
+      });
       const savedAssistantMessage = await prisma.chatMessage.create({
         data: {
           conversationId: conversation.id,
@@ -1129,6 +2269,10 @@ export async function POST(request: NextRequest) {
           metadata: JSON.stringify({
             mode: parsed.mode,
             tools: parsed.tools || null,
+            agentRuntimeV2: agentRuntimePlan,
+            runtimePublicStatus,
+            conversationSummaryCache: nextConversationSummaryCache(asyncTaskPlan.pendingContent),
+            taskCard,
             asyncTask: {
               id: "",
               status: "queued",
@@ -1142,12 +2286,17 @@ export async function POST(request: NextRequest) {
         }
       });
       assistantMessageSaved = true;
+      const savedTaskCard = { ...taskCard, taskId: savedAssistantMessage.id, openUrl: `/api/ai/chat/tasks/${encodeURIComponent(savedAssistantMessage.id)}` };
       await prisma.chatMessage.update({
         where: { id: savedAssistantMessage.id },
         data: {
           metadata: JSON.stringify({
             mode: parsed.mode,
             tools: parsed.tools || null,
+            agentRuntimeV2: agentRuntimePlan,
+            runtimePublicStatus,
+            conversationSummaryCache: nextConversationSummaryCache(asyncTaskPlan.pendingContent),
+            taskCard: savedTaskCard,
             asyncTask: {
               id: savedAssistantMessage.id,
               status: "queued",
@@ -1186,6 +2335,8 @@ export async function POST(request: NextRequest) {
         content: asyncTaskPlan.pendingContent,
         model: conversationModel,
         provider: "agent",
+        runtimeStatus: runtimePublicStatus,
+        ...(debugAgent ? { agentRuntimeTrace: compactRuntimeDebugTrace(agentRuntimePlan, activeTask) } : {}),
         conversationId: conversation.id,
         conversation: {
           userId: user!.id,
@@ -1211,6 +2362,7 @@ export async function POST(request: NextRequest) {
           content: asyncTaskPlan.pendingContent,
           createdAt: formatTime(savedAssistantMessage.createdAt),
           attachments: [],
+          taskCard: savedTaskCard,
           pendingFileGeneration:
             asyncTaskPlan.requiresGeneratedFile && (asyncTaskPlan.kind === "ppt" || asyncTaskPlan.kind === "word")
               ? {
@@ -1233,29 +2385,64 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const imageRun =
-      parsed.mode === "agent" && parsed.tools?.contentMode === "image"
-        ? await runChatImageGeneration({
+    const runtimeAction = parsed.mode === "agent" ? agentRuntimePlan?.decision.nextAction || "answer_chat" : "run_legacy_tool";
+    const runLegacyAgent = () =>
+      runAgent({
+        userId: user!.id,
+        messages: parsed.messages as AgentChatMessage[],
+        files: parsed.files,
+        preferences: null,
+        pendingTask: pendingAgentTask,
+        tools: parsed.tools,
+        signal: controller.signal
+      });
+    const runImageGeneration = () =>
+      runChatImageGeneration({
+        request,
+        userText,
+        files: parsed.files,
+        signal: controller.signal
+      });
+    const adapterRun =
+      parsed.mode === "agent" && runtimeAction === "run_legacy_tool" && agentRuntimePlan
+        ? await executeRuntimeTool(agentRuntimePlan.decision, {
             request,
-            userText,
-            files: parsed.files,
-            signal: controller.signal
-          })
-        : null;
-    const result = imageRun
-      ? imageRun.result
-      : parsed.mode === "agent"
-        ? await runAgent({
+            origin: request.nextUrl.origin,
             userId: user!.id,
+            conversationId: conversation.id,
+            userText,
             messages: parsed.messages as AgentChatMessage[],
             files: parsed.files,
-            preferences: null,
-            pendingTask: pendingAgentTask,
             tools: parsed.tools,
-            signal: controller.signal
+            signal: controller.signal,
+            timeoutMs,
+            activeTask,
+            runLegacyAgent,
+            runImageGeneration,
+            runChatAnswer: () => runRuntimeChatAnswer(parsed, controller.signal, timeoutMs, { conversationSummary: conversationSummaryCache, activeTask })
           })
+        : null;
+    const adapterId = adapterRun && "adapterId" in adapterRun ? adapterRun.adapterId : null;
+    const result = adapterRun
+      ? adapterRun.result
+      : parsed.mode === "agent" && runtimeAction === "ask_clarification"
+        ? createClarificationResult({
+            agentRuntimePlan,
+            content: agentRuntimePlan?.decision.clarificationQuestion || "我先确认一下：你希望我现在直接执行，还是先给你方案和建议？",
+            routeReason: "runtime_v2:clarification"
+          })
+      : parsed.mode === "agent" && runtimeAction === "answer_chat"
+        ? await runRuntimeChatAnswer(parsed, controller.signal, timeoutMs, { conversationSummary: conversationSummaryCache, activeTask })
+      : parsed.mode === "agent"
+        ? await runLegacyAgent()
         : await runManualChat(parsed, controller.signal, timeoutMs);
-    const imageGeneration = imageRun?.imageGeneration || null;
+    const imageGeneration = adapterRun && "imageGeneration" in adapterRun ? adapterRun.imageGeneration || null : null;
+    const adapterResultCard = adapterRun && "resultCard" in adapterRun ? adapterRun.resultCard || null : null;
+    const baseTaskCard = buildAdapterTaskCard({
+      targetTool: agentRuntimePlan?.decision.targetTool,
+      resultCard: adapterResultCard,
+      imageGeneration
+    });
 
     const savedUserAttachments = await saveUserAttachments({
       files: parsed.files,
@@ -1287,6 +2474,11 @@ export async function POST(request: NextRequest) {
           agentTask: result.agentTask || null,
           pendingTask: result.pendingTask || null,
           defaultsApplied: result.defaultsApplied || [],
+          agentRuntimeV2: agentRuntimePlan,
+          runtimePublicStatus,
+          conversationSummaryCache: nextConversationSummaryCache(result.content),
+          taskCard: baseTaskCard,
+          ...(debugAgent ? { agentRuntimeDebug: compactRuntimeDebugTrace(agentRuntimePlan, activeTask, adapterId) } : {}),
           webContext: compactWebContext(result.webContext),
           imageGeneration
         })
@@ -1310,11 +2502,28 @@ export async function POST(request: NextRequest) {
       Promise.all(savedUserAttachments.map(toClientAttachment)),
       Promise.all(generatedAttachments.map(toClientAttachment))
     ]);
+    const taskCard = buildAdapterTaskCard({
+      targetTool: agentRuntimePlan?.decision.targetTool,
+      resultCard: adapterResultCard,
+      generatedAttachment: assistantAttachments[0] || null,
+      imageGeneration
+    }) || baseTaskCard;
+    if (taskCard && JSON.stringify(taskCard) !== JSON.stringify(baseTaskCard)) {
+      const existingMetadata = parseJsonObject(savedAssistantMessage.metadata || null) || {};
+      await prisma.chatMessage.update({
+        where: { id: savedAssistantMessage.id },
+        data: {
+          metadata: JSON.stringify({ ...existingMetadata, taskCard })
+        }
+      });
+    }
 
     return NextResponse.json({
       content: result.content,
       model: conversationModel,
       provider: parsed.mode === "agent" ? "agent" : result.providerUsed,
+      runtimeStatus: runtimePublicStatus,
+      ...(debugAgent ? { agentRuntimeTrace: compactRuntimeDebugTrace(agentRuntimePlan, activeTask, adapterId) } : {}),
       conversationId: conversation.id,
       conversation: {
         userId: user!.id,
@@ -1340,6 +2549,7 @@ export async function POST(request: NextRequest) {
         content: result.content,
         createdAt: formatTime(savedAssistantMessage.createdAt),
         attachments: assistantAttachments,
+        taskCard,
         imageGeneration,
         webContext: compactWebContext(result.webContext)
       }
@@ -1374,6 +2584,7 @@ export async function POST(request: NextRequest) {
           conversationId: conversation.id,
           conversationModel,
           errorInfo,
+          agentRuntimePlan,
           mode: parsed.mode,
           tools: parsed.tools
         });
@@ -1388,6 +2599,8 @@ export async function POST(request: NextRequest) {
           content: errorInfo.message,
           model: conversationModel,
           provider: parsed.mode === "agent" ? "agent" : errorInfo.providerRequest?.provider || "provider",
+          runtimeStatus: buildRuntimePublicStatus(agentRuntimePlan),
+          ...(debugAgent ? { agentRuntimeTrace: compactRuntimeDebugTrace(agentRuntimePlan, activeTask) } : {}),
           conversationId: conversation.id,
           conversation: {
             userId: user!.id,

@@ -33,6 +33,25 @@ type AiChatResponse = {
   content?: string;
   model?: string;
   provider?: "xheai" | "moonshot" | "agent";
+  runtimeStatus?: {
+    label: string;
+    steps: string[];
+    events?: Array<{
+      stage: string;
+      label: string;
+      visible: boolean;
+    }>;
+    completedLabel?: string;
+  } | null;
+  agentRuntimeTrace?: {
+    intent?: string;
+    targetTool?: string;
+    confidence?: number;
+    nextAction?: string;
+    adapterId?: string | null;
+    missingInputs?: string[];
+    activeTaskId?: string | null;
+  } | null;
   conversationId?: string;
   conversation?: Conversation;
   assistantMessage?: ChatMessageType;
@@ -40,7 +59,31 @@ type AiChatResponse = {
   code?: string;
 };
 
-type AiChatResult = { failed: true } | { failed: false; data: AiChatResponse };
+type AiChatResult =
+  | { failed: true }
+  | {
+      failed: false;
+      data: AiChatResponse;
+      handledInStream?: boolean;
+      interruptedInStream?: boolean;
+      requestId?: string;
+    };
+
+type StreamChatEvent =
+  | { event: "runtime_status"; data: { requestId?: string; stage?: string; message?: string } }
+  | { event: "token"; data: { requestId?: string; text?: string } }
+  | { event: "tool_status"; data: { requestId?: string; message?: string } }
+  | {
+      event: "final";
+      data: AiChatResponse & {
+        requestId?: string;
+        messageId?: string;
+        taskId?: string;
+        content?: string;
+        agentRuntimeTrace?: AiChatResponse["agentRuntimeTrace"];
+      };
+    }
+  | { event: "error"; data: { requestId?: string; message?: string } };
 
 type ChatToolSelection = {
   webSearch: boolean;
@@ -71,6 +114,7 @@ type ChatFileTaskResponse = {
     content?: string;
     failureReason?: string | null;
     attachments?: ChatAttachment[];
+    taskCard?: ChatMessageType["taskCard"] | null;
     webContext?: ChatMessageType["webContext"] | null;
     updatedAt?: string;
   };
@@ -197,6 +241,15 @@ function createLocalImagePendingMessage(text: string, referenceImages: ChatImage
       status: "准备生成",
       images: [],
       referenceImages
+    },
+    taskCard: {
+      kind: "task_card",
+      taskType: "image",
+      status: "queued",
+      title: "图片任务",
+      description: "正在创建图片生成任务",
+      taskId: `local-${now}`,
+      retryable: true
     }
   };
 }
@@ -215,6 +268,14 @@ function createLocalFilePendingMessage(text: string, tool: ContentToolId | null)
       kind: isPpt ? "ppt" : "word",
       fileName: isPpt ? "演示文稿.pptx" : "文档.docx",
       status: "generating"
+    },
+    taskCard: {
+      kind: "task_card",
+      taskType: isPpt ? "ppt" : "word",
+      status: "queued",
+      title: isPpt ? "演示文稿.pptx" : "文档.docx",
+      description: isPpt ? "正在生成 PPT 文件" : "正在生成 Word 文档",
+      retryable: true
     }
   };
 }
@@ -230,13 +291,29 @@ function hasLocalPendingAssistantMessage(messages: ChatMessageType[]) {
   return messages.some((message) =>
     message.imageGeneration?.generationId.startsWith("local-") ||
     message.pendingFileGeneration?.status === "generating" ||
-    message.pendingAgentTask?.status === "generating"
+    message.pendingAgentTask?.status === "generating" ||
+    message.id.startsWith("assistant-temp-") ||
+    Boolean(message.statusText)
   );
 }
 
 function revealAssistantMessage(message: ChatMessageType): ChatMessageType {
   if (message.role !== "assistant" || !message.content.trim()) return message;
   return { ...message, reveal: true };
+}
+
+function createStreamingAssistantMessage(requestId: string): ChatMessageType {
+  const id = `assistant-temp-${requestId}`;
+  return {
+    id,
+    clientKey: id,
+    requestId,
+    role: "assistant",
+    content: "",
+    createdAt: nowTime(),
+    streamStatus: "pending",
+    statusText: "正在理解你的需求"
+  };
 }
 
 function getExtension(fileName: string) {
@@ -309,6 +386,11 @@ export function ChatPage() {
   const [model] = useState(DEFAULT_MODEL);
   const [loading, setLoading] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState("Nexus AI 正在思考");
+  const [runtimeStatusSteps, setRuntimeStatusSteps] = useState<string[]>([]);
+  const [agentDebugTrace, setAgentDebugTrace] = useState<AiChatResponse["agentRuntimeTrace"]>(null);
+  const currentStreamingAssistantIdRef = useRef<string | null>(null);
+  const currentStreamingRequestIdRef = useRef<string | null>(null);
+  const streamingFinalizedRef = useRef(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [dragDepth, setDragDepth] = useState(0);
   const [previewAttachment, setPreviewAttachment] = useState<ChatAttachment | null>(null);
@@ -418,6 +500,22 @@ export function ChatPage() {
                         failureReason: data.task!.failureReason || null,
                         createdAt: data.task!.createdAt,
                         updatedAt: data.task!.updatedAt
+                      },
+                      taskCard: {
+                        ...(message.taskCard || {
+                          kind: "task_card",
+                          taskType: "image",
+                          title: "图片任务",
+                          retryable: true
+                        }),
+                        status:
+                          data.task!.status === "completed" || data.task!.status === "已完成"
+                            ? "completed"
+                            : data.task!.status === "failed" || data.task!.status === "生成失败" || data.task!.status === "timeout"
+                              ? "failed"
+                              : "running",
+                        taskId: data.task!.taskId,
+                        failureReason: data.task!.failureReason || null
                       }
                     };
                   })
@@ -465,6 +563,7 @@ export function ChatPage() {
                         ...message,
                         content: data.task!.content || message.content,
                         attachments: data.task!.attachments || [],
+                        taskCard: data.task!.taskCard || message.taskCard || null,
                         pendingFileGeneration: null,
                         reveal: true
                       };
@@ -478,6 +577,16 @@ export function ChatPage() {
                           status: "failed",
                           failureReason: "生成失败，请重新输入后重试。"
                         },
+                        taskCard: data.task!.taskCard || {
+                          kind: "task_card",
+                          taskType: message.pendingFileGeneration?.kind === "ppt" ? "ppt" : "word",
+                          status: "failed",
+                          title: message.pendingFileGeneration?.fileName || "文件生成任务",
+                          description: "生成失败，请重新输入后重试。",
+                          taskId: id,
+                          retryable: true,
+                          failureReason: "生成失败，请重新输入后重试。"
+                        },
                         reveal: true
                       };
                     }
@@ -487,7 +596,8 @@ export function ChatPage() {
                         ...message.pendingFileGeneration!,
                         fileName: data.task!.fileName || message.pendingFileGeneration!.fileName,
                         status: "generating"
-                      }
+                      },
+                      taskCard: data.task!.taskCard || message.taskCard || null
                     };
                   })
                 ])
@@ -535,6 +645,7 @@ export function ChatPage() {
                         content: data.task!.content || message.content,
                         attachments: data.task!.attachments || [],
                         webContext: data.task!.webContext || null,
+                        taskCard: data.task!.taskCard || message.taskCard || null,
                         pendingAgentTask: null,
                         reveal: true
                       };
@@ -548,6 +659,16 @@ export function ChatPage() {
                           status: "failed",
                           failureReason: "生成失败，请重新输入后重试。"
                         },
+                        taskCard: data.task!.taskCard || {
+                          kind: "task_card",
+                          taskType: "file-analysis",
+                          status: "failed",
+                          title: message.pendingAgentTask?.label || "任务处理",
+                          description: "生成失败，请重新输入后重试。",
+                          taskId: id,
+                          retryable: true,
+                          failureReason: "生成失败，请重新输入后重试。"
+                        },
                         reveal: true
                       };
                     }
@@ -557,7 +678,8 @@ export function ChatPage() {
                         ...message.pendingAgentTask!,
                         label: data.task!.label || message.pendingAgentTask!.label,
                         status: "generating"
-                      }
+                      },
+                      taskCard: data.task!.taskCard || message.taskCard || null
                     };
                   })
                 ])
@@ -618,7 +740,12 @@ export function ChatPage() {
     setActiveWebContext(null);
     setPreviewAttachment(null);
     setLoading(false);
-    setLoadingLabel("Nexus AI 正在思考");
+    setLoadingLabel("正在理解你的需求");
+    setRuntimeStatusSteps([]);
+    setAgentDebugTrace(null);
+    currentStreamingAssistantIdRef.current = null;
+    currentStreamingRequestIdRef.current = null;
+    streamingFinalizedRef.current = false;
   }
 
   function addFiles(files: File[]) {
@@ -689,32 +816,32 @@ export function ChatPage() {
   async function requestAssistantReply(
     nextMessages: ChatMessageType[],
     requestAttachments: ChatAttachment[],
+    pendingAssistantId?: string,
+    requestId?: string,
     toolSelection: ChatToolSelection = getToolSelection()
   ): Promise<AiChatResult> {
-    const hasDocumentAttachments = requestAttachments.some(isDocumentAttachment);
-    const hasImagesForUnderstanding = toolSelection.contentMode !== "image" && hasImageAttachments(requestAttachments);
     try {
-      const userText = nextMessages[nextMessages.length - 1]?.content || "";
-      setLoadingLabel(
-        toolSelection.webSearch && likelyNeedsWebSearch(userText)
-          ? "Nexus AI 正在搜索网页并筛选来源"
-          : hasImagesForUnderstanding
-            ? "Nexus AI 正在理解图片内容"
-            : hasDocumentAttachments
-            ? "Nexus AI 正在解析文件并组织回答"
-            : "Nexus AI 正在思考"
-      );
+      setLoadingLabel("正在理解你的需求");
       const response = requestAttachments.length
-        ? await requestMultipartChat(nextMessages, requestAttachments, toolSelection)
-        : await requestTextChat(nextMessages, toolSelection);
+        ? await requestMultipartChat(nextMessages, requestAttachments, requestId, toolSelection)
+        : await requestTextChat(nextMessages, requestId, toolSelection);
+      if (response.ok && response.headers.get("content-type")?.includes("text/event-stream") && response.body && pendingAssistantId) {
+        return await consumeChatStream(response, pendingAssistantId);
+      }
+
       const data = (await response.json().catch(() => ({}))) as AiChatResponse;
 
       if (response.ok && typeof data.content === "string" && data.conversationId) {
+        const statusSteps = data.runtimeStatus?.events?.filter((event) => event.visible).map((event) => event.label) || data.runtimeStatus?.steps || [];
+        setRuntimeStatusSteps(statusSteps);
+        setLoadingLabel(data.runtimeStatus?.completedLabel || "已完成");
+        setAgentDebugTrace(data.agentRuntimeTrace || null);
         return { failed: false as const, data };
       }
 
       if (data.code === "MISSING_API_KEY") {
         toast({ type: "error", message: "API Key 未配置，已使用本地 fallback 回复" });
+        setRuntimeStatusSteps(["正在理解你的需求", "模型服务未配置", "已完成"]);
         return {
           failed: false as const,
           data: {
@@ -726,10 +853,57 @@ export function ChatPage() {
         };
       }
 
+      if (pendingAssistantId) {
+        const message = data.message || "回复中断，已保留已生成内容，可以重试。";
+        applyAssistantMessageUpdate(activeConversationId, pendingAssistantId, (current) => ({
+          ...current,
+          content: current.content || data.content || message,
+          streamStatus: "interrupted",
+          streamError: message,
+          statusText: undefined,
+          fallback: !current.content && !data.content ? true : current.fallback
+        }));
+        toast({ type: "error", message });
+        setRuntimeStatusSteps([]);
+        return {
+          failed: false as const,
+          handledInStream: true,
+          interruptedInStream: true,
+          data: {
+            content: data.content || message,
+            conversationId: data.conversationId || activeConversationId
+          }
+        };
+      }
+
       toast({ type: "error", message: data.message || "模型请求失败，请稍后重试" });
+      setRuntimeStatusSteps([]);
       return { failed: true as const };
     } catch {
+      if (pendingAssistantId) {
+        const message = "回复中断，已保留已生成内容，可以重试。";
+        applyAssistantMessageUpdate(activeConversationId, pendingAssistantId, (current) => ({
+          ...current,
+          content: current.content || message,
+          streamStatus: "interrupted",
+          streamError: message,
+          statusText: undefined,
+          fallback: !current.content ? true : current.fallback
+        }));
+        toast({ type: "error", message });
+        setRuntimeStatusSteps([]);
+        return {
+          failed: false as const,
+          handledInStream: true,
+          interruptedInStream: true,
+          data: {
+            content: message,
+            conversationId: activeConversationId
+          }
+        };
+      }
       toast({ type: "error", message: "模型请求失败，请稍后重试" });
+      setRuntimeStatusSteps([]);
       return { failed: true as const };
     }
   }
@@ -741,15 +915,30 @@ export function ChatPage() {
     };
   }
 
-  function requestTextChat(nextMessages: ChatMessageType[], toolSelection: ChatToolSelection = getToolSelection()) {
-    return fetch("/api/ai/chat", {
+  function getChatApiUrl() {
+    const params = new URLSearchParams();
+    const currentSearchParams =
+      typeof window !== "undefined" ? new URLSearchParams(window.location.search) : searchParams;
+    if (currentSearchParams.get("debugAgent") === "1") {
+      params.set("debugAgent", "1");
+      const debugStreamAbortAfterChars = currentSearchParams.get("debugStreamAbortAfterChars");
+      if (debugStreamAbortAfterChars) params.set("debugStreamAbortAfterChars", debugStreamAbortAfterChars);
+    }
+    params.set("stream", "1");
+    return `/api/ai/chat?${params.toString()}`;
+  }
+
+  function requestTextChat(nextMessages: ChatMessageType[], requestId?: string, toolSelection: ChatToolSelection = getToolSelection()) {
+    return fetch(getChatApiUrl(), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({
         mode,
         conversationId: activeConversationId,
         model,
         messages: toApiMessages(nextMessages),
+        requestId,
+        stream: true,
         tools: toolSelection
       })
     });
@@ -758,19 +947,263 @@ export function ChatPage() {
   function requestMultipartChat(
     nextMessages: ChatMessageType[],
     requestAttachments: ChatAttachment[],
+    requestId?: string,
     toolSelection: ChatToolSelection = getToolSelection()
   ) {
     const formData = new FormData();
     formData.append("mode", mode);
     formData.append("conversationId", activeConversationId);
     formData.append("model", model);
+    if (requestId) formData.append("requestId", requestId);
     formData.append("messages", JSON.stringify(toApiMessages(nextMessages)));
+    formData.append("stream", "true");
     formData.append("tools", JSON.stringify(toolSelection));
     requestAttachments.forEach((attachment) => {
       if (attachment.file) formData.append("files", attachment.file, attachment.name);
     });
 
-    return fetch("/api/ai/chat", { method: "POST", body: formData });
+    return fetch(getChatApiUrl(), { method: "POST", headers: { Accept: "text/event-stream" }, body: formData });
+  }
+
+  function applyAssistantMessageUpdate(conversationId: string, assistantId: string, updater: (message: ChatMessageType) => ChatMessageType) {
+    setMessagesByConversation((current) => ({
+      ...current,
+      [conversationId]: (current[conversationId] || []).map((message) => (message.id === assistantId ? updater(message) : message))
+    }));
+  }
+
+  function finalizeStreamingAssistant({
+    conversationId,
+    pendingAssistantId,
+    finalMessage
+  }: {
+    conversationId: string;
+    pendingAssistantId: string;
+    finalMessage: ChatMessageType;
+  }) {
+    let replaced = false;
+    setMessagesByConversation((current) => {
+      const items = current[conversationId] || [];
+      const nextItems = items.map((message) => {
+        if (message.id !== pendingAssistantId) return message;
+        replaced = true;
+        const streamStatus: ChatMessageType["streamStatus"] =
+          finalMessage.streamStatus === "interrupted" || finalMessage.streamStatus === "failed"
+            ? finalMessage.streamStatus
+            : "completed";
+        return {
+          ...finalMessage,
+          content: message.content || finalMessage.content || "",
+          clientKey: message.clientKey || pendingAssistantId,
+          requestId: message.requestId || finalMessage.requestId,
+          streamStatus,
+          statusText: undefined,
+          streamError: streamStatus === "completed" ? undefined : finalMessage.streamError,
+          reveal: false
+        };
+      });
+      return {
+        ...current,
+        [conversationId]: replaced
+          ? nextItems
+          : [
+              ...items,
+              {
+                ...finalMessage,
+                clientKey: pendingAssistantId,
+                requestId: finalMessage.requestId,
+                streamStatus:
+                  finalMessage.streamStatus === "interrupted" || finalMessage.streamStatus === "failed"
+                    ? finalMessage.streamStatus
+                    : ("completed" as const),
+                statusText: undefined,
+                streamError:
+                  finalMessage.streamStatus === "interrupted" || finalMessage.streamStatus === "failed"
+                    ? finalMessage.streamError
+                    : undefined,
+                reveal: false
+              }
+            ]
+      };
+    });
+    currentStreamingAssistantIdRef.current = finalMessage.id;
+    streamingFinalizedRef.current = true;
+  }
+
+  function parseSseEvents(buffer: string) {
+    const parts = buffer.split("\n\n");
+    return {
+      complete: parts.slice(0, -1),
+      rest: parts[parts.length - 1] || ""
+    };
+  }
+
+  function decodeSseBlock(block: string): StreamChatEvent | null {
+    const lines = block.split(/\r?\n/);
+    const event = lines.find((line) => line.startsWith("event:"))?.slice(6).trim() || "message";
+    const dataText = lines
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim())
+      .join("\n");
+    if (!dataText) return null;
+    try {
+      return { event, data: JSON.parse(dataText) } as StreamChatEvent;
+    } catch {
+      return null;
+    }
+  }
+
+  async function consumeChatStream(response: Response, pendingAssistantId: string): Promise<AiChatResult> {
+    const reader = response.body?.getReader();
+    if (!reader) return { failed: true };
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalData: (AiChatResponse & { content?: string }) | null | undefined;
+    let failed = false;
+    let hasFinalized = false;
+    let accumulatedText = "";
+    let interruptedMessage = "回复中断，已保留已生成内容，可以重试。";
+
+    const isCurrentRequestEvent = (requestId?: string) => {
+      const currentRequestId = currentStreamingRequestIdRef.current;
+      return !requestId || !currentRequestId || requestId === currentRequestId;
+    };
+
+    const markStreamingInterrupted = (message = interruptedMessage) => {
+      interruptedMessage = message;
+      applyAssistantMessageUpdate(activeConversationId, pendingAssistantId, (current) => ({
+        ...current,
+        content: current.content || accumulatedText || message,
+        streamStatus: "interrupted",
+        streamError: message,
+        statusText: undefined,
+        fallback: !current.content && !accumulatedText ? true : current.fallback
+      }));
+    };
+
+    const handleEvent = (item: StreamChatEvent) => {
+      if (item.event === "runtime_status") {
+        if (!isCurrentRequestEvent(item.data.requestId)) return;
+        if (currentStreamingAssistantIdRef.current !== pendingAssistantId) return;
+        const message = item.data.message?.trim();
+        if (message) {
+          setLoadingLabel(message);
+          setRuntimeStatusSteps((current) => (current.includes(message) ? current : [...current, message]));
+          applyAssistantMessageUpdate(activeConversationId, pendingAssistantId, (current) => ({
+            ...current,
+            streamStatus: current.streamStatus === "pending" ? "streaming" : current.streamStatus,
+            statusText: message
+          }));
+        }
+        return;
+      }
+      if (item.event === "tool_status") {
+        if (!isCurrentRequestEvent(item.data.requestId)) return;
+        if (currentStreamingAssistantIdRef.current !== pendingAssistantId) return;
+        const message = item.data.message?.trim() || "正在创建任务";
+        setLoadingLabel(message);
+        setRuntimeStatusSteps((current) => (current.includes(message) ? current : [...current, message]));
+        applyAssistantMessageUpdate(activeConversationId, pendingAssistantId, (current) => ({
+          ...current,
+          streamStatus: "streaming",
+          statusText: message
+        }));
+        return;
+      }
+      if (item.event === "token") {
+        if (!isCurrentRequestEvent(item.data.requestId)) return;
+        if (currentStreamingAssistantIdRef.current !== pendingAssistantId || streamingFinalizedRef.current) return;
+        const text = item.data.text || "";
+        if (!text) return;
+        accumulatedText += text;
+        applyAssistantMessageUpdate(activeConversationId, pendingAssistantId, (message) => ({
+          ...message,
+          streamStatus: "streaming",
+          content: `${message.content || ""}${text}`
+        }));
+        return;
+      }
+      if (item.event === "error") {
+        if (!isCurrentRequestEvent(item.data.requestId)) return;
+        if (currentStreamingAssistantIdRef.current !== pendingAssistantId) return;
+        failed = true;
+        const message = item.data.message || interruptedMessage;
+        markStreamingInterrupted(message);
+        toast({ type: "error", message });
+        return;
+      }
+      if (item.event === "final") {
+        if (!isCurrentRequestEvent(item.data.requestId)) return;
+        if (currentStreamingAssistantIdRef.current !== pendingAssistantId) return;
+        if (hasFinalized) return;
+        hasFinalized = true;
+        finalData = item.data;
+        if (item.data.agentRuntimeTrace) setAgentDebugTrace(item.data.agentRuntimeTrace);
+        const accumulated = accumulatedText;
+        const finalMessage = item.data.assistantMessage || {
+          id: item.data.messageId || pendingAssistantId,
+          role: "assistant" as const,
+          content: item.data.content || accumulated,
+          createdAt: nowTime()
+        };
+        finalizeStreamingAssistant({
+          conversationId: activeConversationId,
+          pendingAssistantId,
+          finalMessage: {
+            ...finalMessage,
+            id: finalMessage.id || item.data.messageId || pendingAssistantId,
+            requestId: item.data.requestId || currentStreamingRequestIdRef.current || undefined,
+            content: finalMessage.content || item.data.content || accumulated
+          }
+        });
+      }
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+        const parsed = parseSseEvents(buffer);
+        buffer = parsed.rest;
+        parsed.complete.map(decodeSseBlock).filter(Boolean).forEach((event) => handleEvent(event as StreamChatEvent));
+      }
+      if (buffer.trim()) {
+        const event = decodeSseBlock(buffer);
+        if (event) handleEvent(event);
+      }
+    } catch {
+      failed = true;
+      markStreamingInterrupted();
+    }
+
+    const completed = finalData;
+    if (!completed) {
+      markStreamingInterrupted(failed ? interruptedMessage : "回复中断，已保留已生成内容，可以重试。");
+      return {
+        failed: false,
+        handledInStream: true,
+        interruptedInStream: true,
+        requestId: currentStreamingRequestIdRef.current || undefined,
+        data: {
+          content: accumulatedText,
+          conversationId: activeConversationId
+        }
+      };
+    }
+    if (completed) {
+      return {
+        failed: false,
+        handledInStream: true,
+        requestId: currentStreamingRequestIdRef.current || undefined,
+        data: {
+          ...completed,
+          content: completed.content || completed.assistantMessage?.content || "",
+          conversationId: completed.conversationId || activeConversationId
+        }
+      };
+    }
+    return { failed: true };
   }
 
   async function sendMessage() {
@@ -786,8 +1219,10 @@ export function ChatPage() {
       status: "已发送" as const,
       uploadedAt: nowTime()
     }));
+    const requestId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const userMessage: ChatMessageType = {
       id: `user-${Date.now()}`,
+      requestId,
       role: "user",
       content: text,
       createdAt: nowTime(),
@@ -799,9 +1234,21 @@ export function ChatPage() {
     const localFilePendingMessage = !localImagePendingMessage
       ? createLocalFilePendingMessage(text, selectedContentTool)
       : null;
+    if (localImagePendingMessage) {
+      localImagePendingMessage.requestId = requestId;
+      localImagePendingMessage.streamStatus = "pending";
+      localImagePendingMessage.statusText = "正在理解你的需求";
+    }
+    if (localFilePendingMessage) {
+      localFilePendingMessage.requestId = requestId;
+      localFilePendingMessage.streamStatus = "pending";
+      localFilePendingMessage.statusText = "正在理解你的需求";
+    }
+    const streamingAssistantMessage = localImagePendingMessage || localFilePendingMessage ? null : createStreamingAssistantMessage(requestId);
     const apiMessages = [...messages, userMessage];
     const localPendingMessage = localImagePendingMessage || localFilePendingMessage;
-    const nextMessages = localPendingMessage ? [...apiMessages, localPendingMessage] : apiMessages;
+    const pendingAssistantMessage = localPendingMessage || streamingAssistantMessage;
+    const nextMessages = localPendingMessage ? [...apiMessages, localPendingMessage] : streamingAssistantMessage ? [...apiMessages, streamingAssistantMessage] : apiMessages;
 
     setMessagesByConversation((current) => ({ ...current, [conversationId]: nextMessages }));
     updateConversationAfterSend(conversationId, text);
@@ -809,17 +1256,22 @@ export function ChatPage() {
     setAttachments([]);
     setActiveView("chat");
     setLoading(true);
+    currentStreamingAssistantIdRef.current = pendingAssistantMessage?.id || null;
+    currentStreamingRequestIdRef.current = pendingAssistantMessage ? requestId : null;
+    streamingFinalizedRef.current = false;
+    setRuntimeStatusSteps(["正在理解你的需求", "正在整理上下文", "正在判断是否需要工具"]);
+    setAgentDebugTrace(null);
     setLoadingLabel(
       webSearchEnabled && likelyNeedsWebSearch(text)
-        ? "Nexus AI 正在搜索网页并筛选来源"
+        ? "正在搜索网页并筛选来源"
         : selectedContentTool !== "image" && hasImageAttachments(sentAttachments)
-          ? "Nexus AI 正在理解图片内容"
+          ? "正在理解图片内容"
         : selectedContentTool === "image"
-          ? "Nexus AI 正在创建图像任务"
-          : "Nexus AI 正在思考"
+          ? "正在创建图片任务"
+          : "正在分析上下文"
     );
 
-    const result = await requestAssistantReply(apiMessages, pendingAttachments);
+    const result = await requestAssistantReply(apiMessages, pendingAttachments, pendingAssistantMessage?.id, requestId);
 
     if (result.failed) {
       if (localPendingMessage) {
@@ -828,14 +1280,25 @@ export function ChatPage() {
           [conversationId]: apiMessages
         }));
       }
+      if (streamingAssistantMessage) {
+        setMessagesByConversation((current) => ({
+          ...current,
+          [conversationId]: apiMessages
+        }));
+      }
       setInput(rawInput);
       setAttachments(pendingAttachments);
       setLoading(false);
+      setRuntimeStatusSteps([]);
+      currentStreamingAssistantIdRef.current = null;
+      currentStreamingRequestIdRef.current = null;
       return;
     }
 
     const data = result.data;
     const persistedConversationId = data.conversationId || conversationId;
+    const streamFinalAlreadyApplied = result.handledInStream === true;
+    const pendingAssistantId = pendingAssistantMessage?.id || "";
     const assistantMessage: ChatMessageType = revealAssistantMessage(data.assistantMessage || {
       id: `assistant-${Date.now()}`,
       role: "assistant",
@@ -849,14 +1312,40 @@ export function ChatPage() {
         referenceImages
       };
     }
+    const assistantMessageForPending: ChatMessageType = pendingAssistantMessage
+      ? { ...assistantMessage, clientKey: pendingAssistantMessage.clientKey || pendingAssistantId }
+      : assistantMessage;
+
+    if (streamFinalAlreadyApplied) {
+      if (persistedConversationId !== conversationId) {
+        setMessagesByConversation((current) => {
+          const next = { ...current };
+          delete next[conversationId];
+          next[persistedConversationId] = current[conversationId] || nextMessages;
+          return next;
+        });
+        setActiveConversationId(persistedConversationId);
+      }
+      if (data.conversation) {
+        window.dispatchEvent(new Event("nexus-chat-conversations-updated"));
+        setDraftConversation(createEmptyConversation());
+      }
+      setAttachments([]);
+      setLoading(false);
+      setLoadingLabel("正在理解你的需求");
+      currentStreamingAssistantIdRef.current = null;
+      currentStreamingRequestIdRef.current = null;
+      window.setTimeout(() => setRuntimeStatusSteps([]), 900);
+      return;
+    }
 
     if (persistedConversationId !== conversationId) {
       setMessagesByConversation((current) => {
         const next = { ...current };
         delete next[conversationId];
-        next[persistedConversationId] = localPendingMessage
+        next[persistedConversationId] = pendingAssistantMessage
           ? (current[conversationId] || nextMessages).map((message) =>
-              message.id === localPendingMessage.id ? assistantMessage : message
+              message.id === pendingAssistantId ? assistantMessageForPending : message
             )
           : [...apiMessages, assistantMessage];
         return next;
@@ -865,9 +1354,9 @@ export function ChatPage() {
     } else {
       setMessagesByConversation((current) => ({
         ...current,
-        [persistedConversationId]: localPendingMessage
+        [persistedConversationId]: pendingAssistantMessage
           ? (current[persistedConversationId] || []).map((message) =>
-              message.id === localPendingMessage.id ? assistantMessage : message
+              message.id === pendingAssistantId ? assistantMessageForPending : message
             )
           : [...(current[persistedConversationId] || []), assistantMessage]
       }));
@@ -879,7 +1368,8 @@ export function ChatPage() {
     }
     setAttachments([]);
     setLoading(false);
-    setLoadingLabel("Nexus AI 正在思考");
+    setLoadingLabel("正在理解你的需求");
+    window.setTimeout(() => setRuntimeStatusSteps([]), 900);
   }
 
   async function retryImageGeneration(imageGeneration: ChatImageGenerationMeta) {
@@ -894,11 +1384,15 @@ export function ChatPage() {
     const retryPrompt = prompt.trim();
     const userMessage: ChatMessageType = {
       id: `user-image-retry-${Date.now()}`,
+      requestId: `image-retry-${Date.now()}`,
       role: "user",
       content: retryPrompt,
       createdAt: nowTime()
     };
     const localImagePendingMessage = createLocalImagePendingMessage(retryPrompt, imageGeneration.referenceImages || []);
+    localImagePendingMessage.requestId = userMessage.requestId;
+    localImagePendingMessage.streamStatus = "pending";
+    localImagePendingMessage.statusText = "正在理解你的需求";
     localImagePendingMessage.imageGeneration = {
       ...localImagePendingMessage.imageGeneration!,
       retryCount: (imageGeneration.retryCount || 0) + 1
@@ -910,9 +1404,14 @@ export function ChatPage() {
     updateConversationAfterSend(conversationId, retryPrompt);
     setActiveView("chat");
     setLoading(true);
-    setLoadingLabel("Nexus AI 正在重新创建图像任务");
+    setLoadingLabel("正在重新创建图片任务");
+    setRuntimeStatusSteps(["正在理解你的需求", "正在检查当前图片任务", "正在创建任务"]);
+    setAgentDebugTrace(null);
+    currentStreamingAssistantIdRef.current = localImagePendingMessage.id;
+    currentStreamingRequestIdRef.current = userMessage.requestId || localImagePendingMessage.id;
+    streamingFinalizedRef.current = false;
 
-    const result = await requestAssistantReply(apiMessages, [], { webSearch: webSearchEnabled, contentMode: "image" });
+    const result = await requestAssistantReply(apiMessages, [], localImagePendingMessage.id, userMessage.requestId || localImagePendingMessage.id, { webSearch: webSearchEnabled, contentMode: "image" });
     if (result.failed) {
       setMessagesByConversation((current) => ({
         ...current,
@@ -931,11 +1430,13 @@ export function ChatPage() {
         )
       }));
       setLoading(false);
+      setRuntimeStatusSteps([]);
       return;
     }
 
     const data = result.data;
     const persistedConversationId = data.conversationId || conversationId;
+    const streamFinalAlreadyApplied = result.handledInStream === true;
     const assistantMessage: ChatMessageType = revealAssistantMessage(data.assistantMessage || {
       id: `assistant-image-retry-${Date.now()}`,
       role: "assistant",
@@ -950,6 +1451,32 @@ export function ChatPage() {
         retryCount: (imageGeneration.retryCount || 0) + 1
       };
     }
+    const assistantMessageForRetry: ChatMessageType = {
+      ...assistantMessage,
+      clientKey: localImagePendingMessage.clientKey || localImagePendingMessage.id
+    };
+
+    if (streamFinalAlreadyApplied) {
+      if (persistedConversationId !== conversationId) {
+        setMessagesByConversation((current) => {
+          const next = { ...current };
+          delete next[conversationId];
+          next[persistedConversationId] = current[conversationId] || [];
+          return next;
+        });
+        setActiveConversationId(persistedConversationId);
+      }
+      if (data.conversation) {
+        window.dispatchEvent(new Event("nexus-chat-conversations-updated"));
+        setDraftConversation(createEmptyConversation());
+      }
+      setLoading(false);
+      setLoadingLabel("正在理解你的需求");
+      currentStreamingAssistantIdRef.current = null;
+      currentStreamingRequestIdRef.current = null;
+      window.setTimeout(() => setRuntimeStatusSteps([]), 900);
+      return;
+    }
 
     if (persistedConversationId !== conversationId) {
       setMessagesByConversation((current) => {
@@ -957,7 +1484,7 @@ export function ChatPage() {
         const next = { ...current };
         delete next[conversationId];
         next[persistedConversationId] = baseMessages.map((message) =>
-          message.id === localImagePendingMessage.id ? assistantMessage : message
+          message.id === localImagePendingMessage.id ? assistantMessageForRetry : message
         );
         return next;
       });
@@ -966,7 +1493,7 @@ export function ChatPage() {
       setMessagesByConversation((current) => ({
         ...current,
         [persistedConversationId]: (current[persistedConversationId] || []).map((message) =>
-          message.id === localImagePendingMessage.id ? assistantMessage : message
+          message.id === localImagePendingMessage.id ? assistantMessageForRetry : message
         )
       }));
     }
@@ -976,7 +1503,8 @@ export function ChatPage() {
       setDraftConversation(createEmptyConversation());
     }
     setLoading(false);
-    setLoadingLabel("Nexus AI 正在思考");
+    setLoadingLabel("正在理解你的需求");
+    window.setTimeout(() => setRuntimeStatusSteps([]), 900);
   }
 
   function handleDragEnter(event: DragEvent<HTMLElement>) {
@@ -1055,6 +1583,8 @@ export function ChatPage() {
             messages={messages}
             loading={loading && !hasLocalPendingAssistantMessage(messages)}
             loadingLabel={loadingLabel}
+            runtimeStatusSteps={runtimeStatusSteps}
+            agentDebugTrace={agentDebugTrace}
             onPreviewAttachment={setPreviewAttachment}
             onOpenFile={openFileNotice}
             onRetryImageGeneration={retryImageGeneration}

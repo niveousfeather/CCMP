@@ -72,15 +72,34 @@ export type ChatWebContext = {
   };
 };
 
+export type ChatTaskCard = {
+  kind: "task_card";
+  taskType: "ppt" | "word" | "excel" | "image" | "file-analysis" | "teaching-diagram" | "knowledge-graph";
+  status: "queued" | "running" | "completed" | "failed";
+  title: string;
+  description?: string;
+  taskId?: string;
+  downloadUrl?: string | null;
+  openUrl?: string | null;
+  retryable?: boolean;
+  failureReason?: string | null;
+};
+
 export type ChatMessage = {
   id: string;
+  clientKey?: string;
+  requestId?: string;
   role: "user" | "assistant";
   content: string;
+  streamStatus?: "pending" | "streaming" | "finalizing" | "completed" | "interrupted" | "failed";
+  streamError?: string;
   createdAt: string;
+  statusText?: string;
   reveal?: boolean;
   attachments?: ChatAttachment[];
   imageGeneration?: ChatImageGeneration | null;
   webContext?: ChatWebContext | null;
+  taskCard?: ChatTaskCard | null;
   pendingFileGeneration?: {
     taskId?: string;
     kind: "word" | "ppt";
