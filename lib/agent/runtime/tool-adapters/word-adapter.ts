@@ -10,6 +10,7 @@ import {
   resumeDeepWritingTaskMemory,
   type DeepWritingTaskMemory
 } from "@/lib/agent/runtime/deep-writing-memory";
+import { runDeepWritingDraft } from "@/lib/agent/runtime/deep-writing-runner";
 import type { GeneratedAgentFile } from "@/lib/agent/types";
 import type { ConversationFileReference, ToolAdapter } from "@/lib/agent/runtime/tool-adapters/types";
 import * as storage from "@/lib/storage";
@@ -212,34 +213,48 @@ async function buildDeepWritingMemory(context: Parameters<ToolAdapter["execute"]
   });
 }
 
-function deepWritingRunResult(memory: DeepWritingTaskMemory) {
-  const panelState = createDeepWritingPanelState(memory);
+async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Parameters<ToolAdapter["execute"]>[1]) {
+  let finalMemory = memory;
+  if (context.emitDeepWritingEvent) {
+    finalMemory = await runDeepWritingDraft({
+      memory,
+      sourceText: memory.sourceSummary,
+      conversationSummary: memory.sourceSummary,
+      emit: context.emitDeepWritingEvent
+    });
+    rememberDeepWritingMemory(finalMemory);
+  }
+
+  const panelState = createDeepWritingPanelState(finalMemory);
   const events = [
     createDeepWritingEvent("deep_writing_started", {
-      stage: memory.currentStage,
-      taskId: memory.taskId,
-      title: memory.topic,
+      stage: finalMemory.currentStage,
+      taskId: finalMemory.taskId,
+      title: finalMemory.topic,
       progress: panelState.progress
     }),
     createDeepWritingEvent("deep_writing_source_plan", {
-      stage: memory.currentStage,
-      keywords: memory.searchPlan.keywords,
-      questions: memory.searchPlan.questions,
-      status: memory.searchPlan.status
+      stage: finalMemory.currentStage,
+      keywords: finalMemory.searchPlan.keywords,
+      questions: finalMemory.searchPlan.questions,
+      status: finalMemory.searchPlan.status
     }),
     createDeepWritingEvent("deep_writing_outline", {
-      stage: memory.currentStage,
+      stage: finalMemory.currentStage,
       outline: panelState.outline,
       progress: panelState.progress
     })
   ];
+  const completed = finalMemory.currentStage === "completed";
 
   return {
     result: {
-      content: "已进入深度写作准备阶段：我会先整理写作计划、资料摘要和章节大纲。",
+      content: completed
+        ? "深度写作草稿已完成，已在右侧面板展示。下一步可生成 Word 文档。"
+        : "已进入深度写作准备阶段：我会先整理写作计划、资料摘要和章节大纲。",
       modelUsed: "NexusAI Deep Writing Planner",
       providerUsed: "xheai" as const,
-      routeReason: "runtime_v2:word-adapter:deep_writing_foundation",
+      routeReason: completed ? "runtime_v2:word-adapter:deep_writing_stream" : "runtime_v2:word-adapter:deep_writing_foundation",
       fallbackUsed: false,
       extractedDocuments: [],
       generatedFiles: [],
@@ -249,16 +264,16 @@ function deepWritingRunResult(memory: DeepWritingTaskMemory) {
     runtimeMode: "adapter" as const,
     resultCard: {
       title: "深度写作",
-      description: memory.topic,
-      status: "running" as const,
+      description: finalMemory.topic,
+      status: completed ? ("completed" as const) : ("running" as const),
       taskType: "word" as const,
       retryable: true,
       mode: "deep_writing" as const,
-      deepWritingTaskId: memory.taskId,
+      deepWritingTaskId: finalMemory.taskId,
       panelAvailable: true,
       panelAutoOpen: true,
-      currentStage: memory.currentStage,
-      deepWritingTaskMemory: memory,
+      currentStage: finalMemory.currentStage,
+      deepWritingTaskMemory: finalMemory,
       deepWritingPanelState: panelState
     }
   };
@@ -290,7 +305,7 @@ export const wordAdapter: ToolAdapter = {
     const deepWritingMemory = await buildDeepWritingMemory(context);
     if (deepWritingMemory) {
       rememberDeepWritingMemory(deepWritingMemory);
-      return deepWritingRunResult(deepWritingMemory);
+      return deepWritingRunResult(deepWritingMemory, context);
     }
 
     const request = await buildWordRequest(context);

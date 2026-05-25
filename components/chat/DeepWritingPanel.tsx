@@ -162,7 +162,7 @@ export function DeepWritingPanel({
             ) : (
               <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[var(--color-text-muted)]">
                 <ChevronRight className="h-3.5 w-3.5" />
-                等待文件
+                下阶段生成 Word
               </span>
             )}
           </div>

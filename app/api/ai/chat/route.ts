@@ -107,6 +107,7 @@ type ChatStreamWriter = {
   runtimeStatus: (stage: string, message: string) => void;
   token: (text: string) => void;
   toolStatus: (message: string) => void;
+  deepWritingEvent: (event: string, data: Record<string, unknown>) => void;
   final: (data: Record<string, unknown>) => void;
   error: (message: string) => void;
 };
@@ -1744,6 +1745,7 @@ async function streamChatResponse({
           runtimeStage = "calling_tool";
           sendEvent("tool_status", { message });
         },
+        deepWritingEvent: (event, data) => sendEvent(event, data),
         final: (data) => {
           finalSent = true;
           sendEvent("final", data);
@@ -2132,6 +2134,7 @@ async function streamChatResponse({
                 signal: abortController.signal,
                 timeoutMs,
                 activeTask,
+                emitDeepWritingEvent: (event) => writer.deepWritingEvent(event.type, event.payload),
                 runLegacyAgent,
                 runImageGeneration,
                 runChatAnswer: () =>
