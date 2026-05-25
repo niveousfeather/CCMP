@@ -28,7 +28,6 @@ const defaultForm: CourseAbilityGraphInput = {
   region: "重庆"
 };
 
-const DATA_NOTICE = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。";
 type CapabilityMapViewMode = "overview" | "mapping";
 
 function normalizeForm(form: CourseAbilityGraphInput): CourseAbilityGraphInput {
@@ -225,9 +224,9 @@ export function CapabilityMapEntry() {
 
   return (
     <main className={cn(styles.root, "capability-map-root min-h-screen")}>
-      <div className="mx-auto w-full max-w-[1780px] px-4 py-5 lg:px-6">
-        <header className="mb-5 rounded-3xl border border-blue-100 bg-white px-5 py-4 shadow-[0_12px_36px_rgba(37,99,235,0.06)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="w-full px-4 py-4 lg:px-5">
+        <header className="mb-4 rounded-3xl border border-blue-100 bg-white px-5 py-4 shadow-[0_12px_36px_rgba(37,99,235,0.06)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
             <div>
               <p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
                 <ShieldCheck className="h-4 w-4" />
@@ -236,9 +235,6 @@ export function CapabilityMapEntry() {
               <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
                 重庆地区影视动画专业《{graph.course.courseName}》课程能力图谱
               </h1>
-            </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-900">
-              {DATA_NOTICE}
             </div>
           </div>
         </header>
