@@ -1,6 +1,15 @@
 import { randomUUID } from "node:crypto";
 
 import { parseDocuments } from "@/lib/document-processing/parser";
+import { detectDeepWritingMode } from "@/lib/agent/runtime/deep-writing-detector";
+import {
+  createDeepWritingEvent,
+  createDeepWritingPanelState,
+  createDeepWritingTaskMemory,
+  isDeepWritingResumeRequest,
+  resumeDeepWritingTaskMemory,
+  type DeepWritingTaskMemory
+} from "@/lib/agent/runtime/deep-writing-memory";
 import type { GeneratedAgentFile } from "@/lib/agent/types";
 import type { ConversationFileReference, ToolAdapter } from "@/lib/agent/runtime/tool-adapters/types";
 import * as storage from "@/lib/storage";
@@ -13,8 +22,10 @@ const WORD_MISSING_SUBJECT_MESSAGE = "请补充 Word 文档的主题、文体和
 const WORD_MISSING_FILE_MESSAGE = "请先上传需要整理成 Word 的文件，或补充当前对话中的材料。";
 const WORD_MISSING_CONTENT_MESSAGE = "请提供要写入 Word 的正文材料、对话总结或明确主题。";
 const WORD_MISSING_ACTIVE_TASK_MESSAGE = "请先在当前对话里生成一个 Word 任务，我再继续完善。";
+const DEEP_WRITING_MISSING_ACTIVE_TASK_MESSAGE = "请先在当前对话里启动一个深度写作任务，我再继续。";
 const MAX_WORD_TASK_MEMORY_ENTRIES = 100;
 const wordTaskMemoryByConversation = new Map<string, WordTaskMemory>();
+const deepWritingMemoryByConversation = new Map<string, DeepWritingTaskMemory>();
 
 function datePath() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -32,6 +43,10 @@ function referencesPriorWordTask(text: string) {
   return /继续刚才的\s*Word|继续生成这个文档|把刚才的\s*Word\s*补完整|根据刚才的\s*Word\s*继续写/i.test(text);
 }
 
+function referencesPriorDeepWritingTask(text: string) {
+  return isDeepWritingResumeRequest(text);
+}
+
 function currentConversationWordMemory(context: Parameters<ToolAdapter["execute"]>[1]): WordTaskMemory | null {
   const memory = context.wordTaskMemory || wordTaskMemoryByConversation.get(context.conversationId) || null;
   if (!memory || memory.conversationId !== context.conversationId) return null;
@@ -43,6 +58,19 @@ function rememberWordTaskMemory(memory: WordTaskMemory) {
   if (wordTaskMemoryByConversation.size <= MAX_WORD_TASK_MEMORY_ENTRIES) return;
   const oldestKey = wordTaskMemoryByConversation.keys().next().value;
   if (oldestKey) wordTaskMemoryByConversation.delete(oldestKey);
+}
+
+function currentConversationDeepWritingMemory(context: Parameters<ToolAdapter["execute"]>[1]): DeepWritingTaskMemory | null {
+  const memory = context.deepWritingTaskMemory || deepWritingMemoryByConversation.get(context.conversationId) || null;
+  if (!memory || memory.conversationId !== context.conversationId) return null;
+  return memory;
+}
+
+function rememberDeepWritingMemory(memory: DeepWritingTaskMemory) {
+  deepWritingMemoryByConversation.set(memory.conversationId, memory);
+  if (deepWritingMemoryByConversation.size <= MAX_WORD_TASK_MEMORY_ENTRIES) return;
+  const oldestKey = deepWritingMemoryByConversation.keys().next().value;
+  if (oldestKey) deepWritingMemoryByConversation.delete(oldestKey);
 }
 
 function sanitizeTitle(value: string) {
@@ -150,11 +178,100 @@ async function buildWordRequest(context: Parameters<ToolAdapter["execute"]>[1]):
   };
 }
 
+async function buildDeepWritingMemory(context: Parameters<ToolAdapter["execute"]>[1]): Promise<DeepWritingTaskMemory | null> {
+  const existingMemory = currentConversationDeepWritingMemory(context);
+  if (referencesPriorDeepWritingTask(context.userText) && existingMemory) {
+    return resumeDeepWritingTaskMemory(existingMemory, context.userText);
+  }
+
+  const uploadedSourceText = await parseUploadedSourceText(context.files);
+  const conversationText = conversationSourceText(context.conversationFiles);
+  const recentSummary = collectRecentSummary(context.messages, context.userText);
+  const sourceText = uploadedSourceText || conversationText || recentSummary || "";
+  const sourceFileNames = [
+    ...context.files.map((file) => file.name),
+    ...(context.conversationFiles || []).map((file) => file.fileName)
+  ].filter(Boolean);
+  const detection = detectDeepWritingMode({
+    userText: context.userText,
+    targetTool: "word",
+    sourceText,
+    fileCount: Math.max(context.files.length, context.conversationFiles?.length || 0),
+    sourceFileNames
+  });
+
+  if (!detection.enabled) return null;
+
+  return createDeepWritingTaskMemory({
+    conversationId: context.conversationId,
+    originalInstruction: context.userText,
+    topic: inferTitle(context.userText, sourceText),
+    detection,
+    sourceFileNames,
+    sourceSummary: sourceText
+  });
+}
+
+function deepWritingRunResult(memory: DeepWritingTaskMemory) {
+  const panelState = createDeepWritingPanelState(memory);
+  const events = [
+    createDeepWritingEvent("deep_writing_started", {
+      stage: memory.currentStage,
+      taskId: memory.taskId,
+      title: memory.topic,
+      progress: panelState.progress
+    }),
+    createDeepWritingEvent("deep_writing_source_plan", {
+      stage: memory.currentStage,
+      keywords: memory.searchPlan.keywords,
+      questions: memory.searchPlan.questions,
+      status: memory.searchPlan.status
+    }),
+    createDeepWritingEvent("deep_writing_outline", {
+      stage: memory.currentStage,
+      outline: panelState.outline,
+      progress: panelState.progress
+    })
+  ];
+
+  return {
+    result: {
+      content: "已进入深度写作准备阶段：我会先整理写作计划、资料摘要和章节大纲。",
+      modelUsed: "NexusAI Deep Writing Planner",
+      providerUsed: "xheai" as const,
+      routeReason: "runtime_v2:word-adapter:deep_writing_foundation",
+      fallbackUsed: false,
+      extractedDocuments: [],
+      generatedFiles: [],
+      pendingTask: null,
+      defaultsApplied: ["deep_writing_foundation", ...events.map((event) => event.type)]
+    },
+    runtimeMode: "adapter" as const,
+    resultCard: {
+      title: "深度写作",
+      description: memory.topic,
+      status: "running" as const,
+      taskType: "word" as const,
+      retryable: true,
+      mode: "deep_writing" as const,
+      deepWritingTaskId: memory.taskId,
+      panelAvailable: true,
+      panelAutoOpen: true,
+      currentStage: memory.currentStage,
+      deepWritingTaskMemory: memory,
+      deepWritingPanelState: panelState
+    }
+  };
+}
+
 export const wordAdapter: ToolAdapter = {
   id: "word-adapter",
   targetTool: "word",
   canHandle: (decision) => decision.targetTool === "word",
   validateInputs: (decision, context) => {
+    if (referencesPriorDeepWritingTask(context.userText) && !currentConversationDeepWritingMemory(context)) {
+      return { ok: false, missingInputs: ["active_deep_writing_task"], message: DEEP_WRITING_MISSING_ACTIVE_TASK_MESSAGE };
+    }
     if (referencesPriorWordTask(context.userText) && !currentConversationWordMemory(context)) {
       return { ok: false, missingInputs: ["active_word_task"], message: WORD_MISSING_ACTIVE_TASK_MESSAGE };
     }
@@ -170,6 +287,12 @@ export const wordAdapter: ToolAdapter = {
     return { ok: true };
   },
   execute: async (_decision, context) => {
+    const deepWritingMemory = await buildDeepWritingMemory(context);
+    if (deepWritingMemory) {
+      rememberDeepWritingMemory(deepWritingMemory);
+      return deepWritingRunResult(deepWritingMemory);
+    }
+
     const request = await buildWordRequest(context);
     const result = await generateWordDocumentFromRequest(request);
     rememberWordTaskMemory(result.wordTaskMemory);

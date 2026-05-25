@@ -1,5 +1,6 @@
 import type { AgentRuntimeDecision, AgentRuntimeTargetTool } from "@/lib/agent/runtime/types";
 import type { AgentRunResult, AgentToolSelection } from "@/lib/agent/types";
+import type { DeepWritingPanelState, DeepWritingTaskMemory, DeepWritingTaskStage } from "@/lib/agent/runtime/deep-writing-memory";
 import type { WordTaskMemory } from "@/lib/word-engine";
 
 export type AgentActiveTaskKind = "image" | "teaching-diagram" | "ppt" | "word" | "excel" | "file-analysis" | "knowledge-graph";
@@ -45,6 +46,13 @@ export type ToolAdapterResultCard = {
   retryable?: boolean;
   failureReason?: string | null;
   wordTaskMemory?: WordTaskMemory | null;
+  mode?: "deep_writing";
+  deepWritingTaskId?: string;
+  panelAvailable?: boolean;
+  panelAutoOpen?: boolean;
+  currentStage?: DeepWritingTaskStage;
+  deepWritingTaskMemory?: DeepWritingTaskMemory | null;
+  deepWritingPanelState?: DeepWritingPanelState | null;
 };
 
 export type ToolAdapterExecutionResult = {
@@ -68,6 +76,7 @@ export type ToolAdapterContext = {
   timeoutMs?: number;
   activeTask?: AgentActiveTask | null;
   wordTaskMemory?: WordTaskMemory | null;
+  deepWritingTaskMemory?: DeepWritingTaskMemory | null;
   runLegacyAgent: () => Promise<AgentRunResult>;
   runImageGeneration: () => Promise<{ result: AgentRunResult; imageGeneration: unknown | null }>;
   runChatAnswer: () => Promise<AgentRunResult>;
