@@ -1752,3 +1752,89 @@ npm.cmd exec -- tsx scripts/agent-runtime/check-file-analysis-upload.ts
 npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
 npm.cmd exec -- tsc --noEmit
 ```
+## 30I. Word 链路收口文档快照
+
+### 链路收口结论
+
+Word 生成现在是聊天原生能力，但不是前端独立页面，也不是新的底层 docx 生成器。当前链路为：
+
+```text
+Runtime 判断
+-> word-adapter
+-> word-engine
+-> lib/document
+-> taskCard / downloadUrl
+```
+
+实现边界：
+
+- `intent-planner` / `skill-router` / `execution-gate` 固定“何时生成 Word、何时只聊天、何时 file-analysis、何时追问”。
+- `word-adapter` 从当前请求、当前 conversation 文件、`recentSummary`、`wordTaskMemory` 组装 `WordRequest`。
+- `lib/word-engine/**` 构建确定性 `WordPlan` / `WordContent`，做标题清洗、正文组织、污染词过滤和 docx 生成包装。
+- `lib/document/**` 仍是底层 docx 渲染实现，本轮未重写。
+- 生成结果通过统一 taskCard / generated file card 展示，下载入口使用 `downloadUrl`。
+
+### 已完成能力
+
+- Word 咨询不生成文件：`Word 怎么排版？`、`Word 目录怎么做？` 等只回答聊天。
+- 明确 Word/docx 生成：`帮我生成一份 Word`、`写一份可下载的 Word 报告`、`导出成 docx` 等进入 Word。
+- 上传 txt 内容进入正文：真实 E2E 已验证姓名、分数和说明文本进入 docx。
+- 文件总结优先 file-analysis：`根据这个文件总结一下` 不生成 docx。
+- 同 conversation 续写：当前 conversation 有 `wordTaskMemory` 时可继续当前 Word 任务。
+- 新 conversation 不继承旧任务：没有当前 conversation Word task memory 时追问 `active_word_task`。
+- docx 可下载可打开：真实 API E2E 下载文件通过基础 docx package 校验。
+- 污染词清理：正文不得包含 AI 过程稿、内部提示语、`wordTaskMemory`、stage、mock、placeholder、TODO 等内容。
+
+### 关键提交记录
+
+- `4c4f9f0` - `test(agent): add word runtime routing regression`
+- `c5d9855` - `feat(word): add chat native word engine wrapper`
+- `5aec347` - `feat(word): route adapter through word engine`
+- `58fe810` - `feat(word): add task memory and resume state`
+- `0163132` - `fix(word): improve generated document content quality`
+- `4ca3f50` - `test(word): verify real chat document generation`
+- `1487dde` - `test(word): complete authenticated chat e2e validation`
+
+### 当前不支持边界
+
+- 不做 Word 独立编辑器页面。
+- 不做在线 Word 编辑器。
+- 不做直接修改已有 docx 的复杂样式能力。
+- 不做自动目录第一版。
+- 不做页眉页脚高级控制第一版。
+- 不做多模板选择第一版。
+- 不做长文分章节真实模型续写第一版。
+
+### 后续建议
+
+- Word 模板风格：增加正式报告、培训方案、会议纪要、总结材料等 preset。
+- 自动目录：在底层 docx 能力允许时接入 TOC 字段和标题层级。
+- 页眉页脚：增加基础页码、标题、日期、单位名称控制。
+- 表格增强：增强分类整理、风险与应对、任务清单等表格的结构和样式。
+- docx 上传后修改：单独设计“解析已有 docx -> 受控修改 -> 导出新版”的能力，不混入当前生成链路。
+- 长文分段生成：后续如接入真实模型续写，需要继续保持当前 conversation 边界，不跨会话找文件或任务。
+
+### 验证快照
+
+30H 验证通过：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-real-chat.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-quality.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-memory.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-adapter.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-engine.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-runtime.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
+npm.cmd exec -- tsc --noEmit
+npm.cmd run build
+```
+
+真实登录 API E2E 已覆盖：
+
+- 明确 Word 请求生成 completed taskCard；
+- 点击/请求 `downloadUrl` 可获得 `.docx`；
+- docx 可被基础包校验读取；
+- 上传 txt 事实进入正文；
+- 文件总结不生成 Word；
+- 普通 Word 咨询不生成 taskCard。

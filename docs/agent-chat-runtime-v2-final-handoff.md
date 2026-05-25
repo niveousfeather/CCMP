@@ -501,3 +501,90 @@ npm.cmd exec -- tsx scripts/agent-runtime/check-excel-engine.ts
 - 扩展预算、项目进度、客户跟进等模板；
 - 单独设计 Excel 修改能力矩阵；
 - 若后续需要复杂图表和更强样式，再评估 `exceljs` 或专用 OOXML 写入层。
+## 30I. Word 链路收口快照
+
+### 当前完整链路
+
+聊天原生 Word 生成当前已从旧 legacy 生成路径收口到独立包装链路：
+
+```text
+用户消息
+-> Agent Runtime V2 intent-planner / skill-router / execution-gate
+-> word-adapter
+-> lib/word-engine
+-> lib/document/**
+-> generatedFiles / taskCard.downloadUrl
+-> 前端生成文件卡片下载 .docx
+```
+
+职责边界：
+
+- Runtime 只判断是否真的需要 Word，以及是否缺主题、文件或当前任务。
+- `word-adapter` 只负责组装 `WordRequest`、读取当前 conversation 文件/摘要/任务记忆、调用 `word-engine`、返回 `taskCard` 和下载元数据。
+- `lib/word-engine/**` 是聊天原生 Word 的独立后端包装层，不调用真实模型，不重写底层 docx 生成器。
+- `lib/document/**` 继续负责底层 docx 渲染、样式和包结构。
+- Chat UI 继续使用统一生成文件卡片和现有下载入口，不新增 Word 独立页面。
+
+### 已完成能力
+
+- Word 咨询不生成文件，例如“Word 怎么排版？”只走普通聊天回答。
+- 明确 Word / docx 生成会进入 `word-adapter`，生成可下载 `.docx`。
+- 上传 txt 后生成 Word 时，文件真实内容会进入正文。
+- “根据这个文件总结一下”等总结/分析请求优先进入 file-analysis，不误生成 Word。
+- 同一 conversation 内支持基于 `wordTaskMemory` 续写当前 Word 任务。
+- 新 conversation 不继承旧 Word 任务、旧文件或长期用户记忆。
+- 真实 API E2E 已验证 taskCard、downloadUrl、docx package 可读和正文非空。
+- 正文清理污染词，避免出现 AI 过程稿、`wordTaskMemory`、stage、mock、placeholder、TODO 等内部内容。
+
+### 关键提交
+
+- `4c4f9f0` - 30B Word routing regression：固定 Word 生成/咨询/file-analysis/追问边界。
+- `c5d9855` - 30C word-engine：新增 `lib/word-engine/**` 包装层，复用 `lib/document/**`。
+- `5aec347` - 30D adapter 接入：`word-adapter` 默认调用 `word-engine`，停止默认 legacy Word 生成。
+- `58fe810` - 30E task memory/resume：增加 `wordTaskMemory` 和同 conversation 续写状态。
+- `0163132` - 30F content quality：优化正式报告/方案/总结正文结构和污染词清理。
+- `4ca3f50` - 30G real chat validation：补本地真实聊天链路验收脚本。
+- `1487dde` - 30H authenticated chat E2E：补真实登录 API E2E，修正 Word 真实聊天走 adapter 下载链路。
+
+### 当前不支持
+
+- 不做 Word 独立编辑器页面。
+- 不做复杂在线 Word 编辑体验。
+- 不做已有 docx 的复杂样式级修改。
+- 不做自动目录、页眉页脚等高级版式控制。
+- 不做多模板选择。
+- 不做长文分章节真实模型续写。
+
+### 验证结果
+
+30H 后 Word 相关验证全部通过：
+
+```bash
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-real-chat.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-quality.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-memory.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-adapter.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-engine.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-word-runtime.ts
+npm.cmd exec -- tsx scripts/agent-runtime/check-runtime-v2.ts
+npm.cmd exec -- tsc --noEmit
+npm.cmd run build
+```
+
+`check-word-real-chat.ts` 在设置 `AGENT_E2E_COOKIE` 后已跑真实 `/api/ai/chat`，覆盖：
+
+- Word 咨询不生成 taskCard；
+- 明确 Word 请求生成 completed Word taskCard；
+- 下载 URL 可用且不是内部 task polling URL；
+- 下载 `.docx` 可被基础 docx/zip 校验读取；
+- 上传 txt 中的 `张三`、`李四`、`90`、`85`、`AI 教育测试数据` 进入正文；
+- 文件总结不生成 Word。
+
+### 后续建议
+
+- 增加 Word 模板风格预设。
+- 增加自动目录。
+- 增加页眉页脚基础控制。
+- 增强表格生成和表格样式。
+- 设计上传 docx 后的受控修改能力。
+- 设计长文分段生成和恢复策略，但继续保持当前 conversation 边界。
