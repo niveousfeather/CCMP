@@ -68,6 +68,7 @@ async function generateText(prompt: string) {
     conversationId: "lesson-plan-engine",
     title: prompt,
     instruction: prompt,
+    contentOrigin: "generated_content",
     outputFileName: prompt,
     stylePreset: "professional",
     language: "zh-CN"

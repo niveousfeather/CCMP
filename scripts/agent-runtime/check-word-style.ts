@@ -55,7 +55,10 @@ function docxParts(buffer: Buffer) {
 }
 
 async function generate(request: WordRequest) {
-  const result = await generateWordDocumentFromRequest(request);
+  const result = await generateWordDocumentFromRequest({
+    ...request,
+    contentOrigin: request.contentOrigin || (request.sourceText ? "existing_content" : "generated_content")
+  });
   return { result, ...docxParts(result.buffer) };
 }
 

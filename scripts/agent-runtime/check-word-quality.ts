@@ -47,7 +47,10 @@ function docxText(buffer: Buffer) {
 }
 
 async function generateText(input: Parameters<typeof generateWordDocumentFromRequest>[0]) {
-  const result = await generateWordDocumentFromRequest(input);
+  const result = await generateWordDocumentFromRequest({
+    ...input,
+    contentOrigin: input.contentOrigin || "generated_content"
+  });
   return { result, text: docxText(result.buffer) };
 }
 
@@ -67,6 +70,7 @@ const checks: Check[] = [
         title: "学生成绩整理报告",
         instruction: "根据 txt 内容生成 Word 报告",
         sourceText: "姓名，成绩；张三，90；李四，85；关键词：过程性评价、学习反馈。",
+        contentOrigin: "existing_content",
         outputFileName: "学生成绩整理报告"
       });
       assertIncludesAll(text, ["张三", "90", "李四", "85", "过程性评价"], "docx body");
@@ -91,6 +95,7 @@ const checks: Check[] = [
         title: "根据这个文件整理成 Excel 文档",
         instruction: "请把当前资料整理成 Word",
         sourceText: "资料主题为校园阅读活动，包含活动目标、参与年级和成果展示。",
+        contentOrigin: "existing_content",
         outputFileName: "根据这个文件整理成 Excel 文档"
       });
       const titleSlice = text.slice(0, 80);
@@ -164,6 +169,7 @@ const checks: Check[] = [
         title: "内部字段隔离报告",
         instruction: "生成 Word 报告",
         sourceText: "wordTaskMemory completedSections pendingSections currentStage resumeInstruction failureReason 内部任务。",
+        contentOrigin: "existing_content",
         outputFileName: "内部字段隔离报告"
       });
       assertExcludesAll(text, forbiddenTerms, "docx body");

@@ -277,10 +277,13 @@ const checks: Check[] = [
     }
   },
   {
-    name: "ordinary Word does not collect deep writing sources",
+    name: "ordinary Word write uses light deep writing without source search",
     async run() {
       const result = await executeRuntimeTool(makeDecision(), context("帮我生成一份 Word，主题是 AI 教育培训方案", "ordinary-source"));
-      assert("resultCard" in result && result.resultCard?.mode !== "deep_writing", "ordinary Word should not enter deep writing");
+      assert("resultCard" in result && result.resultCard?.mode === "deep_writing", "ordinary Word write should enter light deep writing");
+      const memory = result.resultCard.deepWritingTaskMemory;
+      assert(memory?.writingMode === "light", "ordinary Word write should use light writing mode");
+      assert(memory.searchPlan.status === "skipped", "light writing should not require source search");
     }
   },
   {

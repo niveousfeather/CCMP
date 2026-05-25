@@ -23,6 +23,9 @@ function planToContent(plan: ReturnType<typeof buildWordPlan>): WordContent {
 
 export async function generateWordDocumentFromRequest(request: WordRequest) {
   let memory = createWordTaskMemory(request, "planning");
+  if (!request.contentOrigin || request.contentOrigin === "write_from_scratch") {
+    throwWordTaskMemoryError("WRITE_FROM_SCRATCH_REQUIRES_CONTENT_GENERATION", memory);
+  }
   const validation = validateWordRequest(request);
   if (!validation.ok) {
     throwWordTaskMemoryError(validation.errors.join(" "), memory);

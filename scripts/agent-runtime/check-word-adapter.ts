@@ -1,9 +1,10 @@
-import { rm, readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { parseDocxPackage } from "@/lib/document/docx-package";
 import { planAgentRuntimeTurn, type AgentRuntimeDecision } from "@/lib/agent/runtime";
 import { executeRuntimeTool } from "@/lib/agent/runtime/tool-executor";
+import type { SafeDeepWritingEvent } from "@/lib/agent/runtime/deep-writing-runner";
 import type { ConversationFileReference, ToolAdapterContext } from "@/lib/agent/runtime/tool-adapters";
 import type { AgentRunResult } from "@/lib/agent/types";
 
@@ -36,6 +37,7 @@ function baseAgentResult(content: string): AgentRunResult {
 function plan(input: string, overrides: Partial<Parameters<typeof planAgentRuntimeTurn>[0]> = {}) {
   return planAgentRuntimeTurn({
     messages: [{ role: "user", content: input }],
+    tools: { webSearch: false, contentMode: "write" },
     ...overrides
   });
 }
@@ -60,12 +62,14 @@ function makeContext({
   userText,
   files = [],
   conversationFiles = [],
-  messages
+  messages,
+  events
 }: {
   userText: string;
   files?: File[];
   conversationFiles?: ConversationFileReference[];
   messages?: ToolAdapterContext["messages"];
+  events?: SafeDeepWritingEvent[];
 }): ToolAdapterContext {
   return {
     request: new Request("http://localhost/api/ai/chat"),
@@ -76,9 +80,14 @@ function makeContext({
     messages: messages || [{ role: "user", content: userText }],
     files,
     conversationFiles,
-    tools: { webSearch: false, contentMode: null },
+    tools: { webSearch: false, contentMode: "write" },
     signal: new AbortController().signal,
     activeTask: null,
+    emitDeepWritingEvent: events
+      ? (event) => {
+          events.push(event);
+        }
+      : undefined,
     runLegacyAgent: async () => {
       throw new Error("LEGACY_AGENT_SHOULD_NOT_BE_CALLED");
     },
@@ -123,20 +132,22 @@ async function executeWord(input: string, context: ToolAdapterContext, decision?
   return executeRuntimeTool(runtimeDecision, context);
 }
 
+function assertDeepWriting(result: Awaited<ReturnType<typeof executeRuntimeTool>>, events: SafeDeepWritingEvent[]) {
+  assert("resultCard" in result && result.resultCard?.mode === "deep_writing", "write-from-scratch should use deep writing card");
+  assert(result.resultCard.panelAutoOpen === true, "deep writing panel should auto open");
+  assert(events.some((event) => event.type === "deep_writing_started"), "deep writing should start");
+  assert(events.some((event) => event.type === "deep_writing_outline"), "deep writing should emit outline");
+  assert(events.some((event) => event.type === "deep_writing_section_delta"), "deep writing should stream section delta");
+}
+
 const checks: Check[] = [
   {
-    name: "explicit Word request generates docx task card result",
+    name: "explicit Word write request enters deep writing instead of fast docx",
     async run() {
       const input = "帮我生成一份 AI 教育培训方案 Word 文档";
-      const result = await executeWord(input, makeContext({ userText: input }));
-      const { generated, xml } = await readGeneratedDocx(result);
-      const resultCard = "resultCard" in result ? result.resultCard : null;
-      assert(result.result.generatedFiles.length === 1, "should generate exactly one docx");
-      assert(resultCard?.taskType === "word", "resultCard should be word");
-      assert(resultCard?.status === "completed", "resultCard should be completed");
-      assert(resultCard?.downloadUrl === generated.url, "resultCard should expose generated downloadUrl");
-      assert(resultCard?.wordTaskMemory?.currentStage === "completed", "resultCard should include completed wordTaskMemory");
-      assert(textFromXml(xml).includes("AI 教育"), "docx should include topic");
+      const events: SafeDeepWritingEvent[] = [];
+      const result = await executeWord(input, makeContext({ userText: input, events }));
+      assertDeepWriting(result, events);
     }
   },
   {
@@ -173,7 +184,10 @@ const checks: Check[] = [
   {
     name: "Word advice does not execute adapter",
     run() {
-      const runtimePlan = plan("Word 怎么排版？");
+      const runtimePlan = planAgentRuntimeTurn({
+        messages: [{ role: "user", content: "Word 怎么排版？" }],
+        tools: { webSearch: false, contentMode: null }
+      });
       assert(runtimePlan.decision.targetTool === "none", "Word advice should not target word");
       assert(runtimePlan.decision.nextAction === "answer_chat", "Word advice should answer chat");
     }
@@ -181,7 +195,11 @@ const checks: Check[] = [
   {
     name: "file analysis request does not generate Word",
     run() {
-      const runtimePlan = plan("根据这个文件总结一下");
+      const runtimePlan = planAgentRuntimeTurn({
+        messages: [{ role: "user", content: "根据这个文件总结一下" }],
+        files: [{ name: "source.txt", type: "text/plain", size: 120 }],
+        tools: { webSearch: false, contentMode: null }
+      });
       assert(runtimePlan.decision.targetTool === "file-analysis", "file summary should target file-analysis");
     }
   },
@@ -191,26 +209,28 @@ const checks: Check[] = [
       const noSubject = plan("帮我生成一份 Word");
       assert(noSubject.decision.nextAction === "ask_clarification", "generic Word should ask clarification");
       assert(noSubject.decision.missingInputs.includes("subject"), "generic Word should require subject");
-      const noFile = plan("根据这个文件整理成 Word");
+      const noFile = plan("根据这个文件整理成 Word", { files: [] });
       assert(noFile.decision.nextAction === "ask_clarification", "missing file should ask clarification");
       assert(noFile.decision.missingInputs.includes("file"), "missing file should require file");
     }
   },
   {
-    name: "polluted input is sanitized in generated docx",
+    name: "polluted write input is sanitized through deep writing",
     async run() {
       const input = "生成一份教师培训 Word 文档。附件依据显示：我将围绕培训主题，避免空泛套话，生成正文时优先保留要点。";
-      const result = await executeWord(input, makeContext({ userText: input }));
-      const { xml } = await readGeneratedDocx(result);
-      const text = textFromXml(xml);
-      for (const phrase of forbiddenPhrases) assert(!text.includes(phrase), `docx should not include ${phrase}`);
+      const events: SafeDeepWritingEvent[] = [];
+      const result = await executeWord(input, makeContext({ userText: input, events }));
+      assertDeepWriting(result, events);
+      const text = JSON.stringify(events);
+      for (const phrase of forbiddenPhrases) assert(!text.includes(phrase), `events should not include ${phrase}`);
     }
   },
   {
-    name: "generated docx buffer passes base zip validation",
+    name: "exported docx buffer passes base zip validation",
     async run() {
-      const input = "帮我生成一份基础校验 Word 文档";
-      const result = await executeWord(input, makeContext({ userText: input }));
+      const input = "把以上内容整理成 Word";
+      const source = "基础校验材料说明：本次文档用于验证 Word 导出链路，内容包含标题、正文、后续建议和文件打开校验。";
+      const result = await executeWord(input, makeContext({ userText: input, conversationFiles: [conversationFile(source)] }));
       const { buffer, xml } = await readGeneratedDocx(result);
       assert(buffer.length > 0, "buffer should not be empty");
       assert(xml.includes("<w:document"), "docx should include document.xml root");

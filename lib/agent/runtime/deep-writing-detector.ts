@@ -1,6 +1,6 @@
 import type { AgentRuntimeTargetTool } from "@/lib/agent/runtime/types";
 
-export type DeepWritingDocumentKind = "report" | "plan" | "research" | "manual" | "summary" | "general";
+export type DeepWritingDocumentKind = "lesson_plan" | "report" | "plan" | "research" | "manual" | "summary" | "general";
 
 export type DeepWritingDetection = {
   enabled: boolean;
@@ -22,7 +22,6 @@ export type DeepWritingDetectionInput = {
 const explicitDeepWritingTerms = [
   "深度写作",
   "深度写",
-  "深度思考",
   "深度分析",
   "调研报告",
   "高级报告",
@@ -35,35 +34,106 @@ const explicitDeepWritingTerms = [
   "白皮书",
   "行业分析",
   "分章节写",
+  "教案",
+  "教学设计",
+  "课程设计",
+  "课程方案",
+  "授课计划",
+  "授课内容完整",
+  "细致一点",
+  "详细一点",
+  "完整一点",
   "娣卞害",
   "璋冪爺",
-  "楂樼骇",
-  "瀹屾暣",
-  "鎼滈泦",
+  "鎶ュ憡",
+  "瀹屾暣鏂规",
+  "澶氳祫鏂",
   "闀挎枃",
-  "鐧界毊"
+  "鍩硅",
+  "鎵嬪唽",
+  "鐧界毊涔",
+  "琛屼笟鍒嗘瀽"
 ];
 
-const complexityTerms = ["正式报告", "完整方案", "调研报告", "培训手册", "高级一点", "详细一点", "深入一点", "长文", "白皮书", "行业分析"];
-const simpleAdviceTerms = ["怎么排版", "目录怎么做", "页眉页脚怎么设置", "一页说明"];
-const fileAnalysisOnlyTerms = ["总结一下", "分析这个文档", "提取重点", "讲了什么", "对比这两个文件"];
-const wordOutputTerms = ["word", "docx", "文档", "报告", "方案", "手册"];
+const complexityTerms = [
+  "正式报告",
+  "完整方案",
+  "调研报告",
+  "培训手册",
+  "高级一点",
+  "详细一点",
+  "细致一点",
+  "深入一点",
+  "完整一点",
+  "授课内容完整",
+  "长文",
+  "白皮书",
+  "行业分析",
+  "教案",
+  "教学设计",
+  "课程设计",
+  "课程方案",
+  "授课计划",
+  "课时",
+  "学时",
+  "分章节",
+  "姝ｅ紡鎶",
+  "瀹屾暣鏂规",
+  "璋冪爺鎶",
+  "鍩硅",
+  "鎵嬪唽",
+  "璇︾粏",
+  "闀挎枃",
+  "鐧界毊涔",
+  "琛層笟鍒嗘瀽"
+];
+
+const simpleAdviceTerms = [
+  "Word 怎么排版",
+  "word 怎么排版",
+  "标题怎么设置",
+  "目录怎么做",
+  "页眉页脚怎么设置",
+  "文档结构怎么改",
+  "怎么排版",
+  "怎么设置标题",
+  "排版建议",
+  "鎬庝箞鎺掔増",
+  "鐩綍鎬庝箞鍋",
+  "椤电湁椤佃剼"
+];
+
+const fileAnalysisOnlyTerms = ["总结一下", "分析这个文档", "提取重点", "讲了什么", "对比这两个文件", "鎬荤粨", "鍒嗘瀽", "鎻愬彇"];
+const wordOutputTerms = ["word", "docx", "文档", "报告", "方案", "手册", "教案", "教学设计", "课程设计", "鏂囨", "鎶ュ憡", "鏂规", "鎵嬪唽"];
 
 function normalize(value?: string) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function compact(value?: string) {
+  return normalize(value).replace(/\s+/g, "");
+}
+
 function includesAny(text: string, terms: string[]) {
   const lower = text.toLowerCase();
-  return terms.some((term) => lower.includes(term.toLowerCase()));
+  const compactLower = compact(text).toLowerCase();
+  return terms.some((term) => lower.includes(term.toLowerCase()) || compactLower.includes(compact(term).toLowerCase()));
 }
 
 function kindFromText(text: string): DeepWritingDocumentKind {
-  if (includesAny(text, ["调研", "研究", "行业分析", "白皮书", "research", "璋冪爺", "鐮旂┒"])) return "research";
-  if (includesAny(text, ["培训手册", "手册", "manual", "鍩硅鎵嬪唽"])) return "manual";
-  if (includesAny(text, ["方案", "计划", "实施", "项目", "plan", "鏂规", "璁″垝"])) return "plan";
-  if (includesAny(text, ["报告", "分析", "report", "鎶ュ憡"])) return "report";
-  if (includesAny(text, ["总结", "复盘", "summary", "鎬荤粨"])) return "summary";
+  if (includesAny(text, ["教案", "教学设计", "课程设计", "授课计划", "课时", "学时", "教学过程", "实训任务", "lesson plan"])) {
+    return "lesson_plan";
+  }
+  if (includesAny(text, ["璋冪爺", "鐮旂┒", "琛屼笟鍒嗘瀽", "鐧界毊涔"])) return "research";
+  if (includesAny(text, ["鍩硅", "鎵嬪唽"])) return "manual";
+  if (includesAny(text, ["鏂规", "璁″垝", "瀹炴柦", "椤圭洰"])) return "plan";
+  if (includesAny(text, ["鎶ュ憡", "鍒嗘瀽"])) return "report";
+  if (includesAny(text, ["鎬荤粨", "澶嶇洏"])) return "summary";
+  if (includesAny(text, ["调研", "研究", "行业分析", "白皮书", "research"])) return "research";
+  if (includesAny(text, ["培训手册", "手册", "manual"])) return "manual";
+  if (includesAny(text, ["方案", "计划", "实施", "项目", "plan"])) return "plan";
+  if (includesAny(text, ["报告", "分析", "report"])) return "report";
+  if (includesAny(text, ["总结", "复盘", "summary"])) return "summary";
   return "general";
 }
 
@@ -95,7 +165,7 @@ function enabled(
 }
 
 function asksForLongLength(text: string) {
-  return /写\s*[3-9]\d{3,}\s*字以上/i.test(text) || /写\s*[一二三四五六七八九十]+千字以上/i.test(text);
+  return /\d{3,}\s*字/.test(text) || /[一二三四五六七八九两]\s*千\s*字/.test(text);
 }
 
 export function detectDeepWritingMode(input: DeepWritingDetectionInput): DeepWritingDetection {

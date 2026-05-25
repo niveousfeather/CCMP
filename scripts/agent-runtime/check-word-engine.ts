@@ -37,19 +37,20 @@ function plainTextFromDocumentXml(xml: string) {
 
 const checks: Check[] = [
   {
-    name: "explicit topic without sourceText generates baseline docx",
+    name: "unmarked write-from-scratch is rejected by engine",
     async run() {
-      const result = await generateWordDocumentFromRequest({
-        title: "AI 教育培训方案",
-        instruction: "生成一份 AI 教育培训方案 Word 文档",
-        language: "zh-CN"
-      });
-      assert(result.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "mimeType should be docx");
-      assert(result.fileName.endsWith(".docx"), "fileName should end with .docx");
-      assert(result.sizeBytes > 0, "generated buffer should not be empty");
-      const text = plainTextFromDocumentXml(documentXml(result.buffer));
-      assert(text.includes("AI 教育培训方案"), "document should include Chinese title");
-      assert(text.includes("文档概述"), "document should include baseline overview section");
+      try {
+        await generateWordDocumentFromRequest({
+          title: "AI 教育培训方案",
+          instruction: "生成一份 AI 教育培训方案 Word 文档",
+          language: "zh-CN"
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        assert(message.includes("WRITE_FROM_SCRATCH_REQUIRES_CONTENT_GENERATION"), "engine should reject unmarked write-from-scratch");
+        return;
+      }
+      throw new Error("unmarked write-from-scratch should not generate a baseline docx");
     }
   },
   {
@@ -59,6 +60,7 @@ const checks: Check[] = [
         title: "教研活动总结",
         instruction: "根据资料生成一份 Word 总结",
         sourceText: "本次教研活动围绕项目式学习、课堂观察和教师协作展开，形成了三项改进建议。",
+        contentOrigin: "existing_content",
         outputFileName: "教研活动总结"
       });
       const text = plainTextFromDocumentXml(documentXml(result.buffer));
@@ -73,6 +75,7 @@ const checks: Check[] = [
         title: "清洗测试文档",
         instruction: "生成 Word 文档",
         sourceText: "我将围绕培训主题展开。附件依据显示需要避免空泛套话，并且生成正文时优先使用内部说明。",
+        contentOrigin: "existing_content",
         outputFileName: "clean-doc"
       });
       const text = plainTextFromDocumentXml(documentXml(result.buffer));
@@ -86,6 +89,7 @@ const checks: Check[] = [
         title: "学生发展质量报告",
         instruction: "生成一份学生发展质量报告 Word",
         sourceText: "报告关注学业质量、综合素养、过程评价和改进建议。",
+        contentOrigin: "existing_content",
         outputFileName: "学生发展质量报告?.docx"
       });
       assert(result.fileName === "学生发展质量报告.docx", `unexpected fileName ${result.fileName}`);
@@ -107,7 +111,8 @@ const checks: Check[] = [
       const result = await generateWordDocumentFromRequest({
         title: "基础校验报告",
         instruction: "生成一份基础校验报告 Word",
-        sourceText: "校验内容包括压缩包结构、主文档 XML、样式文件和内容类型声明。"
+        sourceText: "校验内容包括压缩包结构、主文档 XML、样式文件和内容类型声明。",
+        contentOrigin: "existing_content"
       });
       const xml = documentXml(result.buffer);
       assert(xml.includes("<w:document"), "document.xml should contain a Word document root");
@@ -129,7 +134,8 @@ const checks: Check[] = [
       const plan = buildWordPlan({
         title: "确定性测试",
         instruction: "生成测试文档",
-        sourceText: "第一条事实。第二条事实。"
+        sourceText: "第一条事实。第二条事实。",
+        contentOrigin: "existing_content"
       });
       assert(!sanitized.sections[0]?.paragraphs.join("").includes("根据用户要求"), "sanitizer should remove polluted phrase");
       assert(plan.sections.length >= 3, "plan should include baseline sections");

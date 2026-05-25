@@ -4,7 +4,7 @@ import path from "node:path";
 import { parseDocxPackage } from "@/lib/document/docx-package";
 import { executeRuntimeTool } from "@/lib/agent/runtime/tool-executor";
 import type { AgentRuntimeDecision } from "@/lib/agent/runtime";
-import type { ToolAdapterContext, WordTaskMemory } from "@/lib/agent/runtime/tool-adapters";
+import type { ConversationFileReference, ToolAdapterContext, WordTaskMemory } from "@/lib/agent/runtime/tool-adapters";
 import type { AgentRunResult } from "@/lib/agent/types";
 import { generateWordDocumentFromRequest } from "@/lib/word-engine";
 
@@ -59,11 +59,13 @@ function wordDecision(overrides: Partial<AgentRuntimeDecision> = {}): AgentRunti
 function makeContext({
   userText,
   conversationId = "conversation-memory-1",
-  wordTaskMemory
+  wordTaskMemory,
+  conversationFiles = []
 }: {
   userText: string;
   conversationId?: string;
   wordTaskMemory?: WordTaskMemory | null;
+  conversationFiles?: ConversationFileReference[];
 }): ToolAdapterContext {
   return {
     request: new Request("http://localhost/api/ai/chat"),
@@ -73,7 +75,7 @@ function makeContext({
     userText,
     messages: [{ role: "user", content: userText }],
     files: [],
-    conversationFiles: [],
+    conversationFiles,
     tools: { webSearch: false, contentMode: null },
     signal: new AbortController().signal,
     activeTask: null,
@@ -83,6 +85,22 @@ function makeContext({
     },
     runImageGeneration: async () => ({ result: baseAgentResult("image not used"), imageGeneration: null }),
     runChatAnswer: async () => baseAgentResult("chat answer")
+  };
+}
+
+function conversationFile(conversationId: string, text: string): ConversationFileReference {
+  return {
+    attachmentId: `${conversationId}-source`,
+    fileName: "source.txt",
+    mimeType: "text/plain",
+    sizeBytes: text.length,
+    objectKey: null,
+    providerFileId: null,
+    extractedText: text,
+    textPreview: text.slice(0, 200),
+    parseStatus: "parsed",
+    sourceMessageId: `${conversationId}-message`,
+    conversationId
   };
 }
 
@@ -120,6 +138,7 @@ async function generateBaseline() {
     instruction: "生成一份 AI 教育培训方案 Word 文档",
     sourceText: "培训对象为一线教师，重点包含 AI 课程设计、课堂应用和过程评价。",
     sourceFiles: [{ fileName: "source.txt", mimeType: "text/plain", text: "AI 课程设计与课堂应用" }],
+    contentOrigin: "existing_content",
     outputFileName: "AI 教育培训方案"
   });
 }
@@ -192,8 +211,14 @@ const checks: Check[] = [
       const baseline = await executeRuntimeTool(
         wordDecision(),
         makeContext({
-          userText: "生成一份 AI 教育培训方案 Word 文档",
-          conversationId: "conversation-memory-resume"
+          userText: "把以上内容整理成 Word",
+          conversationId: "conversation-memory-resume",
+          conversationFiles: [
+            conversationFile(
+              "conversation-memory-resume",
+              "AI 教育培训方案已有正文：培训对象为一线教师，重点包含 AI 课程设计、课堂应用和过程评价。"
+            )
+          ]
         })
       );
       assert(!("validationFailed" in baseline), "baseline Word generation should validate");
@@ -232,6 +257,7 @@ const checks: Check[] = [
         title: "内部字段隔离检查",
         instruction: "生成正文时优先检查污染词。作为 AI，我将围绕附件依据生成 Word。",
         sourceText: "completedSections pendingSections currentStage resumeInstruction failureReason wordTaskMemory 这些词不能进入正文。",
+        contentOrigin: "existing_content",
         outputFileName: "internal-memory-check"
       });
       const text = textFromXml(parseDocxPackage(result.buffer).getText("word/document.xml") || "");

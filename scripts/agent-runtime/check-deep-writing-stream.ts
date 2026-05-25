@@ -240,12 +240,13 @@ const checks: Check[] = [
     }
   },
   {
-    name: "ordinary Word still generates docx",
+    name: "ordinary Word write streams deep writing",
     async run() {
-      const result = await executeRuntimeTool(makeDecision(), context("帮我生成一份 Word，主题是 AI 教育培训方案", "deep-normal-docx"));
+      const events: SafeDeepWritingEvent[] = [];
+      const result = await executeRuntimeTool(makeDecision(), streamingContext("帮我生成一份 Word，主题是 AI 教育培训方案", "deep-normal-docx", events));
       assert("resultCard" in result && result.resultCard?.taskType === "word", "ordinary Word should return Word card");
-      assert(result.resultCard?.mode !== "deep_writing", "ordinary Word should not enter deep writing");
-      assert(result.result.generatedFiles.length === 1, "ordinary Word should generate docx");
+      assert(result.resultCard?.mode === "deep_writing", "ordinary Word write should enter deep writing");
+      assert(events.some((event) => event.type === "deep_writing_section_delta"), "ordinary Word write should stream section delta");
     }
   },
   {

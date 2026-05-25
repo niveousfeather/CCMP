@@ -242,13 +242,13 @@ const checks: Check[] = [
     }
   },
   {
-    name: "ordinary Word request remains normal",
+    name: "ordinary Word write request enters light deep writing",
     async run() {
       const input = "帮我生成一份 Word，主题是 AI 教育培训方案";
       const result = await executeRuntimeTool(makeDecision(), context({ userText: input, conversationId: "deep-normal-word" }));
       assert("resultCard" in result && result.resultCard?.taskType === "word", "ordinary Word should still return Word card");
-      assert(result.resultCard?.mode !== "deep_writing", "ordinary Word should not enter deep writing mode");
-      assert(result.result.generatedFiles.length === 1, "ordinary Word should still generate docx");
+      assert(result.resultCard?.mode === "deep_writing", "ordinary Word write should enter deep writing mode");
+      assert(result.resultCard?.panelAutoOpen === true, "deep writing panel should auto open");
     }
   },
   {

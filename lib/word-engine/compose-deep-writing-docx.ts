@@ -28,6 +28,7 @@ export function composeDeepWritingDocxRequest(memory: DeepWritingTaskMemory): Wo
     conversationId: memory.conversationId,
     title: cleanText(memory.topic || fallbackTitle, 120),
     instruction: cleanText(memory.originalInstruction || memory.topic, 500),
+    contentOrigin: "generated_content",
     sourceText: cleanText([memory.sourceSummary, ...memory.adoptedSources.map((source) => source.summary)].join("\n"), 4000),
     sourceFiles: memory.sourceFileNames.map((fileName) => ({ fileName })),
     conversationSummary: cleanText(memory.sourceSummary, 1200),
@@ -161,6 +162,7 @@ function attributesFor(memory: DeepWritingTaskMemory, title: string, sections: W
 }
 
 function mapDocumentKind(kind: DeepWritingTaskMemory["documentKind"]): WordDocumentAttributes["documentKind"] {
+  if (kind === "lesson_plan") return "lesson_plan";
   if (kind === "research") return "report";
   if (kind === "manual") return "training";
   if (kind === "plan" || kind === "report" || kind === "summary") return kind;
@@ -168,6 +170,7 @@ function mapDocumentKind(kind: DeepWritingTaskMemory["documentKind"]): WordDocum
 }
 
 function subtitleFor(memory: DeepWritingTaskMemory) {
+  if (memory.documentKind === "lesson_plan") return "课程教案";
   if (memory.documentKind === "research") return "\u8c03\u7814\u62a5\u544a";
   if (memory.documentKind === "plan") return "\u5b8c\u6574\u65b9\u6848";
   if (memory.documentKind === "manual") return "\u57f9\u8bad\u624b\u518c";

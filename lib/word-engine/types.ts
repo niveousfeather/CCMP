@@ -21,6 +21,7 @@ export type WordRequest = {
   conversationId?: string;
   title: string;
   instruction: string;
+  contentOrigin?: "existing_content" | "generated_content" | "write_from_scratch";
   sourceText?: string;
   sourceFiles?: WordSourceFile[];
   conversationSummary?: string;

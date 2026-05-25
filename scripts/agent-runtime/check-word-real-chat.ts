@@ -4,6 +4,7 @@ import path from "node:path";
 import { parseDocxPackage } from "@/lib/document/docx-package";
 import { planAgentRuntimeTurn, type AgentRuntimeDecision } from "@/lib/agent/runtime";
 import { executeRuntimeTool } from "@/lib/agent/runtime/tool-executor";
+import type { SafeDeepWritingEvent } from "@/lib/agent/runtime/deep-writing-runner";
 import type { AgentActiveTask, ConversationFileReference, ToolAdapterContext } from "@/lib/agent/runtime/tool-adapters";
 import type { AgentRunResult } from "@/lib/agent/types";
 
@@ -58,16 +59,16 @@ function makeTxtFile() {
   return new File([sampleText], "sample.txt", { type: "text/plain" });
 }
 
-function makeConversationFile(conversationId: string): ConversationFileReference {
+function makeConversationFile(conversationId: string, text = sampleText): ConversationFileReference {
   return {
     attachmentId: `${conversationId}-sample`,
     fileName: "sample.txt",
     mimeType: "text/plain",
-    sizeBytes: sampleText.length,
+    sizeBytes: text.length,
     objectKey: null,
     providerFileId: null,
-    extractedText: sampleText,
-    textPreview: sampleText,
+    extractedText: text,
+    textPreview: text.slice(0, 200),
     parseStatus: "parsed",
     sourceMessageId: `${conversationId}-message`,
     conversationId
@@ -103,7 +104,8 @@ function context({
   files = [],
   conversationFiles = [],
   messages,
-  activeTask = null
+  activeTask = null,
+  events
 }: {
   userText: string;
   conversationId?: string;
@@ -111,6 +113,7 @@ function context({
   conversationFiles?: ConversationFileReference[];
   messages?: ToolAdapterContext["messages"];
   activeTask?: AgentActiveTask | null;
+  events?: SafeDeepWritingEvent[];
 }): ToolAdapterContext {
   return {
     request: new Request(`${baseUrl}/api/ai/chat`),
@@ -124,6 +127,11 @@ function context({
     tools: { webSearch: false, contentMode: null },
     signal: new AbortController().signal,
     activeTask,
+    emitDeepWritingEvent: events
+      ? (event) => {
+          events.push(event);
+        }
+      : undefined,
     runLegacyAgent: async () => {
       throw new Error("LEGACY_AGENT_SHOULD_NOT_BE_CALLED");
     },
@@ -172,6 +180,15 @@ async function readGeneratedDocx(result: Awaited<ReturnType<typeof executeRuntim
 
 function assertCleanBody(text: string) {
   for (const term of forbiddenTerms) assert(!text.includes(term), `docx body should not include ${term}`);
+}
+
+function assertDeepWriting(result: Awaited<ReturnType<typeof executeRuntimeTool>>, events: SafeDeepWritingEvent[]) {
+  assert("resultCard" in result && result.resultCard?.taskType === "word", "deep writing should return a Word taskCard");
+  assert(result.resultCard?.mode === "deep_writing", "write-from-scratch should use deep writing mode");
+  assert(result.resultCard?.panelAutoOpen === true, "deep writing panel should auto open");
+  assert(events.some((event) => event.type === "deep_writing_started"), "deep writing should emit started event");
+  assert(events.some((event) => event.type === "deep_writing_outline"), "deep writing should emit outline event");
+  assert(events.some((event) => event.type === "deep_writing_section_delta"), "deep writing should emit section delta event");
 }
 
 async function runCase(name: string, fn: () => Promise<void> | void) {
@@ -273,16 +290,15 @@ const checks: Check[] = [
     }
   },
   {
-    name: "explicit Word request generates downloadable clean docx",
+    name: "explicit Word write request enters deep writing",
     async run() {
       const input = "帮我生成一份 Word，主题是 AI 教育培训方案";
       const runtimePlan = plan(input);
       assert(runtimePlan.decision.targetTool === "word", "explicit Word request should target word");
-      const result = await executeRuntimeTool(runtimePlan.decision, context({ userText: input }));
-      const { text } = await readGeneratedDocx(result);
-      assert(text.includes("AI 教育培训方案"), "docx should include requested topic");
-      assert(text.includes("项目背景") && text.includes("实施路径"), "docx should look like a formal plan");
-      assertCleanBody(text);
+      const events: SafeDeepWritingEvent[] = [];
+      const result = await executeRuntimeTool(runtimePlan.decision, context({ userText: input, events }));
+      assertDeepWriting(result, events);
+      assert(result.result.generatedFiles.length === 1, "deep writing should generate final docx after draft");
     }
   },
   {
@@ -315,16 +331,20 @@ const checks: Check[] = [
     }
   },
   {
-    name: "same conversation continues Word task memory",
+    name: "same conversation continues exported Word task memory",
     async run() {
       const conversationId = "word-real-chat-resume";
-      const firstInput = "帮我生成一份 Word，主题是 AI 教育培训方案";
-      const first = await executeRuntimeTool(plan(firstInput).decision, context({ userText: firstInput, conversationId }));
+      const firstInput = "把以上内容整理成 Word";
+      const firstSource = "AI 教育培训方案已有正文：培训对象为中小学教师，周期四周，目标是完成 AI 备课、课堂活动设计和评价改进。";
+      const first = await executeRuntimeTool(
+        plan(firstInput).decision,
+        context({ userText: firstInput, conversationId, conversationFiles: [makeConversationFile(conversationId, firstSource)] })
+      );
       await readGeneratedDocx(first);
 
       const resumeInput = "继续刚才的 Word，补充使用建议";
       const activeTask: AgentActiveTask = { id: "word-task-1", kind: "word", title: "AI 教育培训方案", status: "completed", source: "conversation" };
-      const runtimePlan = plan(resumeInput, { activeTask, tools: { webSearch: false, contentMode: "write" } });
+      const runtimePlan = plan(resumeInput, { activeTask, tools: { webSearch: false, contentMode: null } });
       const resumeDecision = runtimePlan.decision.targetTool === "word" ? runtimePlan.decision : wordDecision();
       const resumed = await executeRuntimeTool(resumeDecision, context({ userText: resumeInput, conversationId, activeTask }));
       const { resultCard, text } = await readGeneratedDocx(resumed);

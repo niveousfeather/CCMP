@@ -22,6 +22,7 @@ export type DeepWritingTaskMemory = {
   originalInstruction: string;
   topic: string;
   documentKind: DeepWritingDocumentKind;
+  writingMode?: "deep" | "light";
   sourceFileNames: string[];
   sourceSummary: string;
   searchPlan: {
@@ -114,6 +115,7 @@ export type DeepWritingTaskMemoryInput = {
   detection: DeepWritingDetection;
   sourceFileNames: string[];
   sourceSummary: string;
+  writingMode?: "deep" | "light";
 };
 
 const unsafePayloadKeys = new Set([
@@ -155,16 +157,23 @@ function topicKeywords(topic: string) {
     .slice(0, 6);
 }
 
-function outlineFor(kind: DeepWritingDocumentKind) {
+function outlineTitlesFor(kind: DeepWritingDocumentKind, writingMode: "deep" | "light") {
+  if (writingMode === "light") return ["写作目标", "正文草稿", "发布与使用建议"];
+
   const titlesByKind: Record<DeepWritingDocumentKind, string[]> = {
-    research: ["研究背景", "资料来源与方法", "核心发现", "趋势分析", "建议与结论"],
+    lesson_plan: ["课程基本信息", "学情分析", "教学目标", "教学重点与难点", "教学过程设计", "实训任务", "考核评价"],
+    research: ["研究背景", "资料来源与范围", "现状分析", "趋势判断", "关键问题", "建议与结论"],
     report: ["摘要", "背景", "资料分析", "主要发现", "建议", "结论"],
     plan: ["项目背景", "目标定位", "实施路径", "时间安排", "风险与应对", "预期成果"],
     manual: ["使用对象", "核心内容", "操作流程", "注意事项", "评估与反馈"],
     summary: ["总体概述", "关键要点", "分类整理", "后续建议"],
     general: ["文档概述", "背景与目标", "主要内容", "使用建议"]
   };
-  return titlesByKind[kind].map((title, index) => ({
+  return titlesByKind[kind];
+}
+
+function outlineFor(kind: DeepWritingDocumentKind, writingMode: "deep" | "light") {
+  return outlineTitlesFor(kind, writingMode).map((title, index) => ({
     id: `section-${index + 1}`,
     title,
     status: "pending" as const,
@@ -173,6 +182,13 @@ function outlineFor(kind: DeepWritingDocumentKind) {
 }
 
 function sourceQuestions(kind: DeepWritingDocumentKind, topic: string) {
+  if (kind === "lesson_plan") {
+    return [
+      `${topic}的课程对象、课时和授课目标是什么？`,
+      `${topic}需要覆盖哪些完整授课内容和实训任务？`,
+      `${topic}如何设计教学过程、重点难点和考核评价？`
+    ];
+  }
   const base = [`${topic}的背景是什么？`, `${topic}有哪些关键信息和证据？`, `${topic}可以形成哪些建议？`];
   if (kind === "research") return [...base, `${topic}有哪些趋势和争议？`];
   if (kind === "plan") return [...base, `${topic}如何落地执行？`];
@@ -183,19 +199,23 @@ function sourceQuestions(kind: DeepWritingDocumentKind, topic: string) {
 export function createDeepWritingTaskMemory(input: DeepWritingTaskMemoryInput): DeepWritingTaskMemory {
   const timestamp = nowIso();
   const topic = compact(input.topic || input.originalInstruction, 160) || "深度写作文档";
-  const outline = outlineFor(input.detection.suggestedDocumentKind);
+  const writingMode = input.writingMode || "deep";
+  const outline = outlineFor(input.detection.suggestedDocumentKind, writingMode);
+  const needsSearch = /搜集资料|检索资料|调研|研究|行业分析|白皮书/.test(input.originalInstruction);
+
   return {
     taskId: input.taskId || randomUUID(),
     conversationId: input.conversationId,
     originalInstruction: compact(input.originalInstruction, 600),
     topic,
     documentKind: input.detection.suggestedDocumentKind,
+    writingMode,
     sourceFileNames: input.sourceFileNames.filter(Boolean).slice(0, 20),
     sourceSummary: compact(input.sourceSummary, 1200),
     searchPlan: {
       keywords: topicKeywords(topic),
       questions: sourceQuestions(input.detection.suggestedDocumentKind, topic),
-      status: /搜集资料|检索资料|调研|研究|行业分析|白皮书/.test(input.originalInstruction) ? "pending" : "skipped"
+      status: needsSearch ? "pending" : "skipped"
     },
     outline,
     completedSectionIds: [],
@@ -219,7 +239,7 @@ export function createDeepWritingTaskMemory(input: DeepWritingTaskMemoryInput): 
 }
 
 export function isDeepWritingResumeRequest(text: string) {
-  return /继续刚才的深度报告|继续刚才的深度写作|继续那个调研文档|继续.*深度|继续.*调研文档/i.test(text);
+  return /继续刚才的深度报告|继续刚才的深度写作|继续那个调研文档|继续.*深度|继续.*调研文档|继续刚才/.test(text);
 }
 
 export function resumeDeepWritingTaskMemory(memory: DeepWritingTaskMemory, resumeInstruction: string): DeepWritingTaskMemory {
