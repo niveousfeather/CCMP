@@ -108,6 +108,7 @@ function context(input: {
       : [],
     tools: { webSearch: false, contentMode: input.contentMode ?? "write" },
     signal: new AbortController().signal,
+    allowDeterministicWriting: true,
     emitDeepWritingEvent: input.emitDeepWritingEvent,
     runLegacyAgent: async () => {
       throw new Error("LEGACY_AGENT_SHOULD_NOT_BE_CALLED");

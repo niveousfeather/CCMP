@@ -114,6 +114,7 @@ function context(userText: string, contentMode: "write" | null = "write", events
     conversationFiles: [],
     tools: { webSearch: false, contentMode },
     signal: new AbortController().signal,
+    allowDeterministicWriting: true,
     emitDeepWritingEvent: events
       ? (event) => {
           events.push(event);

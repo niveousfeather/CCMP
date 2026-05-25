@@ -82,6 +82,7 @@ function makeContext({
     conversationFiles,
     tools: { webSearch: false, contentMode: "write" },
     signal: new AbortController().signal,
+    allowDeterministicWriting: true,
     activeTask: null,
     emitDeepWritingEvent: events
       ? (event) => {

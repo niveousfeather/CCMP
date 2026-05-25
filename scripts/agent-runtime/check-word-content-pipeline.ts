@@ -89,6 +89,7 @@ function adapterContext(input: {
   events?: SafeDeepWritingEvent[];
   deepWritingTaskMemory?: DeepWritingTaskMemory | null;
   sourceText?: string;
+  allowDeterministicWriting?: boolean;
 }): ToolAdapterContext {
   const sourceText = input.sourceText || "";
   return {
@@ -119,6 +120,7 @@ function adapterContext(input: {
     tools: { webSearch: false, contentMode: "write" },
     signal: new AbortController().signal,
     deepWritingTaskMemory: input.deepWritingTaskMemory,
+    allowDeterministicWriting: input.allowDeterministicWriting ?? true,
     emitDeepWritingEvent: input.events
       ? (event) => {
           input.events?.push(event);
@@ -149,6 +151,7 @@ async function runDraft(instruction: string, conversationId: string) {
   const events: SafeDeepWritingEvent[] = [];
   const completed = await runDeepWritingDraft({
     memory: makeMemory(instruction, conversationId),
+    contentGenerationMode: "deterministic_test_only",
     emit: (event) => {
       events.push(event);
     }
@@ -186,6 +189,7 @@ async function executeAdapter(input: {
   events?: SafeDeepWritingEvent[];
   deepWritingTaskMemory?: DeepWritingTaskMemory | null;
   sourceText?: string;
+  allowDeterministicWriting?: boolean;
 }) {
   return executeRuntimeTool(makeDecision(), adapterContext(input));
 }
@@ -397,6 +401,22 @@ const checks: Check[] = [
       const text = docxText(await readFile(filePath));
       await rm(filePath, { force: true });
       assert(text.includes("门店开业"), "export docx should preserve source text");
+    }
+  },
+  {
+    name: "production compose_deep without model generator does not complete docx",
+    async run() {
+      const events: SafeDeepWritingEvent[] = [];
+      const result = await executeAdapter({
+        userText: PRIMARY_LANGUAGE_PROMPT,
+        conversationId: "pipeline-production-no-generator",
+        events,
+        allowDeterministicWriting: false
+      });
+      assert("resultCard" in result && result.resultCard?.mode === "deep_writing", "production write should still open deep writing card");
+      assert(result.resultCard.status === "failed", "production write without generator should fail instead of completing docx");
+      assert(result.result.generatedFiles.length === 0, "production write without generator must not generate docx");
+      assert(events.some((event) => event.type === "deep_writing_failed"), "production write without generator should emit failed event");
     }
   },
   {

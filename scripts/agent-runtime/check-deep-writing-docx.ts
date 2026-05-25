@@ -78,6 +78,7 @@ async function collectWithDocx(memory = makeMemory()) {
     memory,
     sourceText,
     conversationSummary: sourceText,
+    contentGenerationMode: "deterministic_test_only",
     emit: (event) => {
       events.push(event);
     },
@@ -150,6 +151,7 @@ function context(userText: string, conversationId = "deep-docx-adapter"): ToolAd
     ],
     tools: { webSearch: false, contentMode: "write" },
     signal: new AbortController().signal,
+    allowDeterministicWriting: true,
     runLegacyAgent: async () => {
       throw new Error("LEGACY_AGENT_SHOULD_NOT_BE_CALLED");
     },
@@ -321,6 +323,7 @@ const checks: Check[] = [
         memory,
         sourceText,
         conversationSummary: sourceText,
+        contentGenerationMode: "deterministic_test_only",
         emit: (event) => {
           events.push(event);
         },
@@ -334,6 +337,7 @@ const checks: Check[] = [
         memory: resumeDeepWritingTaskMemory(failed, "\u7ee7\u7eed\u521a\u624d\u7684\u6df1\u5ea6\u62a5\u544a"),
         sourceText,
         conversationSummary: sourceText,
+        contentGenerationMode: "deterministic_test_only",
         emit: (event) => {
           resumedEvents.push(event);
         },

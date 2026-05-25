@@ -77,6 +77,7 @@ async function collect(memory: DeepWritingTaskMemory, options: { sourceText?: st
     sourceText: options.sourceText,
     conversationSummary: options.conversationSummary,
     searchProvider: options.provider,
+    contentGenerationMode: "deterministic_test_only",
     emit: (event) => {
       events.push(event);
     }
@@ -128,6 +129,7 @@ function context(userText: string, conversationId: string): ToolAdapterContext {
     conversationFiles: [],
     tools: { webSearch: false, contentMode: "write" },
     signal: new AbortController().signal,
+    allowDeterministicWriting: true,
     runLegacyAgent: async () => {
       throw new Error("LEGACY_AGENT_SHOULD_NOT_BE_CALLED");
     },

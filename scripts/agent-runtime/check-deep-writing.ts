@@ -72,6 +72,7 @@ function context({
     conversationFiles,
     tools: { webSearch: false, contentMode: "write" },
     signal: new AbortController().signal,
+    allowDeterministicWriting: true,
     activeTask,
     runLegacyAgent: async () => {
       throw new Error("LEGACY_AGENT_SHOULD_NOT_BE_CALLED");

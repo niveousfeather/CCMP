@@ -1,7 +1,7 @@
 import type { AgentRuntimeDecision, AgentRuntimeTargetTool } from "@/lib/agent/runtime/types";
 import type { AgentRunResult, AgentToolSelection } from "@/lib/agent/types";
 import type { DeepWritingPanelState, DeepWritingTaskMemory, DeepWritingTaskStage } from "@/lib/agent/runtime/deep-writing-memory";
-import type { SafeDeepWritingEvent } from "@/lib/agent/runtime/deep-writing-runner";
+import type { DeepWritingContentGeneratorInput, DeepWritingContentGeneratorResult, SafeDeepWritingEvent, WritingContentGenerationMode } from "@/lib/agent/runtime/deep-writing-runner";
 import type { WordTaskMemory } from "@/lib/word-engine";
 
 export type AgentActiveTaskKind = "image" | "teaching-diagram" | "ppt" | "word" | "excel" | "file-analysis" | "knowledge-graph";
@@ -53,6 +53,7 @@ export type ToolAdapterResultCard = {
   panelAutoOpen?: boolean;
   currentStage?: DeepWritingTaskStage;
   documentReady?: boolean;
+  contentGenerationMode?: WritingContentGenerationMode;
   deepWritingTaskMemory?: DeepWritingTaskMemory | null;
   deepWritingPanelState?: DeepWritingPanelState | null;
 };
@@ -80,6 +81,8 @@ export type ToolAdapterContext = {
   wordTaskMemory?: WordTaskMemory | null;
   deepWritingTaskMemory?: DeepWritingTaskMemory | null;
   emitDeepWritingEvent?: (event: SafeDeepWritingEvent) => Promise<void> | void;
+  allowDeterministicWriting?: boolean;
+  generateWritingContent?: (input: DeepWritingContentGeneratorInput) => Promise<DeepWritingContentGeneratorResult> | DeepWritingContentGeneratorResult;
   runLegacyAgent: () => Promise<AgentRunResult>;
   runImageGeneration: () => Promise<{ result: AgentRunResult; imageGeneration: unknown | null }>;
   runChatAnswer: () => Promise<AgentRunResult>;

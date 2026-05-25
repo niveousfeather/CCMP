@@ -61,6 +61,7 @@ function context(userText: string, conversationId: string): ToolAdapterContext {
     conversationFiles: [],
     tools: { webSearch: false, contentMode: "write" },
     signal: new AbortController().signal,
+    allowDeterministicWriting: true,
     runLegacyAgent: async () => {
       throw new Error("LEGACY_AGENT_SHOULD_NOT_BE_CALLED");
     },
@@ -109,6 +110,7 @@ async function collectEvents(memory: DeepWritingTaskMemory, sourceText = memory.
     memory,
     sourceText,
     conversationSummary: sourceText,
+    contentGenerationMode: "deterministic_test_only",
     emit: (event) => {
       events.push(event);
     }

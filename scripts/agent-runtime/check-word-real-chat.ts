@@ -127,6 +127,7 @@ function context({
     tools: { webSearch: false, contentMode: null },
     signal: new AbortController().signal,
     activeTask,
+    allowDeterministicWriting: true,
     emitDeepWritingEvent: events
       ? (event) => {
           events.push(event);

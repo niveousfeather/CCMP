@@ -10,7 +10,7 @@ import {
   resumeDeepWritingTaskMemory,
   type DeepWritingTaskMemory
 } from "@/lib/agent/runtime/deep-writing-memory";
-import { runDeepWritingDraft } from "@/lib/agent/runtime/deep-writing-runner";
+import { runDeepWritingDraft, type WritingContentGenerationMode } from "@/lib/agent/runtime/deep-writing-runner";
 import type { GeneratedAgentFile } from "@/lib/agent/types";
 import type { ConversationFileReference, ToolAdapter } from "@/lib/agent/runtime/tool-adapters/types";
 import { classifyWordWriteMode, type WordWriteDocumentKind, type WordWriteModeDecision } from "@/lib/agent/runtime/word-write-mode-classifier";
@@ -298,10 +298,13 @@ async function buildDeepWritingMemory(
 
 async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Parameters<ToolAdapter["execute"]>[1]) {
   const generatedFiles: GeneratedAgentFile[] = [];
+  const contentGenerationMode = resolveWritingContentGenerationMode(context);
   const completedMemory = await runDeepWritingDraft({
     memory,
     sourceText: memory.sourceSummary,
     conversationSummary: memory.sourceSummary,
+    contentGenerationMode,
+    generateDraftContent: context.generateWritingContent,
     emit: context.emitDeepWritingEvent || (() => undefined),
     generateFinalDocument: async (docxMemory) => {
       const generated = await generateAndPersistDeepWritingDocx(docxMemory, context);
@@ -326,12 +329,17 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
         : "深度写作暂未完成，请稍后继续或重试。",
       modelUsed: "NexusAI Deep Writing Planner",
       providerUsed: "xheai" as const,
-      routeReason: completed ? "runtime_v2:word-adapter:deep_writing_docx" : "runtime_v2:word-adapter:deep_writing_failed",
+      routeReason: completed ? "runtime_v2:word-adapter:deep_writing_docx" : `runtime_v2:word-adapter:deep_writing_failed:${contentGenerationMode}`,
       fallbackUsed: false,
       extractedDocuments: [],
       generatedFiles: generatedFile ? [generatedFile] : [],
       pendingTask: null,
-      defaultsApplied: ["deep_writing_docx", "deep_writing_docx_generating", completed ? "deep_writing_completed" : "deep_writing_failed"]
+      defaultsApplied: [
+        `writing_content_generation:${contentGenerationMode}`,
+        "deep_writing_docx",
+        "deep_writing_docx_generating",
+        completed ? "deep_writing_completed" : "deep_writing_failed"
+      ]
     },
     runtimeMode: "adapter" as const,
     resultCard: {
@@ -347,6 +355,7 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
       panelAutoOpen: true,
       currentStage: completedMemory.currentStage,
       documentReady: Boolean(generatedFile || completedMemory.finalDocument?.downloadUrl),
+      contentGenerationMode,
       failureReason: completedMemory.failureReason,
       deepWritingTaskMemory: completedMemory,
       deepWritingPanelState: completedPanelState
@@ -354,6 +363,12 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
   };
 
 
+}
+
+function resolveWritingContentGenerationMode(context: Parameters<ToolAdapter["execute"]>[1]): WritingContentGenerationMode {
+  if (context.generateWritingContent) return "model_generated";
+  if (context.allowDeterministicWriting) return "deterministic_test_only";
+  return "unavailable";
 }
 
 export const wordAdapter: ToolAdapter = {

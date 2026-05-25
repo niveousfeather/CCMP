@@ -25,11 +25,32 @@ export type DeepWritingGeneratedDocument = {
   objectKey?: string | null;
 };
 
+export type WritingContentGenerationMode = "model_generated" | "deterministic_test_only" | "unavailable";
+
+export type DeepWritingContentGeneratorInput = {
+  memory: DeepWritingTaskMemory;
+  sourceText?: string;
+  conversationSummary?: string;
+};
+
+export type DeepWritingContentGeneratorResult = {
+  sections: Array<{
+    id?: string;
+    title: string;
+    paragraphs: string[];
+  }>;
+  modelUsed: string;
+  providerUsed: string;
+  fallbackUsed?: boolean;
+};
+
 export type DeepWritingRunnerInput = {
   memory: DeepWritingTaskMemory;
   sourceText?: string;
   conversationSummary?: string;
   searchProvider?: DeepWritingSearchProvider;
+  contentGenerationMode?: WritingContentGenerationMode;
+  generateDraftContent?: (input: DeepWritingContentGeneratorInput) => Promise<DeepWritingContentGeneratorResult> | DeepWritingContentGeneratorResult;
   generateFinalDocument?: (memory: DeepWritingTaskMemory) => Promise<DeepWritingGeneratedDocument> | DeepWritingGeneratedDocument;
   emit: (event: SafeDeepWritingEvent) => Promise<void> | void;
 };
@@ -73,12 +94,21 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
     });
   }
 
-  const draft = composeDeepWritingDraft({
-    memory,
-    sourceText: input.sourceText,
-    conversationSummary: input.conversationSummary,
-    adoptedSources: memory.adoptedSources
-  });
+  const draftResult = await generateDraft(input, memory);
+  if (!draftResult.ok) {
+    memory.currentStage = "failed";
+    memory.failureReason = draftResult.failureReason;
+    memory.updatedAt = new Date().toISOString();
+    await emit(input.emit, "deep_writing_failed", {
+      taskId: memory.taskId,
+      currentStage: "failed",
+      progress: 10,
+      canResume: true,
+      failureReason: memory.failureReason
+    });
+    return memory;
+  }
+  const draft = draftResult.draft;
   const existingOutlineById = new Map(memory.outline.map((section) => [section.id, section]));
   memory.outline = draft.sections.map((section) => {
     const existing = existingOutlineById.get(section.id);
@@ -193,6 +223,75 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
   });
 
   return memory;
+}
+
+async function generateDraft(input: DeepWritingRunnerInput, memory: DeepWritingTaskMemory): Promise<
+  | { ok: true; draft: ReturnType<typeof composeDeepWritingDraft> }
+  | { ok: false; failureReason: string }
+> {
+  const mode = input.contentGenerationMode || "unavailable";
+  if (mode === "model_generated") {
+    if (!input.generateDraftContent) return { ok: false, failureReason: "WRITING_CONTENT_GENERATION_UNAVAILABLE" };
+    try {
+      const generated = await input.generateDraftContent({
+        memory,
+        sourceText: input.sourceText,
+        conversationSummary: input.conversationSummary
+      });
+      const sections = normalizeGeneratedSections(generated.sections, memory);
+      if (!sections.length) return { ok: false, failureReason: "WRITING_CONTENT_GENERATION_EMPTY" };
+      return {
+        ok: true,
+        draft: {
+          title: memory.topic,
+          sections
+        }
+      };
+    } catch (error) {
+      return { ok: false, failureReason: safeFailureReason(error) || "WRITING_CONTENT_GENERATION_FAILED" };
+    }
+  }
+
+  if (mode === "deterministic_test_only") {
+    return {
+      ok: true,
+      draft: composeDeepWritingDraft({
+        memory,
+        sourceText: input.sourceText,
+        conversationSummary: input.conversationSummary,
+        adoptedSources: memory.adoptedSources
+      })
+    };
+  }
+
+  return { ok: false, failureReason: "WRITING_CONTENT_GENERATION_UNAVAILABLE" };
+}
+
+function normalizeGeneratedSections(sections: DeepWritingContentGeneratorResult["sections"], memory: DeepWritingTaskMemory) {
+  const outlineByTitle = new Map(memory.outline.map((section) => [section.title, section]));
+  return (sections || [])
+    .map((section, index) => {
+      const title = cleanGeneratedText(section.title || memory.outline[index]?.title || `章节 ${index + 1}`, 80);
+      const outline = outlineByTitle.get(title) || memory.outline[index];
+      const paragraphs = (section.paragraphs || [])
+        .map((paragraph) => cleanGeneratedText(paragraph, 1200))
+        .filter((paragraph) => paragraph.length >= 2)
+        .slice(0, 8);
+      return {
+        id: section.id || outline?.id || `section-${index + 1}`,
+        title,
+        paragraphs
+      };
+    })
+    .filter((section) => section.title && section.paragraphs.length);
+}
+
+function cleanGeneratedText(value: string, maxLength: number) {
+  return String(value || "")
+    .replace(/prompt|provider|model|apiKey|stack|rawMemory|chain-of-thought|internal JSON/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
 }
 
 async function collectSources(input: DeepWritingRunnerInput, memory: DeepWritingTaskMemory): Promise<DeepWritingSearchResult[]> {
