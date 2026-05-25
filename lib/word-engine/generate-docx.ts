@@ -1,7 +1,7 @@
 import { createDocxBuffer } from "@/lib/document/create";
 import { serializeWordDocumentPlan, type WordDocumentPlan } from "@/lib/document/plan";
 import { DOCX_MIME } from "@/lib/document/types";
-import type { WordContent, WordGenerateResult, WordRequest, WordTaskMemory } from "./types";
+import type { WordContent, WordDocumentAttributes, WordGenerateResult, WordRequest, WordTaskMemory } from "./types";
 
 function safeBaseFileName(value?: string, fallback = "report") {
   const raw = (value || fallback).replace(/\.docx$/i, "").trim();
@@ -11,6 +11,16 @@ function safeBaseFileName(value?: string, fallback = "report") {
     .slice(0, 80)
     .trim();
   return safe || fallback;
+}
+
+function documentTypeFromAttributes(attributes?: WordDocumentAttributes): WordDocumentPlan["documentType"] {
+  if (!attributes) return "general";
+  if (attributes.documentKind === "summary") return "summary";
+  if (attributes.documentKind === "report") return "report";
+  // The lightweight word-engine composer owns its own section model. Keeping
+  // plan-like documents as general here avoids legacy template QA forcing a
+  // different, stricter generator contract over the composed content.
+  return "general";
 }
 
 function contentToDocumentPlan(content: WordContent): WordDocumentPlan {
@@ -53,7 +63,7 @@ function contentToDocumentPlan(content: WordContent): WordDocumentPlan {
   return {
     title: content.title,
     subtitle: content.subtitle,
-    documentType: "general",
+    documentType: documentTypeFromAttributes(content.attributes),
     sections
   };
 }
@@ -74,7 +84,8 @@ export function generateDocx({
     markdown,
     title: content.title,
     template: request.stylePreset === "formal" ? "formal_doc" : "general",
-    prompt: undefined
+    prompt: undefined,
+    renderOptions: content.attributes
   });
   const fileName = `${safeBaseFileName(request.outputFileName || content.title)}.docx`;
 

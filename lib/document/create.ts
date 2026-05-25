@@ -9,6 +9,24 @@ const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const TABLE_WIDTH_DXA = 9026;
 
+type WordDocumentRenderOptions = {
+  needsToc?: boolean;
+  needsHeaderFooter?: boolean;
+  theme?: "blue" | "green" | "orange" | "purple" | "gray";
+};
+
+const THEME_COLORS: Record<NonNullable<WordDocumentRenderOptions["theme"]>, { accent: string; light: string; border: string; muted: string }> = {
+  blue: { accent: "2563EB", light: "DBEAFE", border: "93C5FD", muted: "1D4ED8" },
+  green: { accent: "16A34A", light: "DCFCE7", border: "86EFAC", muted: "15803D" },
+  orange: { accent: "EA580C", light: "FFEDD5", border: "FDBA74", muted: "C2410C" },
+  purple: { accent: "7C3AED", light: "EDE9FE", border: "C4B5FD", muted: "6D28D9" },
+  gray: { accent: "475569", light: "F1F5F9", border: "CBD5E1", muted: "334155" }
+};
+
+function resolveTheme(options?: WordDocumentRenderOptions) {
+  return THEME_COLORS[options?.theme || "blue"] || THEME_COLORS.blue;
+}
+
 function xmlEscape(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -59,6 +77,7 @@ function paragraphXml({
 type RenderContext = {
   nextNumberedNumId: number;
   orderedNumIds: number[];
+  theme: ReturnType<typeof resolveTheme>;
 };
 
 const BULLET_NUM_ID = 1;
@@ -100,7 +119,7 @@ function weightedColumnWidths(rows: string[][], totalWidth = TABLE_WIDTH_DXA) {
   return widths;
 }
 
-function tableXml(rows: string[][]) {
+function tableXml(rows: string[][], theme = THEME_COLORS.blue) {
   const columnCount = Math.max(...rows.map((row) => row.length), 1);
   const columnWidths = weightedColumnWidths(rows);
   const grid = columnWidths.map((width) => `<w:gridCol w:w="${width}"/>`).join("");
@@ -110,13 +129,13 @@ function tableXml(rows: string[][]) {
         .map(
           (cell, cellIndex) =>
             `<w:tc><w:tcPr><w:tcW w:w="${columnWidths[cellIndex]}" w:type="dxa"/><w:tcMar><w:top w:w="100" w:type="dxa"/><w:left w:w="140" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:right w:w="140" w:type="dxa"/></w:tcMar>${
-              rowIndex === 0 ? '<w:shd w:val="clear" w:fill="EAF2FF"/>' : ""
+              rowIndex === 0 ? `<w:shd w:val="clear" w:fill="${theme.light}"/>` : ""
             }</w:tcPr>${paragraphXml({
               text: cell,
               before: 0,
               after: 0,
               bold: rowIndex === 0,
-              color: rowIndex === 0 ? "1D4ED8" : undefined
+              color: rowIndex === 0 ? theme.muted : undefined
             })}</w:tc>`
         )
         .join("");
@@ -124,7 +143,7 @@ function tableXml(rows: string[][]) {
     })
     .join("");
 
-  return `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="${TABLE_WIDTH_DXA}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="BFDBFE"/><w:left w:val="single" w:sz="8" w:space="0" w:color="BFDBFE"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="BFDBFE"/><w:right w:val="single" w:sz="8" w:space="0" w:color="BFDBFE"/><w:insideH w:val="single" w:sz="6" w:space="0" w:color="DBEAFE"/><w:insideV w:val="single" w:sz="6" w:space="0" w:color="DBEAFE"/></w:tblBorders><w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${body}</w:tbl>`;
+  return `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="${TABLE_WIDTH_DXA}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="${theme.border}"/><w:left w:val="single" w:sz="8" w:space="0" w:color="${theme.border}"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="${theme.border}"/><w:right w:val="single" w:sz="8" w:space="0" w:color="${theme.border}"/><w:insideH w:val="single" w:sz="6" w:space="0" w:color="${theme.light}"/><w:insideV w:val="single" w:sz="6" w:space="0" w:color="${theme.light}"/></w:tblBorders><w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${body}</w:tbl>`;
 }
 
 function blockToXml(block: MarkdownBlock) {
@@ -164,8 +183,8 @@ function wordBlockToXml(block: WordBlock, context: RenderContext) {
     const numId = allocateNumberedListNumId(context);
     return block.items.map((item) => listItemXml(item, numId)).join("");
   }
-  if (block.type === "table") return tableXml([block.headers, ...block.rows]);
-  if (block.type === "rubric" || block.type === "timeline" || block.type === "responsibility_matrix") return tableXml([block.headers, ...block.rows]);
+  if (block.type === "table") return tableXml([block.headers, ...block.rows], context.theme);
+  if (block.type === "rubric" || block.type === "timeline" || block.type === "responsibility_matrix") return tableXml([block.headers, ...block.rows], context.theme);
   if (block.type === "callout") return calloutXml(block);
   return "";
 }
@@ -177,7 +196,8 @@ function sectionToXml(section: WordSection, context: RenderContext) {
       style: `Heading${section.level}`,
       before: section.level === 1 ? 260 : 190,
       after: section.level === 1 ? 150 : 110,
-      bold: true
+      bold: true,
+      color: section.level === 1 ? context.theme.accent : undefined
     }),
     section.intro ? paragraphXml({ text: section.intro, before: 40, after: 130, firstLineIndent: true }) : "",
     ...section.blocks.map((block) => wordBlockToXml(block, context))
@@ -233,6 +253,29 @@ function sectionOverviewXml(sections: WordSection[]) {
   ].join("\n");
 }
 
+function staticTocXml(sections: WordSection[], theme: ReturnType<typeof resolveTheme>) {
+  const items = sections
+    .filter((section) => section.level === 1)
+    .slice(0, 18)
+    .map((section, index) => `${index + 1}. ${section.heading}`);
+  if (!items.length) return "";
+  return [
+    paragraphXml({ text: "目录", style: "Heading1", before: 260, after: 150, bold: true, color: theme.accent }),
+    ...items.map((item) => paragraphXml({ text: item, before: 20, after: 70 }))
+  ].join("\n");
+}
+
+function headerXml(title: string, theme: ReturnType<typeof resolveTheme>) {
+  const shortTitle = title.slice(0, 42);
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="${W_NS}">
+  <w:p>
+    <w:pPr><w:spacing w:before="0" w:after="80"/><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="${theme.border}"/></w:pBdr></w:pPr>
+    ${textRun(shortTitle, { bold: true, color: theme.muted, size: 18 })}
+  </w:p>
+</w:hdr>`;
+}
+
 function footerXml() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:ftr xmlns:w="${W_NS}">
@@ -274,13 +317,15 @@ function buildRenderedDocument({
   title,
   template,
   prompt,
-  intent
+  intent,
+  renderOptions
 }: {
   markdown: string;
   title: string;
   template: DocumentTemplate;
   prompt?: string;
   intent?: WordGenerationIntent;
+  renderOptions?: WordDocumentRenderOptions;
 }) {
   const blocks = parseMarkdown(markdown);
   const hasModelPlan = Boolean(parseWordDocumentPlanJson(markdown));
@@ -294,8 +339,16 @@ function buildRenderedDocument({
   if (finalReport.shouldRepair && !canDeliverWordDocumentPlan(finalReport)) {
     throw new Error(`WORD_CONTENT_QA_FAILED:${finalReport.issues.map((issue) => issue.code).join(",")}`);
   }
-  const context: RenderContext = { nextNumberedNumId: FIRST_ORDERED_NUM_ID, orderedNumIds: [] };
-  const overview = shouldAddSectionOverview(plan, template) ? sectionOverviewXml(plan.sections) : "";
+  const theme = resolveTheme(renderOptions);
+  const context: RenderContext = { nextNumberedNumId: FIRST_ORDERED_NUM_ID, orderedNumIds: [], theme };
+  const overview =
+    renderOptions && "needsToc" in renderOptions
+      ? renderOptions.needsToc
+        ? staticTocXml(plan.sections, theme)
+        : ""
+      : shouldAddSectionOverview(plan, template)
+        ? sectionOverviewXml(plan.sections)
+        : "";
   const body = plan.sections.map((section) => sectionToXml(section, context)).join("\n");
   const coverBlocks = hasModelPlan ? [{ type: "paragraph" as const, text: plan.subtitle || plan.title }] : blocks;
   const cover = coverXml(plan.title, plan.subtitle, template, coverBlocks);
@@ -307,6 +360,7 @@ function buildRenderedDocument({
     ${overview}
     ${body}
     <w:sectPr>
+      ${renderOptions?.needsHeaderFooter ? '<w:headerReference w:type="default" r:id="rIdHeader1"/>' : ""}
       <w:footerReference w:type="default" r:id="rIdFooter1"/>
       <w:pgSz w:w="11906" w:h="16838"/>
       <w:pgMar w:top="1360" w:right="1360" w:bottom="1360" w:left="1360" w:header="708" w:footer="708" w:gutter="0"/>
@@ -315,7 +369,7 @@ function buildRenderedDocument({
     </w:sectPr>
   </w:body>
 </w:document>`;
-  return { documentXml, numberingXml: numberingXml(context.orderedNumIds) };
+  return { documentXml, numberingXml: numberingXml(context.orderedNumIds), theme };
 }
 
 export function markdownToDocumentXml({
@@ -323,18 +377,21 @@ export function markdownToDocumentXml({
   title,
   template,
   prompt,
-  intent
+  intent,
+  renderOptions
 }: {
   markdown: string;
   title: string;
   template: DocumentTemplate;
   prompt?: string;
   intent?: WordGenerationIntent;
+  renderOptions?: WordDocumentRenderOptions;
 }) {
-  return buildRenderedDocument({ markdown, title, template, prompt, intent }).documentXml;
+  return buildRenderedDocument({ markdown, title, template, prompt, intent, renderOptions }).documentXml;
 }
 
-function stylesXml() {
+function stylesXml(renderOptions?: WordDocumentRenderOptions) {
+  const theme = resolveTheme(renderOptions);
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="${W_NS}">
   <w:docDefaults>
@@ -343,12 +400,12 @@ function stylesXml() {
   </w:docDefaults>
   <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="Microsoft YaHei"/><w:sz w:val="22"/></w:rPr></w:style>
   <w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:jc w:val="center"/><w:spacing w:before="260" w:after="180"/></w:pPr><w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:hAnsi="Aptos Display" w:eastAsia="Microsoft YaHei"/><w:sz w:val="42"/><w:color w:val="0F172A"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="260" w:after="200"/></w:pPr><w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:hAnsi="Aptos Display" w:eastAsia="Microsoft YaHei"/><w:sz w:val="32"/><w:color w:val="0F172A"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="210" w:after="130"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1D4ED8"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="260" w:after="200"/></w:pPr><w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:hAnsi="Aptos Display" w:eastAsia="Microsoft YaHei"/><w:sz w:val="32"/><w:color w:val="${theme.accent}"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="210" w:after="130"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="${theme.muted}"/></w:rPr></w:style>
   <w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="170" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="334155"/></w:rPr></w:style>
   <w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:style>
   <w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="0" w:after="0"/><w:shd w:val="clear" w:fill="F8FAFC"/><w:ind w:left="240" w:right="240"/></w:pPr><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Microsoft YaHei"/><w:sz w:val="19"/></w:rPr></w:style>
-  <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="8" w:color="BFDBFE"/><w:left w:val="single" w:sz="8" w:color="BFDBFE"/><w:bottom w:val="single" w:sz="8" w:color="BFDBFE"/><w:right w:val="single" w:sz="8" w:color="BFDBFE"/><w:insideH w:val="single" w:sz="6" w:color="DBEAFE"/><w:insideV w:val="single" w:sz="6" w:color="DBEAFE"/></w:tblBorders></w:tblPr></w:style>
+  <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="8" w:color="${theme.border}"/><w:left w:val="single" w:sz="8" w:color="${theme.border}"/><w:bottom w:val="single" w:sz="8" w:color="${theme.border}"/><w:right w:val="single" w:sz="8" w:color="${theme.border}"/><w:insideH w:val="single" w:sz="6" w:color="${theme.light}"/><w:insideV w:val="single" w:sz="6" w:color="${theme.light}"/></w:tblBorders></w:tblPr></w:style>
 </w:styles>`;
 }
 
@@ -374,19 +431,27 @@ export function createDocxBuffer({
   title,
   template,
   prompt,
-  intent
+  intent,
+  renderOptions
 }: {
   markdown: string;
   title: string;
   template: DocumentTemplate;
   prompt?: string;
   intent?: WordGenerationIntent;
+  renderOptions?: WordDocumentRenderOptions;
 }) {
-  const rendered = buildRenderedDocument({ markdown, title, template, prompt, intent });
-  return makeZip([
+  const rendered = buildRenderedDocument({ markdown, title, template, prompt, intent, renderOptions });
+  const headerContentType = renderOptions?.needsHeaderFooter
+    ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'
+    : "";
+  const headerRelationship = renderOptions?.needsHeaderFooter
+    ? '<Relationship Id="rIdHeader1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>'
+    : "";
+  const entries = [
     {
       name: "[Content_Types].xml",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>${headerContentType}<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`
     },
     {
       name: "_rels/.rels",
@@ -402,11 +467,15 @@ export function createDocxBuffer({
     },
     {
       name: "word/_rels/document.xml.rels",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>`
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${headerRelationship}<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>`
     },
-    { name: "word/styles.xml", content: stylesXml() },
+    { name: "word/styles.xml", content: stylesXml(renderOptions) },
     { name: "word/numbering.xml", content: rendered.numberingXml },
     { name: "word/footer1.xml", content: footerXml() },
     { name: "word/document.xml", content: rendered.documentXml }
-  ]);
+  ];
+  if (renderOptions?.needsHeaderFooter) {
+    entries.splice(entries.length - 1, 0, { name: "word/header1.xml", content: headerXml(title, rendered.theme) });
+  }
+  return makeZip(entries);
 }

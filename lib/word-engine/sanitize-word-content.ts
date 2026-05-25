@@ -53,6 +53,7 @@ export function sanitizeWordContent(content: WordContent): WordContent {
       headers: table.headers.map(cleanText).filter(Boolean),
       rows: table.rows.map((row) => row.map(cleanText))
     })),
-    footerNote: content.footerNote ? cleanText(content.footerNote) : undefined
+    footerNote: content.footerNote ? cleanText(content.footerNote) : undefined,
+    attributes: content.attributes
   };
 }

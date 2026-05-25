@@ -16,7 +16,8 @@ function planToContent(plan: ReturnType<typeof buildWordPlan>): WordContent {
     title: plan.title,
     subtitle: plan.subtitle,
     sections: plan.sections,
-    tables: plan.tables
+    tables: plan.tables,
+    attributes: plan.metadata.attributes
   };
 }
 
@@ -43,6 +44,7 @@ export async function generateWordDocumentFromRequest(request: WordRequest) {
 export { buildWordPlan } from "./build-word-plan";
 export { composeWordPlan } from "./compose-word-content";
 export { generateDocx } from "./generate-docx";
+export { detectWordAttributes } from "./detect-word-attributes";
 export { sanitizeWordContent } from "./sanitize-word-content";
 export {
   WordTaskMemoryError,
@@ -54,6 +56,7 @@ export {
 export { validateWordRequest } from "./validate-word-request";
 export type {
   WordContent,
+  WordDocumentAttributes,
   WordGenerateResult,
   WordPlan,
   WordRequest,

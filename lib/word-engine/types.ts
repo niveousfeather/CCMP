@@ -6,6 +6,16 @@ export type WordSourceFile = {
 
 export type WordStylePreset = "professional" | "concise" | "formal";
 
+export type WordDocumentAttributes = {
+  documentKind: "summary" | "report" | "plan" | "minutes" | "training" | "general";
+  formality: "simple" | "formal";
+  needsToc: boolean;
+  needsHeaderFooter: boolean;
+  needsTables: boolean;
+  theme: "blue" | "green" | "orange" | "purple" | "gray";
+  titleStrategy: "from_user" | "from_source" | "cleaned_generic";
+};
+
 export type WordRequest = {
   taskId?: string;
   conversationId?: string;
@@ -41,6 +51,7 @@ export type WordPlan = {
     language: string;
     stylePreset: WordStylePreset;
     sourceCount: number;
+    attributes?: WordDocumentAttributes;
   };
 };
 
@@ -50,6 +61,7 @@ export type WordContent = {
   sections: WordSection[];
   tables: WordTable[];
   footerNote?: string;
+  attributes?: WordDocumentAttributes;
 };
 
 export type WordValidationResult =
