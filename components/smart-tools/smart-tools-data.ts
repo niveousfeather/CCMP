@@ -1,9 +1,9 @@
-import { Network, Presentation, type LucideIcon } from "lucide-react";
+import { BrainCircuit, Network, Presentation, type LucideIcon } from "lucide-react";
 
 export type SmartToolStatus = "规划中" | "即将上线" | "Beta";
 
 export type SmartToolDefinition = {
-  id: "academic-ppt" | "teaching-architecture-diagram";
+  id: "academic-ppt" | "teaching-architecture-diagram" | "capability-map";
   name: string;
   href: string;
   summary: string;
@@ -30,5 +30,14 @@ export const smartTools: SmartToolDefinition[] = [
     status: "Beta",
     icon: Network,
     accent: "from-blue-100 via-white to-red-50 text-blue-700"
+  },
+  {
+    id: "capability-map",
+    name: "能力图谱",
+    href: "/smart-tools/capability-map",
+    summary: "输入课程、专业方向或能力要求，生成课程能力结构图。",
+    status: "Beta",
+    icon: BrainCircuit,
+    accent: "from-emerald-100 via-white to-blue-50 text-emerald-700"
   }
 ];
