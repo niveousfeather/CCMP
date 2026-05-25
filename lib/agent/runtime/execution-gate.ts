@@ -83,6 +83,9 @@ function buildMissingInputs(text: string, legacyTask: AgentTask, skillId: string
     missing.delete("file");
     missing.delete("documentType");
   }
+  if (skillId === "word" && hasSubjectAfterToolMention(text, "word")) {
+    missing.delete("documentType");
+  }
   if (skillId === "word" && referencesConversationText(text)) {
     missing.delete("documentType");
   }

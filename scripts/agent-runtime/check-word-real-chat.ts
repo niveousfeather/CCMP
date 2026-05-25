@@ -202,29 +202,65 @@ async function runApiE2eIfConfigured() {
     return;
   }
 
-  const formData = new FormData();
-  formData.set("mode", "agent");
-  formData.set("stream", "true");
-  formData.set("messages", JSON.stringify([{ role: "user", content: "帮我生成一份 Word，主题是 AI 教育培训方案" }]));
-  formData.set("tools", JSON.stringify({ webSearch: false, contentMode: "write" }));
+  async function submitRealChat(message: string, files: File[] = [], contentMode: "write" | null = "write") {
+    const formData = new FormData();
+    formData.set("mode", "agent");
+    formData.set("stream", "true");
+    formData.set("messages", JSON.stringify([{ role: "user", content: message }]));
+    formData.set("tools", JSON.stringify({ webSearch: false, contentMode }));
+    for (const file of files) formData.append("files", file, file.name);
 
-  const response = await fetch(`${baseUrl}/api/ai/chat?stream=1&debugAgent=1`, {
-    method: "POST",
-    headers: {
-      cookie,
-      accept: "text/event-stream"
-    },
-    body: formData
-  });
-  assert(response.ok, `real API E2E failed with HTTP ${response.status}`);
-  const events = parseSseEvents(await response.text());
-  const final = events.find((event) => event.event === "final");
-  const error = events.find((event) => event.event === "error");
-  assert(!error, `real API E2E returned error event`);
-  const assistantMessage = final?.data.assistantMessage as { taskCard?: { taskType?: string; downloadUrl?: string | null; status?: string } } | undefined;
-  assert(assistantMessage?.taskCard?.taskType === "word", "real API E2E should return Word taskCard");
-  assert(assistantMessage.taskCard.status === "completed", "real API E2E Word taskCard should complete synchronously");
-  assert(Boolean(assistantMessage.taskCard.downloadUrl), "real API E2E Word taskCard should include downloadUrl");
+    const response = await fetch(`${baseUrl}/api/ai/chat?stream=1&debugAgent=1`, {
+      method: "POST",
+      headers: {
+        cookie,
+        accept: "text/event-stream"
+      },
+      body: formData
+    });
+    assert(response.ok, `real API E2E failed with HTTP ${response.status}`);
+    const events = parseSseEvents(await response.text());
+    const error = events.find((event) => event.event === "error");
+    assert(!error, `real API E2E returned error event`);
+    const final = events.find((event) => event.event === "final");
+    assert(final, "real API E2E should return a final event");
+    return final.data.assistantMessage as {
+      taskCard?: { taskType?: string; downloadUrl?: string | null; status?: string };
+      attachments?: Array<{ fileName?: string; url?: string | null }>;
+    } | undefined;
+  }
+
+  async function downloadRealDocx(downloadUrl: string | null | undefined) {
+    assert(downloadUrl, "real API E2E Word taskCard should include downloadUrl");
+    assert(!downloadUrl.includes("/api/ai/chat/tasks/"), "real API E2E must not expose task polling URL as download URL");
+    const response = await fetch(new URL(downloadUrl, baseUrl), { headers: { cookie } });
+    assert(response.ok, `real API E2E download failed with HTTP ${response.status}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    assert(buffer.length > 0, "real API E2E downloaded docx should be non-empty");
+    return docxText(buffer);
+  }
+
+  const advice = await submitRealChat("Word 怎么排版？", [], null);
+  assert(advice?.taskCard?.taskType !== "word", "real API E2E Word advice should not generate a Word taskCard");
+
+  const generated = await submitRealChat("帮我生成一份 Word，主题是 AI 教育培训方案");
+  assert(generated?.taskCard?.taskType === "word", "real API E2E should return Word taskCard");
+  assert(generated.taskCard.status === "completed", "real API E2E Word taskCard should complete through word-engine adapter");
+  const generatedText = await downloadRealDocx(generated.taskCard.downloadUrl);
+  assert(generatedText.includes("AI 教育培训方案"), "real API E2E docx should include requested topic");
+  assertCleanBody(generatedText);
+
+  const uploaded = await submitRealChat("根据这个文件整理成 Word 文档", [makeTxtFile()]);
+  assert(uploaded?.taskCard?.taskType === "word", "real API E2E uploaded txt should generate Word taskCard");
+  assert(uploaded.taskCard.status === "completed", "real API E2E uploaded txt Word taskCard should complete");
+  const uploadedText = await downloadRealDocx(uploaded.taskCard.downloadUrl);
+  for (const expected of ["张三", "90", "李四", "85", "AI 教育测试数据"]) {
+    assert(uploadedText.includes(expected), `real API E2E uploaded docx should include ${expected}`);
+  }
+  assertCleanBody(uploadedText);
+
+  const summary = await submitRealChat("根据这个文件总结一下", [makeTxtFile()], null);
+  assert(summary?.taskCard?.taskType !== "word", "real API E2E file summary should not generate Word taskCard");
 }
 
 const checks: Check[] = [

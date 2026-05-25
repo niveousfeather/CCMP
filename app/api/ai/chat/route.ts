@@ -89,7 +89,7 @@ type AsyncAgentTaskPlan = {
 
 function shouldUseLegacyAsyncTask(agentRuntimePlan: AgentRuntimePlan | null) {
   const targetTool = agentRuntimePlan?.decision.targetTool;
-  return targetTool === "ppt-simple" || targetTool === "word";
+  return targetTool === "ppt-simple";
 }
 
 type AgentRuntimePublicStatus = {
