@@ -15,7 +15,18 @@ import type { GeneratedAgentFile } from "@/lib/agent/types";
 import type { ConversationFileReference, ToolAdapter } from "@/lib/agent/runtime/tool-adapters/types";
 import * as storage from "@/lib/storage";
 import { createMockStorage } from "@/lib/storage/local";
-import { generateWordDocumentFromRequest, resumeWordRequestFromMemory, type WordRequest, type WordTaskMemory } from "@/lib/word-engine";
+import {
+  completeWordTaskMemory,
+  createWordTaskMemory,
+  generateDocx,
+  generateWordDocumentFromRequest,
+  resumeWordRequestFromMemory,
+  sanitizeWordContent,
+  type WordPlan,
+  type WordRequest,
+  type WordTaskMemory
+} from "@/lib/word-engine";
+import { composeDeepWritingDocxContent, composeDeepWritingDocxRequest } from "@/lib/word-engine/compose-deep-writing-docx";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const WORD_FAILED_MESSAGE = "Word 文档生成失败，请补充更明确的主题或稍后重试。";
@@ -140,7 +151,10 @@ async function persistDocx({
   }
 }
 
-function toGeneratedFile(result: Awaited<ReturnType<typeof generateWordDocumentFromRequest>>, persisted: { objectKey: string | null; url: string | null }): GeneratedAgentFile {
+function toGeneratedFile(
+  result: Pick<Awaited<ReturnType<typeof generateWordDocumentFromRequest>>, "fileName" | "mimeType" | "sizeBytes">,
+  persisted: { objectKey: string | null; url: string | null }
+): GeneratedAgentFile {
   return {
     fileName: result.fileName,
     mimeType: result.mimeType,
@@ -148,6 +162,27 @@ function toGeneratedFile(result: Awaited<ReturnType<typeof generateWordDocumentF
     objectKey: persisted.objectKey,
     url: persisted.url
   };
+}
+
+async function generateAndPersistDeepWritingDocx(memory: DeepWritingTaskMemory, context: Parameters<ToolAdapter["execute"]>[1]) {
+  const request = composeDeepWritingDocxRequest(memory);
+  const content = sanitizeWordContent(composeDeepWritingDocxContent(memory));
+  const plan: WordPlan = {
+    title: content.title,
+    subtitle: content.subtitle,
+    sections: content.sections,
+    tables: content.tables,
+    metadata: {
+      language: request.language || "zh-CN",
+      stylePreset: request.stylePreset || "formal",
+      sourceCount: memory.adoptedSources.length,
+      attributes: content.attributes
+    }
+  };
+  const wordTaskMemory = completeWordTaskMemory(createWordTaskMemory(request, "rendering_docx"), plan);
+  const result = generateDocx({ content, request, warnings: [], wordTaskMemory });
+  const persisted = await persistDocx({ buffer: result.buffer, userId: context.userId });
+  return { result, generatedFile: toGeneratedFile(result, persisted) };
 }
 
 async function buildWordRequest(context: Parameters<ToolAdapter["execute"]>[1]): Promise<WordRequest> {
@@ -214,69 +249,63 @@ async function buildDeepWritingMemory(context: Parameters<ToolAdapter["execute"]
 }
 
 async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Parameters<ToolAdapter["execute"]>[1]) {
-  let finalMemory = memory;
-  if (context.emitDeepWritingEvent) {
-    finalMemory = await runDeepWritingDraft({
-      memory,
-      sourceText: memory.sourceSummary,
-      conversationSummary: memory.sourceSummary,
-      emit: context.emitDeepWritingEvent
-    });
-    rememberDeepWritingMemory(finalMemory);
-  }
-
-  const panelState = createDeepWritingPanelState(finalMemory);
-  const events = [
-    createDeepWritingEvent("deep_writing_started", {
-      stage: finalMemory.currentStage,
-      taskId: finalMemory.taskId,
-      title: finalMemory.topic,
-      progress: panelState.progress
-    }),
-    createDeepWritingEvent("deep_writing_source_plan", {
-      stage: finalMemory.currentStage,
-      keywords: finalMemory.searchPlan.keywords,
-      questions: finalMemory.searchPlan.questions,
-      status: finalMemory.searchPlan.status
-    }),
-    createDeepWritingEvent("deep_writing_outline", {
-      stage: finalMemory.currentStage,
-      outline: panelState.outline,
-      progress: panelState.progress
-    })
-  ];
-  const completed = finalMemory.currentStage === "completed";
-
+  const generatedFiles: GeneratedAgentFile[] = [];
+  const completedMemory = await runDeepWritingDraft({
+    memory,
+    sourceText: memory.sourceSummary,
+    conversationSummary: memory.sourceSummary,
+    emit: context.emitDeepWritingEvent || (() => undefined),
+    generateFinalDocument: async (docxMemory) => {
+      const generated = await generateAndPersistDeepWritingDocx(docxMemory, context);
+      generatedFiles[0] = generated.generatedFile;
+      return {
+        fileName: generated.generatedFile.fileName,
+        mimeType: generated.generatedFile.mimeType,
+        sizeBytes: generated.generatedFile.sizeBytes,
+        downloadUrl: generated.generatedFile.url,
+        objectKey: generated.generatedFile.objectKey
+      };
+    }
+  });
+  rememberDeepWritingMemory(completedMemory);
+  const generatedFile = generatedFiles[0] || null;
+  const completedPanelState = createDeepWritingPanelState(completedMemory, generatedFile?.url || completedMemory.finalDocument?.downloadUrl || undefined);
+  const completed = completedMemory.currentStage === "completed";
   return {
     result: {
       content: completed
-        ? "深度写作草稿已完成，已在右侧面板展示。下一步可生成 Word 文档。"
-        : "已进入深度写作准备阶段：我会先整理写作计划、资料摘要和章节大纲。",
+        ? "深度写作已完成，Word 文档已生成，可在下方卡片下载，也可以点击查看写作过程回看章节草稿。"
+        : "深度写作暂未完成，请稍后继续或重试。",
       modelUsed: "NexusAI Deep Writing Planner",
       providerUsed: "xheai" as const,
-      routeReason: completed ? "runtime_v2:word-adapter:deep_writing_stream" : "runtime_v2:word-adapter:deep_writing_foundation",
+      routeReason: completed ? "runtime_v2:word-adapter:deep_writing_docx" : "runtime_v2:word-adapter:deep_writing_failed",
       fallbackUsed: false,
       extractedDocuments: [],
-      generatedFiles: [],
+      generatedFiles: generatedFile ? [generatedFile] : [],
       pendingTask: null,
-      defaultsApplied: ["deep_writing_foundation", ...events.map((event) => event.type)]
+      defaultsApplied: ["deep_writing_docx", "deep_writing_docx_generating", completed ? "deep_writing_completed" : "deep_writing_failed"]
     },
     runtimeMode: "adapter" as const,
     resultCard: {
-      title: "深度写作",
-      description: finalMemory.topic,
-      status: completed ? ("completed" as const) : ("running" as const),
+      title: "深度写作 Word 文档",
+      description: generatedFile?.fileName || completedMemory.topic,
+      status: completed ? ("completed" as const) : ("failed" as const),
       taskType: "word" as const,
+      downloadUrl: generatedFile?.url || completedMemory.finalDocument?.downloadUrl || null,
       retryable: true,
       mode: "deep_writing" as const,
-      deepWritingTaskId: finalMemory.taskId,
+      deepWritingTaskId: completedMemory.taskId,
       panelAvailable: true,
-      panelAutoOpen: true,
-      currentStage: finalMemory.currentStage,
-      deepWritingTaskMemory: finalMemory,
-      deepWritingPanelState: panelState
+      panelAutoOpen: false,
+      currentStage: completedMemory.currentStage,
+      documentReady: Boolean(generatedFile || completedMemory.finalDocument?.downloadUrl),
+      failureReason: completedMemory.failureReason,
+      deepWritingTaskMemory: completedMemory,
+      deepWritingPanelState: completedPanelState
     }
   };
+
+
 }
 
 export const wordAdapter: ToolAdapter = {

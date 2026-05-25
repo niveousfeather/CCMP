@@ -48,6 +48,13 @@ export type DeepWritingTaskMemory = {
     adopted?: boolean;
     usedInSections: string[];
   }>;
+  finalDocument?: {
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    downloadUrl?: string | null;
+    objectKey?: string | null;
+  };
   currentStage: DeepWritingTaskStage;
   failureReason?: string;
   resumeInstruction?: string;
@@ -286,6 +293,6 @@ export function createDeepWritingPanelState(memory: DeepWritingTaskMemory, downl
       adopted: item.adopted ?? item.usedInSections.length > 0
     })),
     canResume: memory.currentStage !== "completed",
-    downloadUrl
+    downloadUrl: downloadUrl || memory.finalDocument?.downloadUrl || undefined
   };
 }

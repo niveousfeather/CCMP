@@ -52,6 +52,7 @@ export type ToolAdapterResultCard = {
   panelAvailable?: boolean;
   panelAutoOpen?: boolean;
   currentStage?: DeepWritingTaskStage;
+  documentReady?: boolean;
   deepWritingTaskMemory?: DeepWritingTaskMemory | null;
   deepWritingPanelState?: DeepWritingPanelState | null;
 };

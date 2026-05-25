@@ -119,6 +119,7 @@ export type ChatTaskCard = {
   panelAvailable?: boolean;
   panelAutoOpen?: boolean;
   currentStage?: string;
+  documentReady?: boolean;
   deepWritingPanelState?: DeepWritingPanelState | null;
 };
 

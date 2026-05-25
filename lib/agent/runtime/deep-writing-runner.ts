@@ -17,11 +17,20 @@ export type SafeDeepWritingEvent = {
   payload: Record<string, unknown>;
 };
 
+export type DeepWritingGeneratedDocument = {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  downloadUrl?: string | null;
+  objectKey?: string | null;
+};
+
 export type DeepWritingRunnerInput = {
   memory: DeepWritingTaskMemory;
   sourceText?: string;
   conversationSummary?: string;
   searchProvider?: DeepWritingSearchProvider;
+  generateFinalDocument?: (memory: DeepWritingTaskMemory) => Promise<DeepWritingGeneratedDocument> | DeepWritingGeneratedDocument;
   emit: (event: SafeDeepWritingEvent) => Promise<void> | void;
 };
 
@@ -141,6 +150,34 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
     progress: 90
   });
 
+  memory.currentStage = "rendering_docx";
+  await emit(input.emit, "deep_writing_docx_generating", {
+    taskId: memory.taskId,
+    currentStage: "rendering_docx",
+    progress: 92,
+    message: "正在生成 Word 文档"
+  });
+
+  let generatedDocument: DeepWritingGeneratedDocument | null = null;
+  if (input.generateFinalDocument) {
+    try {
+      generatedDocument = await input.generateFinalDocument(memory);
+      memory.finalDocument = generatedDocument;
+    } catch (error) {
+      memory.currentStage = "failed";
+      memory.failureReason = safeFailureReason(error);
+      memory.updatedAt = new Date().toISOString();
+      await emit(input.emit, "deep_writing_failed", {
+        taskId: memory.taskId,
+        currentStage: "failed",
+        progress: 92,
+        canResume: true,
+        failureReason: memory.failureReason
+      });
+      return memory;
+    }
+  }
+
   memory.currentStage = "completed";
   memory.pendingSectionIds = [];
   memory.updatedAt = new Date().toISOString();
@@ -149,7 +186,10 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
     currentStage: "completed",
     progress: 100,
     panelAvailable: true,
-    draftCompleted: true
+    draftCompleted: true,
+    documentReady: Boolean(generatedDocument),
+    fileName: generatedDocument?.fileName,
+    downloadUrl: generatedDocument?.downloadUrl
   });
 
   return memory;
@@ -289,6 +329,15 @@ function compact(value?: string, maxLength = 800) {
     .slice(0, maxLength);
 }
 
+function safeFailureReason(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  const cleaned = compact(raw, 240);
+  if (!cleaned || /api[_-]?key|token|secret|password|authorization|provider|stack|model/i.test(cleaned)) {
+    return "Word 文档生成失败，请稍后重试。";
+  }
+  return cleaned;
+}
+
 function notConfiguredEventSource(): DeepWritingSearchResult {
   return {
     id: "not-configured",
@@ -322,6 +371,7 @@ function cloneMemory(memory: DeepWritingTaskMemory): DeepWritingTaskMemory {
     outline: memory.outline.map((section) => ({ ...section })),
     completedSectionIds: [...memory.completedSectionIds],
     pendingSectionIds: [...memory.pendingSectionIds],
+    finalDocument: memory.finalDocument ? { ...memory.finalDocument } : undefined,
     adoptedSources: memory.adoptedSources.map((source) => ({
       ...source,
       usedInSections: [...source.usedInSections]

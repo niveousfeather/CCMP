@@ -207,7 +207,11 @@ const checks: Check[] = [
       const activeTask: AgentActiveTask = { id: "deep-task", kind: "word", title: "AI 教育调研报告", status: "running", source: "conversation" };
       const resumed = await executeRuntimeTool(makeDecision(), context({ userText: resumeInput, conversationId: "deep-resume", activeTask }));
       assert("resultCard" in resumed && resumed.resultCard?.mode === "deep_writing", "resume should return deep writing metadata");
-      assert(resumed.resultCard.currentStage === "building_outline" || resumed.resultCard.currentStage === "writing_sections", "resume should keep a resumable stage");
+      assert(resumed.resultCard.panelAvailable === true, "resume should keep the writing process panel available");
+      assert(
+        ["building_outline", "writing_sections", "rendering_docx", "completed"].includes(String(resumed.resultCard.currentStage)),
+        "resume should keep a deep writing stage"
+      );
     }
   },
   {

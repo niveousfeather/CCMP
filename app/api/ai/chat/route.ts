@@ -130,6 +130,7 @@ type ChatTaskCard = {
   panelAvailable?: boolean;
   panelAutoOpen?: boolean;
   currentStage?: string;
+  documentReady?: boolean;
   deepWritingPanelState?: unknown | null;
 };
 
@@ -787,6 +788,7 @@ function buildTaskCard(input: {
   panelAvailable?: boolean;
   panelAutoOpen?: boolean;
   currentStage?: string;
+  documentReady?: boolean;
   deepWritingPanelState?: unknown | null;
 }): ChatTaskCard {
   return {
@@ -805,6 +807,7 @@ function buildTaskCard(input: {
     panelAvailable: input.panelAvailable,
     panelAutoOpen: input.panelAutoOpen,
     currentStage: input.currentStage,
+    documentReady: input.documentReady,
     deepWritingPanelState: input.deepWritingPanelState || null
   };
 }
@@ -852,6 +855,7 @@ function buildAdapterTaskCard(input: {
     panelAvailable?: boolean;
     panelAutoOpen?: boolean;
     currentStage?: string;
+    documentReady?: boolean;
     deepWritingPanelState?: unknown | null;
   } | null;
   generatedAttachment?: { downloadUrl?: string; url?: string | null; name?: string } | null;
@@ -883,6 +887,7 @@ function buildAdapterTaskCard(input: {
     panelAvailable: input.resultCard.panelAvailable,
     panelAutoOpen: input.resultCard.panelAutoOpen,
     currentStage: input.resultCard.currentStage,
+    documentReady: input.resultCard.documentReady,
     deepWritingPanelState: input.resultCard.deepWritingPanelState || null
   });
 }
