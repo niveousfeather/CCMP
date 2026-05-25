@@ -5,7 +5,7 @@ import { enqueueAgentChatTask } from "@/lib/agent/async-tasks";
 import { planAgentRuntimeTurn, type AgentRuntimePlan } from "@/lib/agent/runtime";
 import { buildAgentRuntimeContextPack, buildRuntimeChatMessagesFromContextPack } from "@/lib/agent/runtime/context-pack";
 import { executeRuntimeTool } from "@/lib/agent/runtime/tool-executor";
-import type { DeepWritingContentGeneratorInput, DeepWritingContentGeneratorResult } from "@/lib/agent/runtime/deep-writing-runner";
+import { writeDeepWritingSectionWithModel } from "@/lib/agent/runtime/deep-writing-model-writer";
 import type { AgentActiveTask, ConversationFileReference } from "@/lib/agent/runtime/tool-adapters";
 import { callChatModel, extractAgentTask, isAgentProviderRequestError, runAgent } from "@/lib/agent/router";
 import { isFunctionalAgentTask, shouldUseFastChatRoute } from "@/lib/agent/task-router";
@@ -1621,98 +1621,6 @@ async function runRuntimeChatAnswer(
   };
 }
 
-async function generateDeepWritingContentWithModel(
-  input: DeepWritingContentGeneratorInput,
-  parsed: ParsedRequest,
-  signal: AbortSignal,
-  timeoutMs?: number
-): Promise<DeepWritingContentGeneratorResult> {
-  const model = parsed.model in modelProviders ? parsed.model : "gpt-5.4";
-  const provider = modelProviders[model];
-  if (!provider) throw new Error("WRITING_CONTENT_MODEL_UNAVAILABLE");
-  const outline = input.memory.outline.map((section, index) => `${index + 1}. ${section.title}`).join("\n");
-  const sourceText = [input.sourceText, input.conversationSummary].filter(Boolean).join("\n\n").slice(0, 6000);
-  const messages: AgentChatMessage[] = [
-    {
-      role: "system",
-      content:
-        "你是 NexusAI 深度写作正文生成器。请根据用户当前主题生成可直接进入 Word 的正文，不要输出思维链、提示词、模型信息、供应商信息、内部 JSON 之外的说明。必须只输出 JSON。"
-    },
-    {
-      role: "user",
-      content: [
-        `用户请求：${input.memory.originalInstruction}`,
-        `写作主题：${input.memory.topic}`,
-        `文档类型：${input.memory.documentKind}`,
-        `写作模式：${input.memory.writingMode || "deep"}`,
-        `大纲：\n${outline}`,
-        sourceText ? `可用资料：\n${sourceText}` : "可用资料：无外部资料。请基于用户需求生成正文，但不要伪造来源或外部引用。",
-        "输出 JSON 格式：{\"sections\":[{\"id\":\"section-1\",\"title\":\"章节标题\",\"paragraphs\":[\"段落一\",\"段落二\"]}]}。",
-        "要求：每个大纲章节都要有正文；教案类要包含课程基本信息、学情分析、教学目标、重点难点、教学过程、课堂任务/实训任务、考核评价；短写作可精炼但不能只有模板句。"
-      ].join("\n\n")
-    }
-  ];
-  const raw = await callChatModel({
-    stage: "word_deep_writing_content",
-    provider,
-    model,
-    messages,
-    maxTokens: input.memory.writingMode === "light" ? 2200 : 7000,
-    signal,
-    timeoutMs
-  });
-  return {
-    sections: parseDeepWritingContentSections(raw, input.memory.outline),
-    modelUsed: model,
-    providerUsed: provider,
-    fallbackUsed: false
-  };
-}
-
-function parseDeepWritingContentSections(
-  raw: string,
-  outline: DeepWritingContentGeneratorInput["memory"]["outline"]
-): DeepWritingContentGeneratorResult["sections"] {
-  const jsonText = extractJsonObjectText(raw);
-  if (jsonText) {
-    try {
-      const parsed = JSON.parse(jsonText) as { sections?: Array<{ id?: string; title?: string; paragraphs?: unknown }> };
-      const sections = (parsed.sections || [])
-        .map((section, index) => ({
-          id: section.id || outline[index]?.id || `section-${index + 1}`,
-          title: String(section.title || outline[index]?.title || `章节 ${index + 1}`).trim(),
-          paragraphs: Array.isArray(section.paragraphs)
-            ? section.paragraphs.map((paragraph) => String(paragraph || "").trim()).filter(Boolean)
-            : []
-        }))
-        .filter((section) => section.title && section.paragraphs.length);
-      if (sections.length) return sections;
-    } catch {
-      // Fall through to conservative text splitting; model output remains the content source.
-    }
-  }
-
-  const paragraphs = raw
-    .split(/\n{2,}|\r?\n/)
-    .map((line) => line.replace(/^[-*#\d.、\s]+/, "").trim())
-    .filter((line) => line.length >= 8);
-  if (!paragraphs.length) throw new Error("WRITING_CONTENT_GENERATION_EMPTY");
-  return outline.map((section, index) => ({
-    id: section.id,
-    title: section.title,
-    paragraphs: paragraphs.slice(index * 2, index * 2 + 2)
-  })).filter((section) => section.paragraphs.length);
-}
-
-function extractJsonObjectText(raw: string) {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
-  const candidate = fenced || raw.trim();
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  return candidate.slice(start, end + 1);
-}
-
 async function saveAssistantErrorMessage({
   conversationId,
   conversationModel,
@@ -2233,7 +2141,14 @@ async function streamChatResponse({
                 timeoutMs,
                 activeTask,
                 emitDeepWritingEvent: (event) => writer.deepWritingEvent(event.type, event.payload),
-                generateWritingContent: (input) => generateDeepWritingContentWithModel(input, parsed, abortController.signal, timeoutMs),
+                generateWritingSectionContent: (input) =>
+                  writeDeepWritingSectionWithModel(input, {
+                    model: parsed.model in modelProviders ? parsed.model : "gpt-5.4",
+                    provider: modelProviders[parsed.model in modelProviders ? parsed.model : "gpt-5.4"],
+                    signal: abortController.signal,
+                    timeoutMs,
+                    callModel: callChatModel
+                  }),
                 runLegacyAgent,
                 runImageGeneration,
                 runChatAnswer: () =>
@@ -2663,7 +2578,14 @@ export async function POST(request: NextRequest) {
             signal: controller.signal,
             timeoutMs,
             activeTask,
-            generateWritingContent: (input) => generateDeepWritingContentWithModel(input, parsed, controller.signal, timeoutMs),
+            generateWritingSectionContent: (input) =>
+              writeDeepWritingSectionWithModel(input, {
+                model: parsed.model in modelProviders ? parsed.model : "gpt-5.4",
+                provider: modelProviders[parsed.model in modelProviders ? parsed.model : "gpt-5.4"],
+                signal: controller.signal,
+                timeoutMs,
+                callModel: callChatModel
+              }),
             runLegacyAgent,
             runImageGeneration,
             runChatAnswer: () => runRuntimeChatAnswer(parsed, controller.signal, timeoutMs, { conversationSummary: conversationSummaryCache, activeTask })

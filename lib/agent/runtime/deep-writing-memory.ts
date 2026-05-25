@@ -18,6 +18,8 @@ export type DeepWritingTaskStage =
   | "interrupted"
   | "failed";
 
+export type DeepWritingGenerationStatus = "pending" | "generating" | "interrupted" | "completed" | "failed";
+
 export type DeepWritingTaskMemory = {
   taskId: string;
   conversationId: string;
@@ -44,6 +46,11 @@ export type DeepWritingTaskMemory = {
     draft?: string;
   }>;
   currentSectionId?: string;
+  currentSectionIndex?: number;
+  currentSectionPartialText?: string;
+  generationStatus?: DeepWritingGenerationStatus;
+  canResume?: boolean;
+  resumeCursor?: string;
   completedSectionIds: string[];
   pendingSectionIds: string[];
   adoptedSources: Array<{
@@ -106,6 +113,7 @@ export type DeepWritingPanelState = {
     title: string;
     draft: string;
   }>;
+  directDocumentBody?: string;
   sources: Array<{
     title: string;
     summary: string;
@@ -258,12 +266,15 @@ export function createDeepWritingTaskMemory(input: DeepWritingTaskMemoryInput): 
         ]
       : [],
     currentStage: "building_outline",
+    generationStatus: "pending",
+    canResume: true,
     createdAt: timestamp,
     updatedAt: timestamp
   };
 }
 
 export function isDeepWritingResumeRequest(text: string) {
+  if (/继续|继续生成|接着写|续写|重试|继续刚才|继续生成文档/.test(text)) return true;
   return /继续刚才的深度报告|继续刚才的深度写作|继续那个调研文档|继续.*深度|继续.*调研文档|继续刚才/.test(text);
 }
 
@@ -280,6 +291,8 @@ export function resumeDeepWritingTaskMemory(memory: DeepWritingTaskMemory, resum
   return {
     ...memory,
     currentStage: stage,
+    generationStatus: "generating",
+    canResume: true,
     resumeInstruction: compact(resumeInstruction, 400),
     updatedAt: nowIso()
   };
@@ -313,6 +326,25 @@ export function createDeepWritingPanelState(memory: DeepWritingTaskMemory, downl
   const completed = memory.completedSectionIds.length;
   const total = Math.max(memory.outline.length, 1);
   const current = memory.outline.find((item) => item.id === memory.currentSectionId);
+  const completedSections = memory.outline
+    .filter((item) => item.status === "completed" && item.draft)
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      draft: item.draft || ""
+    }));
+  const liveSections = [
+    ...completedSections,
+    ...(current && (current.draft || memory.currentSectionPartialText)
+      ? [
+          {
+            id: current.id,
+            title: current.title,
+            draft: current.draft || memory.currentSectionPartialText || ""
+          }
+        ]
+      : [])
+  ];
   return {
     isOpen: true,
     taskId: memory.taskId,
@@ -332,13 +364,8 @@ export function createDeepWritingPanelState(memory: DeepWritingTaskMemory, downl
           draft: current.draft || ""
         }
       : undefined,
-    completedSections: memory.outline
-      .filter((item) => item.status === "completed" && item.draft)
-      .map((item) => ({
-        id: item.id,
-        title: item.title,
-        draft: item.draft || ""
-      })),
+    completedSections,
+    directDocumentBody: liveSections.map((item) => `${item.title}\n${item.draft}`.trim()).filter(Boolean).join("\n\n"),
     sources: memory.adoptedSources.map((item) => ({
       title: item.title,
       summary: item.summary,
@@ -347,7 +374,7 @@ export function createDeepWritingPanelState(memory: DeepWritingTaskMemory, downl
       relevance: item.relevance,
       adopted: item.adopted ?? item.usedInSections.length > 0
     })),
-    canResume: memory.currentStage !== "completed",
+    canResume: memory.canResume ?? memory.currentStage !== "completed",
     downloadUrl: downloadUrl || memory.finalDocument?.downloadUrl || undefined
   };
 }

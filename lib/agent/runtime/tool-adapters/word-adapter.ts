@@ -315,6 +315,7 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
     conversationSummary: memory.sourceSummary,
     contentGenerationMode,
     generateDraftContent: context.generateWritingContent,
+    generateSectionContent: context.generateWritingSectionContent,
     emit: context.emitDeepWritingEvent || (() => undefined),
     generateFinalDocument: async (docxMemory) => {
       const generated = await generateAndPersistDeepWritingDocx(docxMemory, context);
@@ -332,39 +333,51 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
   const generatedFile = generatedFiles[0] || null;
   const completedPanelState = createDeepWritingPanelState(completedMemory, generatedFile?.url || completedMemory.finalDocument?.downloadUrl || undefined);
   const completed = completedMemory.currentStage === "completed";
+  const interrupted = completedMemory.currentStage === "interrupted";
+  const publicStage = completed ? "deep_writing_completed" : interrupted ? "deep_writing_interrupted" : "deep_writing_failed";
+  const publicContent = completed
+    ? "文档已生成，可下载 Word，也可以查看正文预览。"
+    : interrupted
+      ? "文档生成已暂停，已保留当前正文。请输入“继续”可从断点接着生成。"
+      : "深度写作暂未完成，请稍后继续或重试。";
   return {
     result: {
-      content: completed
+      content: publicContent,
+      legacyContent: completed
         ? "文档已生成，可在下方卡片下载，也可以点击查看文档预览完整内容。"
         : "深度写作暂未完成，请稍后继续或重试。",
       modelUsed: "NexusAI Deep Writing Planner",
       providerUsed: "xheai" as const,
-      routeReason: completed ? "runtime_v2:word-adapter:deep_writing_docx" : `runtime_v2:word-adapter:deep_writing_failed:${contentGenerationMode}`,
+      routeReason: completed
+        ? "runtime_v2:word-adapter:deep_writing_docx"
+        : interrupted
+          ? `runtime_v2:word-adapter:deep_writing_interrupted:${contentGenerationMode}`
+          : `runtime_v2:word-adapter:deep_writing_failed:${contentGenerationMode}`,
       fallbackUsed: false,
       extractedDocuments: [],
-      generatedFiles: generatedFile ? [generatedFile] : [],
+      generatedFiles: completed && generatedFile ? [generatedFile] : [],
       pendingTask: null,
       defaultsApplied: [
         `writing_content_generation:${contentGenerationMode}`,
         "deep_writing_docx",
         "deep_writing_docx_generating",
-        completed ? "deep_writing_completed" : "deep_writing_failed"
+        publicStage
       ]
     },
     runtimeMode: "adapter" as const,
     resultCard: {
       title: "深度写作 Word 文档",
       description: generatedFile?.fileName || completedMemory.topic,
-      status: completed ? ("completed" as const) : ("failed" as const),
+      status: completed ? ("completed" as const) : interrupted ? ("running" as const) : ("failed" as const),
       taskType: "word" as const,
-      downloadUrl: generatedFile?.url || completedMemory.finalDocument?.downloadUrl || null,
+      downloadUrl: completed ? generatedFile?.url || completedMemory.finalDocument?.downloadUrl || null : null,
       retryable: true,
       mode: "deep_writing" as const,
       deepWritingTaskId: completedMemory.taskId,
       panelAvailable: true,
       panelAutoOpen: true,
       currentStage: completedMemory.currentStage,
-      documentReady: Boolean(generatedFile || completedMemory.finalDocument?.downloadUrl),
+      documentReady: completed && Boolean(generatedFile || completedMemory.finalDocument?.downloadUrl),
       contentGenerationMode,
       failureReason: completedMemory.failureReason,
       deepWritingTaskMemory: completedMemory,
@@ -376,7 +389,7 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
 }
 
 function resolveWritingContentGenerationMode(context: Parameters<ToolAdapter["execute"]>[1]): WritingContentGenerationMode {
-  if (context.generateWritingContent) return "model_generated";
+  if (context.generateWritingSectionContent || context.generateWritingContent) return "model_generated";
   if (context.allowDeterministicWriting) return "deterministic_test_only";
   return "unavailable";
 }

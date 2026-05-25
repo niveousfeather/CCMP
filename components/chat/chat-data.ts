@@ -96,6 +96,7 @@ export type DeepWritingPanelState = {
     title: string;
     draft: string;
   }>;
+  directDocumentBody?: string;
   sources: Array<{
     title: string;
     summary: string;

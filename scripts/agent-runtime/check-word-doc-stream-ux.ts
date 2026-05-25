@@ -145,6 +145,22 @@ const checks: Check[] = [
     }
   },
   {
+    name: "panel does not render outline card list",
+    async run() {
+      const source = await sourceOf("components/chat/DeepWritingPanel.tsx");
+      assert(!source.includes("文档大纲"), "panel should not render 文档大纲");
+      assert(!source.includes("SectionStatusIcon"), "panel should not render outline status cards");
+    }
+  },
+  {
+    name: "panel uses direct body as main area",
+    async run() {
+      const source = await sourceOf("components/chat/DeepWritingPanel.tsx");
+      assert(source.includes("directDocumentBody"), "panel should use directDocumentBody");
+      assert(source.includes("min-h-[52vh]"), "body area should be primary display");
+    }
+  },
+  {
     name: "section delta maps to preview body",
     run() {
       let state = reduceDeepWritingPanelEvent(createInitialDeepWritingClientState(), {

@@ -44,6 +44,28 @@ export type DeepWritingContentGeneratorResult = {
   fallbackUsed?: boolean;
 };
 
+export type DeepWritingSectionWriterInput = {
+  memory: DeepWritingTaskMemory;
+  section: DeepWritingTaskMemory["outline"][number];
+  sectionIndex: number;
+  previousSections: Array<{
+    id: string;
+    title: string;
+    draft: string;
+  }>;
+  currentPartialText: string;
+  sourceText?: string;
+  conversationSummary?: string;
+  onDelta: (delta: string) => Promise<void> | void;
+};
+
+export type DeepWritingSectionWriterResult = {
+  text: string;
+  modelUsed?: string;
+  providerUsed?: string;
+  interrupted?: boolean;
+};
+
 export type DeepWritingRunnerInput = {
   memory: DeepWritingTaskMemory;
   sourceText?: string;
@@ -51,6 +73,7 @@ export type DeepWritingRunnerInput = {
   searchProvider?: DeepWritingSearchProvider;
   contentGenerationMode?: WritingContentGenerationMode;
   generateDraftContent?: (input: DeepWritingContentGeneratorInput) => Promise<DeepWritingContentGeneratorResult> | DeepWritingContentGeneratorResult;
+  generateSectionContent?: (input: DeepWritingSectionWriterInput) => Promise<DeepWritingSectionWriterResult | string> | DeepWritingSectionWriterResult | string;
   generateFinalDocument?: (memory: DeepWritingTaskMemory) => Promise<DeepWritingGeneratedDocument> | DeepWritingGeneratedDocument;
   emit: (event: SafeDeepWritingEvent) => Promise<void> | void;
 };
@@ -94,84 +117,94 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
     });
   }
 
-  const draftResult = await generateDraft(input, memory);
-  if (!draftResult.ok) {
-    memory.currentStage = "failed";
-    memory.failureReason = draftResult.failureReason;
-    memory.updatedAt = new Date().toISOString();
-    await emit(input.emit, "deep_writing_failed", {
-      taskId: memory.taskId,
-      currentStage: "failed",
-      progress: 10,
-      canResume: true,
-      failureReason: memory.failureReason
+  if ((input.contentGenerationMode || "unavailable") === "model_generated") {
+    const streamed = await streamModelGeneratedSections(input, memory);
+    if (!streamed.ok) return memory;
+  } else {
+    const draftResult = await generateDraft(input, memory);
+    if (!draftResult.ok) {
+      memory.currentStage = "failed";
+      memory.generationStatus = "failed";
+      memory.canResume = true;
+      memory.failureReason = draftResult.failureReason;
+      memory.updatedAt = new Date().toISOString();
+      await emit(input.emit, "deep_writing_failed", {
+        taskId: memory.taskId,
+        currentStage: "failed",
+        progress: 10,
+        canResume: true,
+        failureReason: memory.failureReason
+      });
+      return memory;
+    }
+    const draft = draftResult.draft;
+    const existingOutlineById = new Map(memory.outline.map((section) => [section.id, section]));
+    memory.outline = draft.sections.map((section) => {
+      const existing = existingOutlineById.get(section.id);
+      return {
+        id: section.id,
+        title: section.title,
+        status: existing?.status || "pending",
+        summary: existing?.summary,
+        draft: existing?.draft
+      };
     });
-    return memory;
-  }
-  const draft = draftResult.draft;
-  const existingOutlineById = new Map(memory.outline.map((section) => [section.id, section]));
-  memory.outline = draft.sections.map((section) => {
-    const existing = existingOutlineById.get(section.id);
-    return {
-      id: section.id,
-      title: section.title,
-      status: existing?.status || "pending",
-      summary: existing?.summary,
-      draft: existing?.draft
-    };
-  });
-  memory.pendingSectionIds = memory.outline.filter((section) => section.status !== "completed").map((section) => section.id);
-  memory.completedSectionIds = memory.outline.filter((section) => section.status === "completed").map((section) => section.id);
+    memory.pendingSectionIds = memory.outline.filter((section) => section.status !== "completed").map((section) => section.id);
+    memory.completedSectionIds = memory.outline.filter((section) => section.status === "completed").map((section) => section.id);
 
-  memory.currentStage = "building_outline";
-  await emit(input.emit, "deep_writing_outline", {
-    taskId: memory.taskId,
-    outline: panelOutline(memory),
-    progress: 10
-  });
-
-  const total = Math.max(draft.sections.length, 1);
-  const completedAtStart = new Set(memory.completedSectionIds);
-  for (let index = 0; index < draft.sections.length; index += 1) {
-    const section = draft.sections[index];
-    if (completedAtStart.has(section.id)) continue;
-
-    memory.currentStage = "writing_sections";
-    memory.currentSectionId = section.id;
-    updateSection(memory, section.id, { status: "writing" });
-    await emit(input.emit, "deep_writing_section_started", {
+    memory.currentStage = "building_outline";
+    await emit(input.emit, "deep_writing_outline", {
       taskId: memory.taskId,
-      sectionId: section.id,
-      title: section.title,
-      progress: progressFor(index, total, 12)
+      outline: panelOutline(memory),
+      progress: 10
     });
 
-    let accumulated = "";
-    for (const paragraph of section.paragraphs) {
-      const delta = `${paragraph}\n\n`;
-      accumulated += delta;
-      updateSection(memory, section.id, { draft: accumulated });
-      await emit(input.emit, "deep_writing_section_delta", {
+    const total = Math.max(draft.sections.length, 1);
+    const completedAtStart = new Set(memory.completedSectionIds);
+    for (let index = 0; index < draft.sections.length; index += 1) {
+      const section = draft.sections[index];
+      if (completedAtStart.has(section.id)) continue;
+
+      memory.currentStage = "writing_sections";
+      memory.currentSectionId = section.id;
+      memory.currentSectionIndex = index;
+      updateSection(memory, section.id, { status: "writing" });
+      await emit(input.emit, "deep_writing_section_started", {
         taskId: memory.taskId,
         sectionId: section.id,
-        delta,
-        accumulatedPreview: accumulated.slice(0, 220),
-        progress: progressFor(index, total, 18)
+        title: section.title,
+        progress: progressFor(index, total, 12)
+      });
+
+      let accumulated = "";
+      for (const paragraph of section.paragraphs) {
+        const delta = `${paragraph}\n\n`;
+        accumulated += delta;
+        memory.currentSectionPartialText = accumulated;
+        updateSection(memory, section.id, { draft: accumulated });
+        await emit(input.emit, "deep_writing_section_delta", {
+          taskId: memory.taskId,
+          sectionId: section.id,
+          delta,
+          accumulatedPreview: accumulated.slice(0, 220),
+          progress: progressFor(index, total, 18)
+        });
+      }
+
+      const preview = accumulated.replace(/\s+/g, " ").trim().slice(0, 180);
+      updateSection(memory, section.id, { status: "completed", summary: preview, draft: accumulated });
+      memory.currentSectionPartialText = "";
+      memory.completedSectionIds = unique([...memory.completedSectionIds, section.id]);
+      memory.pendingSectionIds = memory.outline.filter((item) => item.status !== "completed").map((item) => item.id);
+      await emit(input.emit, "deep_writing_section_completed", {
+        taskId: memory.taskId,
+        sectionId: section.id,
+        title: section.title,
+        draft: accumulated,
+        preview,
+        progress: progressFor(index + 1, total, 18)
       });
     }
-
-    const preview = accumulated.replace(/\s+/g, " ").trim().slice(0, 180);
-    updateSection(memory, section.id, { status: "completed", summary: preview, draft: accumulated });
-    memory.completedSectionIds = unique([...memory.completedSectionIds, section.id]);
-    memory.pendingSectionIds = memory.outline.filter((item) => item.status !== "completed").map((item) => item.id);
-    await emit(input.emit, "deep_writing_section_completed", {
-      taskId: memory.taskId,
-      sectionId: section.id,
-      title: section.title,
-      draft: accumulated,
-      preview,
-      progress: progressFor(index + 1, total, 18)
-    });
   }
 
   memory.currentSectionId = undefined;
@@ -211,6 +244,10 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
   }
 
   memory.currentStage = "completed";
+  memory.generationStatus = "completed";
+  memory.canResume = false;
+  memory.currentSectionPartialText = "";
+  memory.currentSectionIndex = undefined;
   memory.pendingSectionIds = [];
   memory.updatedAt = new Date().toISOString();
   await emit(input.emit, "deep_writing_completed", {
@@ -225,6 +262,153 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
   });
 
   return memory;
+}
+
+async function streamModelGeneratedSections(input: DeepWritingRunnerInput, memory: DeepWritingTaskMemory): Promise<{ ok: boolean }> {
+  if (!input.generateSectionContent) {
+    memory.currentStage = "failed";
+    memory.generationStatus = "failed";
+    memory.canResume = true;
+    memory.failureReason = "WRITING_CONTENT_GENERATION_UNAVAILABLE";
+    memory.updatedAt = new Date().toISOString();
+    await emit(input.emit, "deep_writing_failed", {
+      taskId: memory.taskId,
+      currentStage: "failed",
+      progress: 10,
+      canResume: true,
+      failureReason: memory.failureReason
+    });
+    return { ok: false };
+  }
+
+  memory.currentStage = "building_outline";
+  memory.generationStatus = "generating";
+  memory.canResume = true;
+  memory.pendingSectionIds = memory.outline.filter((section) => section.status !== "completed").map((section) => section.id);
+  memory.completedSectionIds = memory.outline.filter((section) => section.status === "completed").map((section) => section.id);
+  await emit(input.emit, "deep_writing_outline", {
+    taskId: memory.taskId,
+    outline: panelOutline(memory),
+    progress: 10
+  });
+
+  const total = Math.max(memory.outline.length, 1);
+  const currentIndex =
+    memory.currentSectionId && !memory.completedSectionIds.includes(memory.currentSectionId)
+      ? Math.max(0, memory.outline.findIndex((section) => section.id === memory.currentSectionId))
+      : memory.outline.findIndex((section) => section.status !== "completed");
+  const startIndex = currentIndex >= 0 ? currentIndex : memory.outline.length;
+
+  for (let index = startIndex; index < memory.outline.length; index += 1) {
+    const section = memory.outline[index];
+    if (!section || section.status === "completed") continue;
+
+    memory.currentStage = "writing_sections";
+    memory.currentSectionId = section.id;
+    memory.currentSectionIndex = index;
+    const startingPartial = section.draft || memory.currentSectionPartialText || "";
+    memory.currentSectionPartialText = startingPartial;
+    updateSection(memory, section.id, { status: "writing", draft: startingPartial });
+    await emit(input.emit, "deep_writing_section_started", {
+      taskId: memory.taskId,
+      sectionId: section.id,
+      title: section.title,
+      progress: progressFor(index, total, 12),
+      accumulatedPreview: startingPartial.slice(0, 220)
+    });
+
+    let accumulated = startingPartial;
+    try {
+      const result = await input.generateSectionContent({
+        memory,
+        section: { ...section, draft: accumulated, status: "writing" },
+        sectionIndex: index,
+        previousSections: completedSectionsForWriter(memory),
+        currentPartialText: startingPartial,
+        sourceText: input.sourceText,
+        conversationSummary: input.conversationSummary,
+        onDelta: async (delta) => {
+          const safeDelta = cleanGeneratedText(delta, 2000);
+          if (!safeDelta) return;
+          accumulated += safeDelta;
+          memory.currentSectionPartialText = accumulated;
+          memory.resumeCursor = `${section.id}:${accumulated.length}`;
+          updateSection(memory, section.id, { status: "writing", draft: accumulated });
+          memory.updatedAt = new Date().toISOString();
+          await emit(input.emit, "deep_writing_section_delta", {
+            taskId: memory.taskId,
+            sectionId: section.id,
+            title: section.title,
+            delta: safeDelta,
+            accumulatedPreview: accumulated.slice(0, 220),
+            progress: progressFor(index, total, 18)
+          });
+        }
+      });
+      const returnedText = typeof result === "string" ? result : result.text;
+      const finalText = normalizeCompletedSectionText(returnedText, startingPartial, accumulated);
+      if (!finalText.trim()) throw new Error("WRITING_CONTENT_GENERATION_EMPTY");
+      accumulated = finalText;
+    } catch (error) {
+      memory.currentStage = "interrupted";
+      memory.generationStatus = "interrupted";
+      memory.canResume = true;
+      memory.failureReason = safeFailureReason(error);
+      memory.currentSectionPartialText = accumulated;
+      memory.resumeCursor = `${section.id}:${accumulated.length}`;
+      updateSection(memory, section.id, { status: "writing", draft: accumulated });
+      memory.pendingSectionIds = memory.outline.filter((item) => item.status !== "completed").map((item) => item.id);
+      memory.updatedAt = new Date().toISOString();
+      await emit(input.emit, "deep_writing_interrupted", {
+        taskId: memory.taskId,
+        currentStage: "interrupted",
+        sectionId: section.id,
+        title: section.title,
+        progress: progressFor(index, total, 18),
+        canResume: true,
+        accumulatedPreview: accumulated.slice(0, 220),
+        failureReason: memory.failureReason
+      });
+      return { ok: false };
+    }
+
+    const preview = accumulated.replace(/\s+/g, " ").trim().slice(0, 180);
+    updateSection(memory, section.id, { status: "completed", summary: preview, draft: accumulated });
+    memory.currentSectionPartialText = "";
+    memory.completedSectionIds = unique([...memory.completedSectionIds, section.id]);
+    memory.pendingSectionIds = memory.outline.filter((item) => item.status !== "completed").map((item) => item.id);
+    memory.updatedAt = new Date().toISOString();
+    await emit(input.emit, "deep_writing_section_completed", {
+      taskId: memory.taskId,
+      sectionId: section.id,
+      title: section.title,
+      draft: accumulated,
+      preview,
+      progress: progressFor(index + 1, total, 18)
+    });
+  }
+
+  memory.currentSectionId = undefined;
+  memory.currentSectionPartialText = "";
+  memory.pendingSectionIds = [];
+  return { ok: true };
+}
+
+function completedSectionsForWriter(memory: DeepWritingTaskMemory) {
+  return memory.outline
+    .filter((section) => section.status === "completed" && section.draft)
+    .map((section) => ({
+      id: section.id,
+      title: section.title,
+      draft: section.draft || ""
+    }));
+}
+
+function normalizeCompletedSectionText(returnedText: string, startingPartial: string, accumulated: string) {
+  const cleaned = cleanGeneratedText(returnedText, 8000);
+  if (!cleaned) return accumulated;
+  if (startingPartial && !cleaned.startsWith(startingPartial)) return `${startingPartial}${cleaned}`;
+  return cleaned.length >= accumulated.length ? cleaned : accumulated;
 }
 
 async function generateDraft(input: DeepWritingRunnerInput, memory: DeepWritingTaskMemory): Promise<

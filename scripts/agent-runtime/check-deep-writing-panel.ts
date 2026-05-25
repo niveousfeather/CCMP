@@ -222,6 +222,16 @@ const checks: Check[] = [
       assert(reopened.isOpen, "panel should reopen");
       assert(reopened.panelState?.taskId === "deep-task-1", "panel state should be restored");
     }
+  },
+  {
+    name: "panel source renders direct body instead of outline cards",
+    run() {
+      const fs = require("node:fs") as typeof import("node:fs");
+      const source = fs.readFileSync("components/chat/DeepWritingPanel.tsx", "utf8");
+      assert(source.includes("directDocumentBody"), "panel should render direct document body");
+      assert(!source.includes("文档大纲"), "panel should not render document outline title");
+      assert(!source.includes("SectionStatusIcon"), "panel should not render outline card icons");
+    }
   }
 ];
 

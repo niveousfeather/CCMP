@@ -107,6 +107,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       ...panel,
       currentStage: "writing_sections",
       currentSection: { id: sectionId, title, draft: "" },
+      directDocumentBody: buildDirectDocumentBody(panel.completedSections || [], { id: sectionId, title, draft: "" }),
       outline: upsertOutlineStatus(panel.outline, sectionId, title, "writing")
     });
   }
@@ -124,6 +125,11 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
         title,
         draft: `${currentDraft}${delta}`
       },
+      directDocumentBody: buildDirectDocumentBody(panel.completedSections || [], {
+        id: sectionId,
+        title,
+        draft: `${currentDraft}${delta}`
+      }),
       outline: upsertOutlineStatus(panel.outline, sectionId, title, "writing")
     });
   }
@@ -146,6 +152,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       ...panel,
       outline: outline.some((item) => item.id === sectionId) ? outline : [...outline, { id: sectionId, title, status: "completed", preview }],
       completedSections: upsertCompletedSection(panel.completedSections || [], sectionId, title, draft),
+      directDocumentBody: buildDirectDocumentBody(upsertCompletedSection(panel.completedSections || [], sectionId, title, draft), undefined),
       progress: progressFromOutline(outline)
     });
   }
@@ -167,6 +174,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       progress: 100,
       canResume: false,
       completedSections: panel.completedSections || [],
+      directDocumentBody: panel.directDocumentBody || buildDirectDocumentBody(panel.completedSections || [], panel.currentSection),
       downloadUrl: readString(payload.downloadUrl) || panel.downloadUrl
     });
   }
@@ -175,7 +183,8 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
     return updatePanel(base, {
       ...panel,
       currentStage: event.type === "deep_writing_failed" ? "failed" : "interrupted",
-      canResume: true
+      canResume: true,
+      directDocumentBody: panel.directDocumentBody || buildDirectDocumentBody(panel.completedSections || [], panel.currentSection)
     });
   }
 
@@ -197,6 +206,7 @@ function panelStateFromTaskCard(taskCard: ChatTaskCard, fallback?: DeepWritingPa
     outline: fallback?.outline || [],
     currentSection: fallback?.currentSection,
     completedSections: fallback?.completedSections || [],
+    directDocumentBody: fallback?.directDocumentBody,
     sources: fallback?.sources || [],
     canResume: taskCard.status !== "completed",
     downloadUrl: taskCard.downloadUrl || fallback?.downloadUrl || undefined
@@ -219,6 +229,7 @@ function normalizePanelState(panelState: DeepWritingPanelState): DeepWritingPane
         }
       : undefined,
     completedSections: normalizeCompletedSections(panelState.completedSections),
+    directDocumentBody: readString(panelState.directDocumentBody) || buildDirectDocumentBody(normalizeCompletedSections(panelState.completedSections), panelState.currentSection),
     sources: normalizeSources(panelState.sources),
     canResume: Boolean(panelState.canResume),
     downloadUrl: panelState.downloadUrl
@@ -235,6 +246,7 @@ function createPanelState(taskId: string, title?: string, overrides: Partial<Dee
     outline: overrides.outline || [],
     currentSection: overrides.currentSection,
     completedSections: overrides.completedSections || [],
+    directDocumentBody: overrides.directDocumentBody,
     sources: overrides.sources || [],
     canResume: overrides.canResume ?? true,
     downloadUrl: overrides.downloadUrl
@@ -386,6 +398,20 @@ function upsertCompletedSection(
     return { id, title: title || section.title, draft };
   });
   return found ? next : [...next, { id, title, draft }];
+}
+
+function buildDirectDocumentBody(
+  completedSections: NonNullable<DeepWritingPanelState["completedSections"]>,
+  currentSection?: DeepWritingPanelState["currentSection"] | null
+) {
+  const sections = [...completedSections];
+  if (currentSection?.draft) {
+    const existing = sections.findIndex((section) => section.id === currentSection.id);
+    const next = { id: currentSection.id, title: currentSection.title, draft: currentSection.draft };
+    if (existing >= 0) sections[existing] = next;
+    else sections.push(next);
+  }
+  return sections.map((section) => `${section.title}\n${section.draft}`.trim()).filter(Boolean).join("\n\n");
 }
 
 function findOutlineTitle(panel: DeepWritingPanelState, sectionId: string) {
