@@ -16,6 +16,7 @@ export type DeepWritingDraftInput = {
   memory: DeepWritingTaskMemory;
   sourceText?: string;
   conversationSummary?: string;
+  adoptedSources?: DeepWritingTaskMemory["adoptedSources"];
 };
 
 const titlesByKind: Record<DeepWritingTaskMemory["documentKind"], string[]> = {
@@ -31,7 +32,13 @@ const forbiddenDraftPattern = /我将思考|我的推理|作为\s*AI|mock|placeh
 
 export function composeDeepWritingDraft(input: DeepWritingDraftInput): DeepWritingDraft {
   const source = cleanDraftText(input.sourceText || input.memory.sourceSummary || input.conversationSummary || "");
-  const facts = extractSourceFacts(source);
+  const adoptedSources = input.adoptedSources || input.memory.adoptedSources || [];
+  const sourceEvidence = adoptedSources.map((item) => item.summary).filter(Boolean).join("\n");
+  const facts = uniqueFacts([
+    ...extractSourceFacts(source),
+    ...extractSourceFacts(sourceEvidence),
+    ...adoptedSources.map((item) => cleanDraftText(item.summary).slice(0, 100))
+  ]);
   const titles = titlesByKind[input.memory.documentKind] || titlesByKind.general;
   const sections = titles.map((title, index) => {
     const id = input.memory.outline[index]?.id || `section-${index + 1}`;
@@ -43,7 +50,8 @@ export function composeDeepWritingDraft(input: DeepWritingDraftInput): DeepWriti
         topic: input.memory.topic,
         documentKind: input.memory.documentKind,
         facts,
-        hasSource: Boolean(source)
+        adoptedSources,
+        hasSource: Boolean(source || sourceEvidence)
       }),
       keyPoints: facts.slice(0, 4)
     };
@@ -60,12 +68,14 @@ function paragraphsForSection({
   topic,
   documentKind,
   facts,
+  adoptedSources,
   hasSource
 }: {
   title: string;
   topic: string;
   documentKind: DeepWritingTaskMemory["documentKind"];
   facts: string[];
+  adoptedSources: DeepWritingTaskMemory["adoptedSources"];
   hasSource: boolean;
 }) {
   const factSentence = facts.length
@@ -132,4 +142,8 @@ function cleanDraftText(text: string) {
     .replace(forbiddenDraftPattern, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function uniqueFacts(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).slice(0, 12);
 }

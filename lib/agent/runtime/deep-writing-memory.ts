@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { DeepWritingDetection, DeepWritingDocumentKind } from "@/lib/agent/runtime/deep-writing-detector";
+import type { DeepWritingSourceType } from "@/lib/agent/runtime/deep-writing-search-provider";
 
 export type DeepWritingSectionStatus = "pending" | "writing" | "completed";
 export type DeepWritingSearchStatus = "pending" | "skipped" | "completed";
@@ -42,6 +43,9 @@ export type DeepWritingTaskMemory = {
     title: string;
     url?: string;
     summary: string;
+    sourceType?: DeepWritingSourceType;
+    relevance?: "low" | "medium" | "high";
+    adopted?: boolean;
     usedInSections: string[];
   }>;
   currentStage: DeepWritingTaskStage;
@@ -55,6 +59,7 @@ export type DeepWritingEventType =
   | "deep_writing_started"
   | "deep_writing_plan"
   | "deep_writing_source_plan"
+  | "deep_writing_source"
   | "deep_writing_outline"
   | "deep_writing_section_started"
   | "deep_writing_section_delta"
@@ -86,6 +91,8 @@ export type DeepWritingPanelState = {
     title: string;
     summary: string;
     url?: string;
+    sourceType?: DeepWritingSourceType;
+    relevance?: "low" | "medium" | "high";
     adopted: boolean;
   }>;
   canResume: boolean;
@@ -113,6 +120,10 @@ const unsafePayloadKeys = new Set([
   "authorization",
   "internalJson",
   "internalJSON",
+  "rawHtml",
+  "html",
+  "rawMemory",
+  "model",
   "wordTaskMemory",
   "deepWritingTaskMemory",
   "modelReasoning"
@@ -187,6 +198,9 @@ export function createDeepWritingTaskMemory(input: DeepWritingTaskMemoryInput): 
           {
             title: input.sourceFileNames[0] || "当前对话资料",
             summary: compact(input.sourceSummary, 300),
+            sourceType: "uploaded_file",
+            relevance: "high",
+            adopted: true,
             usedInSections: []
           }
         ]
@@ -267,7 +281,9 @@ export function createDeepWritingPanelState(memory: DeepWritingTaskMemory, downl
       title: item.title,
       summary: item.summary,
       url: item.url,
-      adopted: item.usedInSections.length > 0
+      sourceType: item.sourceType,
+      relevance: item.relevance,
+      adopted: item.adopted ?? item.usedInSections.length > 0
     })),
     canResume: memory.currentStage !== "completed",
     downloadUrl

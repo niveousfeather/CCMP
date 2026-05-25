@@ -123,13 +123,18 @@ export function DeepWritingPanel({
                     ) : (
                       <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--color-text)]">{source.title}</span>
                     )}
+                    {source.sourceType ? (
+                      <span className="shrink-0 rounded-full bg-[var(--color-panel)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)]">
+                        {getSourceTypeLabel(source.sourceType)}
+                      </span>
+                    ) : null}
                     {source.adopted ? <span className="shrink-0 rounded-full bg-[var(--color-panel)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)]">已采用</span> : null}
                   </div>
                   {source.summary ? <p className="mt-1 line-clamp-3 text-xs leading-5 text-[var(--color-text-muted)]">{source.summary}</p> : null}
                 </div>
               ))
             ) : (
-              <EmptyLine text="暂未接入外部检索，当前仅展示对话和附件资料摘要" />
+              <EmptyLine text="未检测到可用的自建搜索，当前基于已上传资料和对话内容继续写作。" />
             )}
           </div>
         </section>
@@ -204,4 +209,14 @@ function getStageLabel(stage?: string) {
     failed: "失败"
   };
   return labels[stage || ""] || "准备中";
+}
+
+function getSourceTypeLabel(type?: string) {
+  const labels: Record<string, string> = {
+    internal_search: "自建搜索",
+    uploaded_file: "上传资料",
+    conversation: "对话内容",
+    not_configured: "未配置"
+  };
+  return labels[type || ""] || "资料";
 }

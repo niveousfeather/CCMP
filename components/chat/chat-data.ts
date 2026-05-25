@@ -95,6 +95,8 @@ export type DeepWritingPanelState = {
     title: string;
     summary: string;
     url?: string;
+    sourceType?: "internal_search" | "uploaded_file" | "conversation" | "not_configured";
+    relevance?: "low" | "medium" | "high";
     adopted: boolean;
   }>;
   canResume: boolean;

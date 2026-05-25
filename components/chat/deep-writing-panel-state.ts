@@ -26,13 +26,15 @@ const unsafePayloadKeys = new Set([
   "internal",
   "rawEvent",
   "rawJson",
+  "rawHtml",
+  "html",
   "rawMemory",
   "wordTaskMemory",
   "deepWritingTaskMemory",
   "modelReasoning"
 ]);
 
-const unsafeTextPattern = /chain[-\s]?of[-\s]?thought|prompt|provider|api[_\s-]?key|authorization|stack trace|internal json|raw memory|wordTaskMemory|deepWritingTaskMemory|model reasoning/i;
+const unsafeTextPattern = /chain[-\s]?of[-\s]?thought|prompt|provider|api[_\s-]?key|authorization|stack trace|internal json|raw memory|raw html|wordTaskMemory|deepWritingTaskMemory|model reasoning/i;
 
 export function createInitialDeepWritingClientState(): DeepWritingClientState {
   return {
@@ -147,11 +149,12 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
   }
 
   if (event.type === "deep_writing_source_plan" || event.type === "deep_writing_source") {
-    const sources = normalizeSources(payload.sources);
+    const sources = event.type === "deep_writing_source" ? normalizeSourceEvent(payload) : normalizeSources(payload.sources);
+    const mergedSources = mergeSources(panel.sources, sources);
     return updatePanel(base, {
       ...panel,
       currentStage: readString(payload.stage) || panel.currentStage,
-      sources: sources.length ? sources : panel.sources
+      sources: mergedSources.length ? mergedSources : panel.sources
     });
   }
 
@@ -302,10 +305,27 @@ function normalizeSources(value: unknown): DeepWritingPanelState["sources"] {
       title: title || "资料来源",
       summary,
       ...(url ? { url } : {}),
+      ...(readSourceType(record.sourceType) ? { sourceType: readSourceType(record.sourceType) } : {}),
+      ...(readRelevance(record.relevance) ? { relevance: readRelevance(record.relevance) } : {}),
       adopted: Boolean(record.adopted)
     });
   });
   return sources;
+}
+
+function normalizeSourceEvent(payload: Record<string, unknown>): DeepWritingPanelState["sources"] {
+  const fromArray = normalizeSources(payload.sources);
+  return fromArray.length ? fromArray : normalizeSources([payload]);
+}
+
+function mergeSources(existing: DeepWritingPanelState["sources"], incoming: DeepWritingPanelState["sources"]) {
+  if (!incoming.length) return existing;
+  const byKey = new Map<string, DeepWritingPanelState["sources"][number]>();
+  [...existing, ...incoming].forEach((source) => {
+    const key = `${source.url || ""}|${source.title}|${source.summary}`.toLowerCase();
+    if (!byKey.has(key)) byKey.set(key, source);
+  });
+  return Array.from(byKey.values());
 }
 
 function normalizeStatus(value?: string): DeepWritingSectionStatus {
@@ -343,6 +363,16 @@ function readString(value: unknown) {
 
 function readNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? clampProgress(value) : fallback;
+}
+
+function readSourceType(value: unknown): DeepWritingPanelState["sources"][number]["sourceType"] | undefined {
+  if (value === "internal_search" || value === "uploaded_file" || value === "conversation" || value === "not_configured") return value;
+  return undefined;
+}
+
+function readRelevance(value: unknown): DeepWritingPanelState["sources"][number]["relevance"] | undefined {
+  if (value === "low" || value === "medium" || value === "high") return value;
+  return undefined;
 }
 
 function clampProgress(value: number) {

@@ -140,7 +140,8 @@ const checks: Check[] = [
       assert("resultCard" in result && result.resultCard?.mode === "deep_writing", "adapter should return deep writing task card");
       const types = eventTypes(events);
       assert(types[0] === "deep_writing_started", `first event should be started, got ${types[0]}`);
-      assert(types[1] === "deep_writing_outline", `second event should be outline, got ${types[1]}`);
+      assert(types[1] === "deep_writing_source_plan", `second event should be source_plan, got ${types[1]}`);
+      assert(types.indexOf("deep_writing_outline") > types.indexOf("deep_writing_source_plan"), "outline should follow source planning");
       assert(types.includes("deep_writing_polishing"), "polishing event should be emitted");
       assert(types[types.length - 1] === "deep_writing_completed", "completed should be last");
     }
