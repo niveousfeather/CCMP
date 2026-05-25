@@ -154,6 +154,8 @@ const checks: Check[] = [
       const { documentXml, stylesXml } = await generate({
         title: "AI 教育培训方案",
         instruction: "生成一份 AI 教育培训方案 Word 文档",
+        sourceText: "AI 教育培训方案正文包括培训目标、对象安排、实施步骤、研修任务、评价反馈和后续改进机制。",
+        contentOrigin: "generated_content",
         outputFileName: "AI 教育培训方案"
       });
       assert(documentXml.includes("2563EB") || stylesXml.includes("2563EB"), "blue theme color should be written to docx XML");

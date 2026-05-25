@@ -143,15 +143,19 @@ const checks: Check[] = [
     }
   },
   {
-    name: "clear topic without sourceText generates formal Word",
+    name: "clear topic without sourceText requires content generation",
     async run() {
-      const { text } = await generateText({
-        title: "新教师入职培训方案",
-        instruction: "生成一份新教师入职培训方案 Word 文档",
-        outputFileName: "新教师入职培训方案"
-      });
-      assert(text.includes("新教师入职培训方案"), "document should include clear topic");
-      assert(!text.includes("后续可补充资料增强"), "document body should not include metadata warning");
+      let failed = false;
+      try {
+        await generateText({
+          title: "新教师入职培训方案",
+          instruction: "生成一份新教师入职培训方案 Word 文档",
+          outputFileName: "新教师入职培训方案"
+        });
+      } catch (error) {
+        failed = String(error).includes("GENERATED_CONTENT_REQUIRED_FOR_WORD_RENDER");
+      }
+      assert(failed, "write-from-scratch should require generated content before Word render");
     }
   },
   {

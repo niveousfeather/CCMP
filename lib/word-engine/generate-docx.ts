@@ -2,6 +2,7 @@ import { createDocxBuffer } from "@/lib/document/create";
 import { serializeWordDocumentPlan, type WordDocumentPlan } from "@/lib/document/plan";
 import { DOCX_MIME, type DocumentTemplate } from "@/lib/document/types";
 import { composeLessonDocumentPlan } from "./compose-lesson-plan-content";
+import { assertTopicConsistencyForGeneratedDocx } from "./validate-topic-consistency";
 import type { WordContent, WordDocumentAttributes, WordGenerateResult, WordRequest, WordTaskMemory } from "./types";
 
 function safeBaseFileName(value?: string, fallback = "report") {
@@ -25,12 +26,17 @@ function documentTypeFromAttributes(attributes?: WordDocumentAttributes): WordDo
   return "general";
 }
 
+function documentTypeForContent(content: WordContent, contentOrigin?: WordRequest["contentOrigin"]): WordDocumentPlan["documentType"] {
+  if (contentOrigin === "generated_content") return "general";
+  return documentTypeFromAttributes(content.attributes);
+}
+
 function templateFromAttributes(attributes?: WordDocumentAttributes, stylePreset?: string): DocumentTemplate {
   if (attributes?.documentKind === "lesson_plan") return "lesson_plan";
   return stylePreset === "formal" ? "formal_doc" : "general";
 }
 
-function contentToDocumentPlan(content: WordContent): WordDocumentPlan {
+function contentToDocumentPlan(content: WordContent, contentOrigin?: WordRequest["contentOrigin"]): WordDocumentPlan {
   const sections: WordDocumentPlan["sections"] = content.sections.map((section, index) => {
     const [intro, ...rest] = section.paragraphs;
     return {
@@ -70,7 +76,7 @@ function contentToDocumentPlan(content: WordContent): WordDocumentPlan {
   return {
     title: content.title,
     subtitle: content.subtitle,
-    documentType: documentTypeFromAttributes(content.attributes),
+    documentType: documentTypeForContent(content, contentOrigin),
     sections
   };
 }
@@ -105,14 +111,16 @@ export function generateDocx({
   warnings: string[];
   wordTaskMemory: WordTaskMemory;
 }): WordGenerateResult {
+  assertTopicConsistencyForGeneratedDocx(request, content);
   const isLessonPlan = content.attributes?.documentKind === "lesson_plan";
-  const documentPlan = isLessonPlan ? composeLessonDocumentPlan(request) : contentToDocumentPlan(content);
+  const shouldUseGeneratedContent = request.contentOrigin === "generated_content";
+  const documentPlan = isLessonPlan && !shouldUseGeneratedContent ? composeLessonDocumentPlan(request) : contentToDocumentPlan(content, request.contentOrigin);
   const markdown = serializeWordDocumentPlan(documentPlan);
   const buffer = createDocxBufferWithoutQaNoise({
     markdown,
     title: documentPlan.title || content.title,
     template: templateFromAttributes(content.attributes, request.stylePreset),
-    prompt: isLessonPlan ? request.instruction || request.title : undefined,
+    prompt: isLessonPlan && !shouldUseGeneratedContent ? request.instruction || request.title : undefined,
     intent: undefined,
     renderOptions: content.attributes
   });

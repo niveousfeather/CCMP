@@ -159,6 +159,18 @@ function buildExistingContentSections(title: string, lines: string[]): WordSecti
   return sections;
 }
 
+function buildGeneratedContentSections(lines: string[]): WordSection[] {
+  const sections = lines
+    .map((line, index) => {
+      const parts = line.split(/[:：]/);
+      const heading = parts.length > 1 ? cleanText(parts[0], 48) : `正文章节 ${index + 1}`;
+      const body = parts.length > 1 ? parts.slice(1).join("：") : line;
+      return section(heading, [body]);
+    })
+    .filter((item) => item.paragraphs.length);
+  return sections.length ? sections : [section("正文草稿", lines)];
+}
+
 function planSections(title: string, lines: string[], training = false): WordSection[] {
   const pathIntro = training
     ? "实施路径围绕培训准备、课程执行、过程反馈和持续完善四个环节推进，培训内容同步嵌入各阶段任务。"
@@ -226,7 +238,35 @@ function subtitleFor(request: WordRequest, attributes: WordDocumentAttributes) {
 export function composeWordPlan(request: WordRequest): WordPlan {
   const stylePreset: WordStylePreset = request.stylePreset || "professional";
   const preliminaryAttributes = detectWordAttributes(request);
+  const source = collectSourceText(request);
+  const sourceLines = splitSourceParagraphs(source);
   if (preliminaryAttributes.documentKind === "lesson_plan") {
+    if (request.contentOrigin === "generated_content") {
+      if (!sourceLines.length) throw new Error("GENERATED_CONTENT_REQUIRED_FOR_WORD_RENDER");
+      const title = safeTitle(request, preliminaryAttributes);
+      const sections = buildGeneratedContentSections(sourceLines);
+      const attributes = detectWordAttributes(request, {
+        sectionCount: sections.length,
+        estimatedPageCount: Math.max(1, Math.ceil(sections.reduce((total, item) => total + item.paragraphs.join("").length, 0) / 1200))
+      });
+      return {
+        title,
+        subtitle: "基于已生成正文排版",
+        sections,
+        tables: [],
+        metadata: {
+          language: request.language || "zh-CN",
+          stylePreset,
+          sourceCount: sourceLines.length,
+          attributes: {
+            ...attributes,
+            documentKind: "lesson_plan",
+            formality: "formal",
+            needsHeaderFooter: true
+          }
+        }
+      };
+    }
     const content = composeLessonPlanContent(request, preliminaryAttributes);
     return {
       title: content.title,
@@ -243,8 +283,9 @@ export function composeWordPlan(request: WordRequest): WordPlan {
   }
 
   const title = safeTitle(request, preliminaryAttributes);
-  const source = collectSourceText(request);
-  const sourceLines = splitSourceParagraphs(source);
+  if (request.contentOrigin === "generated_content" && !sourceLines.length) {
+    throw new Error("GENERATED_CONTENT_REQUIRED_FOR_WORD_RENDER");
+  }
   const lines = sourceLines.length ? sourceLines : fallbackSource(title, preliminaryAttributes);
   const sections =
     request.contentOrigin === "existing_content" && sourceLines.length

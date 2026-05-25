@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { DeepWritingDetection, DeepWritingDocumentKind } from "@/lib/agent/runtime/deep-writing-detector";
 import type { DeepWritingSourceType } from "@/lib/agent/runtime/deep-writing-search-provider";
+import { extractDeepWritingTopicProfile, hasExplicitDifferentTopic } from "@/lib/word-engine/topic-profile";
 
 export type DeepWritingSectionStatus = "pending" | "writing" | "completed";
 export type DeepWritingSearchStatus = "pending" | "skipped" | "completed";
@@ -21,6 +22,10 @@ export type DeepWritingTaskMemory = {
   conversationId: string;
   originalInstruction: string;
   topic: string;
+  topicFingerprint?: string;
+  subject?: string;
+  grade?: string;
+  domain?: string;
   documentKind: DeepWritingDocumentKind;
   writingMode?: "deep" | "light";
   sourceFileNames: string[];
@@ -198,7 +203,8 @@ function sourceQuestions(kind: DeepWritingDocumentKind, topic: string) {
 
 export function createDeepWritingTaskMemory(input: DeepWritingTaskMemoryInput): DeepWritingTaskMemory {
   const timestamp = nowIso();
-  const topic = compact(input.topic || input.originalInstruction, 160) || "深度写作文档";
+  const topicProfile = extractDeepWritingTopicProfile(input.topic || input.originalInstruction);
+  const topic = compact(topicProfile.topic || input.topic || input.originalInstruction, 160) || "深度写作文档";
   const writingMode = input.writingMode || "deep";
   const outline = outlineFor(input.detection.suggestedDocumentKind, writingMode);
   const needsSearch = /搜集资料|检索资料|调研|研究|行业分析|白皮书/.test(input.originalInstruction);
@@ -208,6 +214,10 @@ export function createDeepWritingTaskMemory(input: DeepWritingTaskMemoryInput): 
     conversationId: input.conversationId,
     originalInstruction: compact(input.originalInstruction, 600),
     topic,
+    topicFingerprint: topicProfile.topicFingerprint,
+    subject: topicProfile.subject,
+    grade: topicProfile.grade,
+    domain: topicProfile.domain,
     documentKind: input.detection.suggestedDocumentKind,
     writingMode,
     sourceFileNames: input.sourceFileNames.filter(Boolean).slice(0, 20),
@@ -243,6 +253,9 @@ export function isDeepWritingResumeRequest(text: string) {
 }
 
 export function resumeDeepWritingTaskMemory(memory: DeepWritingTaskMemory, resumeInstruction: string): DeepWritingTaskMemory {
+  if (hasExplicitDifferentTopic(resumeInstruction, memory.topicFingerprint)) {
+    throw new Error("TOPIC_FINGERPRINT_MISMATCH");
+  }
   const stage: DeepWritingTaskStage =
     memory.currentStage === "failed" || memory.currentStage === "interrupted" || memory.currentStage === "writing_sections"
       ? "writing_sections"
