@@ -12,6 +12,9 @@ function sourceText(request: WordRequest) {
 }
 
 function documentKind(text: string): WordDocumentAttributes["documentKind"] {
+  if (/教案|教学设计|课程教案|课时设计|授课计划|教学大纲|课时|学时|教学重难点|教学重点|教学难点|教学过程|教学反思|实训任务|课程评价|lesson\s*plan/i.test(text)) {
+    return "lesson_plan";
+  }
   if (/会议纪要|会议记录|minutes/i.test(text)) return "minutes";
   if (/培训|手册|training/i.test(text)) return "training";
   if (/方案|计划|实施|项目|执行|proposal|plan/i.test(text)) return "plan";
@@ -48,14 +51,24 @@ export function detectWordAttributes(request: WordRequest, hints: AttributeHints
   const sectionCount = hints.sectionCount ?? 0;
   const estimatedPageCount = hints.estimatedPageCount ?? Math.max(1, Math.ceil(text.length / 1200));
   const explicitToc = /目录|toc|table of contents/i.test(text);
-  const formal = /正式|完整|长文档|手册|报告|方案|培训|纪要|formal/i.test(text) || kind === "report" || kind === "plan" || kind === "training" || kind === "minutes";
+  const formal =
+    /正式|完整|长文档|手册|报告|方案|培训|纪要|教案|教学设计|formal/i.test(text) ||
+    kind === "report" ||
+    kind === "plan" ||
+    kind === "training" ||
+    kind === "minutes" ||
+    kind === "lesson_plan";
 
   return {
     documentKind: kind,
     formality: formal ? "formal" : "simple",
-    needsToc: explicitToc || /正式报告|长文档|完整方案|培训手册/i.test(text) || sectionCount >= 5 || estimatedPageCount > 2,
-    needsHeaderFooter: kind === "report" || kind === "plan" || kind === "training" || kind === "minutes",
-    needsTables: /表格|列表|table/i.test(text) || hasStructuredData(text) || ((kind === "plan" || kind === "report") && Boolean(request.sourceText?.trim())),
+    needsToc: explicitToc || /正式报告|长文档|完整方案|培训手册|课程教案|教学大纲/i.test(text) || sectionCount >= 5 || estimatedPageCount > 2,
+    needsHeaderFooter: kind === "report" || kind === "plan" || kind === "training" || kind === "minutes" || kind === "lesson_plan",
+    needsTables:
+      kind === "lesson_plan" ||
+      /表格|列表|table/i.test(text) ||
+      hasStructuredData(text) ||
+      ((kind === "plan" || kind === "report") && Boolean(request.sourceText?.trim())),
     theme: theme(text),
     titleStrategy: hasWrongToolTitle(request.title || "") ? "cleaned_generic" : request.title?.trim() ? "from_user" : "from_source"
   };

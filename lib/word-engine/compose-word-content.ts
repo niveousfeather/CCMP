@@ -1,4 +1,5 @@
 import { detectWordAttributes } from "./detect-word-attributes";
+import { composeLessonPlanContent } from "./compose-lesson-plan-content";
 import type { WordDocumentAttributes, WordPlan, WordRequest, WordSection, WordStylePreset, WordTable } from "./types";
 
 const pollutionPatterns = [
@@ -77,6 +78,15 @@ function stripWrongToolWords(value: string) {
 
 function safeTitle(request: WordRequest, attributes: WordDocumentAttributes) {
   if (attributes.titleStrategy === "cleaned_generic") return "文件内容整理报告";
+  if (attributes.documentKind === "lesson_plan") {
+    const raw = cleanText(request.title || request.instruction, 120);
+    const topic =
+      raw.match(/([\u4e00-\u9fa5A-Za-z0-9]+(?:动画|课程|教学|实训|语文|数学|英语|信息科技)[\u4e00-\u9fa5A-Za-z0-9]*)/)?.[1] ||
+      raw.replace(/帮我|请|生成|写一个|写一份|设计|Word|word|docx|文档|教案|教学设计|课程设计|课时|学时|\d+\s*个?\s*课时|\d+\s*字/g, " ").replace(/[，。；、？！：:\s]+/g, " ").trim();
+    const cleaned = topic.replace(/的$/, "").trim();
+    if (cleaned.length >= 2) return `${cleaned.includes("教案") ? cleaned : `${cleaned}教案`}`.slice(0, 42);
+    return "课程教学设计教案";
+  }
   const raw = cleanText(request.title || request.instruction, 100);
   const cleaned = stripWrongToolWords(raw)
     .replace(/帮我|请|生成|写一份|写一个|制作|输出|导出|下载|转换|转为|做成|整理成|根据这个文件|根据这份文件|这个文件|这份文件/g, " ")
@@ -265,6 +275,21 @@ function subtitleFor(attributes: WordDocumentAttributes, hasConversationSummary:
 export function composeWordPlan(request: WordRequest): WordPlan {
   const stylePreset: WordStylePreset = request.stylePreset || "professional";
   const preliminaryAttributes = detectWordAttributes(request);
+  if (preliminaryAttributes.documentKind === "lesson_plan") {
+    const content = composeLessonPlanContent(request, preliminaryAttributes);
+    return {
+      title: content.title,
+      subtitle: content.subtitle,
+      sections: content.sections,
+      tables: content.tables,
+      metadata: {
+        language: request.language || "zh-CN",
+        stylePreset,
+        sourceCount: collectSourceLines(request).length,
+        attributes: content.attributes
+      }
+    };
+  }
   const title = safeTitle(request, preliminaryAttributes);
   const source = collectSourceText(request);
   const sourceLines = sourceLinesOrFallback(request, title, preliminaryAttributes);

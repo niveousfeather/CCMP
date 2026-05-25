@@ -46,6 +46,7 @@ export { composeWordPlan } from "./compose-word-content";
 export { generateDocx } from "./generate-docx";
 export { detectWordAttributes } from "./detect-word-attributes";
 export { sanitizeWordContent } from "./sanitize-word-content";
+export { composeLessonPlanContent } from "./compose-lesson-plan-content";
 export { composeDeepWritingDocxContent, composeDeepWritingDocxRequest } from "./compose-deep-writing-docx";
 export {
   WordTaskMemoryError,

@@ -7,7 +7,7 @@ export type WordSourceFile = {
 export type WordStylePreset = "professional" | "concise" | "formal";
 
 export type WordDocumentAttributes = {
-  documentKind: "summary" | "report" | "plan" | "minutes" | "training" | "general";
+  documentKind: "summary" | "report" | "plan" | "minutes" | "training" | "lesson_plan" | "general";
   formality: "simple" | "formal";
   needsToc: boolean;
   needsHeaderFooter: boolean;

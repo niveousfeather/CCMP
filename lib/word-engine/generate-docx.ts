@@ -1,6 +1,7 @@
 import { createDocxBuffer } from "@/lib/document/create";
 import { serializeWordDocumentPlan, type WordDocumentPlan } from "@/lib/document/plan";
-import { DOCX_MIME } from "@/lib/document/types";
+import { DOCX_MIME, type DocumentTemplate } from "@/lib/document/types";
+import { composeLessonDocumentPlan } from "./compose-lesson-plan-content";
 import type { WordContent, WordDocumentAttributes, WordGenerateResult, WordRequest, WordTaskMemory } from "./types";
 
 function safeBaseFileName(value?: string, fallback = "report") {
@@ -15,12 +16,18 @@ function safeBaseFileName(value?: string, fallback = "report") {
 
 function documentTypeFromAttributes(attributes?: WordDocumentAttributes): WordDocumentPlan["documentType"] {
   if (!attributes) return "general";
+  if (attributes.documentKind === "lesson_plan") return "lesson_plan";
   if (attributes.documentKind === "summary") return "summary";
   if (attributes.documentKind === "report") return "report";
   // The lightweight word-engine composer owns its own section model. Keeping
   // plan-like documents as general here avoids legacy template QA forcing a
   // different, stricter generator contract over the composed content.
   return "general";
+}
+
+function templateFromAttributes(attributes?: WordDocumentAttributes, stylePreset?: string): DocumentTemplate {
+  if (attributes?.documentKind === "lesson_plan") return "lesson_plan";
+  return stylePreset === "formal" ? "formal_doc" : "general";
 }
 
 function contentToDocumentPlan(content: WordContent): WordDocumentPlan {
@@ -68,6 +75,25 @@ function contentToDocumentPlan(content: WordContent): WordDocumentPlan {
   };
 }
 
+function debugWordQaEnabled() {
+  return process.env.DEBUG_AGENT === "1" || process.env.NEXT_PUBLIC_DEBUG_AGENT === "1";
+}
+
+function createDocxBufferWithoutQaNoise(input: Parameters<typeof createDocxBuffer>[0]) {
+  if (debugWordQaEnabled()) return createDocxBuffer(input);
+
+  const originalInfo = console.info;
+  console.info = (...args: Parameters<typeof console.info>) => {
+    if (String(args[0] || "").startsWith("[word:qa]")) return;
+    originalInfo(...args);
+  };
+  try {
+    return createDocxBuffer(input);
+  } finally {
+    console.info = originalInfo;
+  }
+}
+
 export function generateDocx({
   content,
   request,
@@ -79,12 +105,15 @@ export function generateDocx({
   warnings: string[];
   wordTaskMemory: WordTaskMemory;
 }): WordGenerateResult {
-  const markdown = serializeWordDocumentPlan(contentToDocumentPlan(content));
-  const buffer = createDocxBuffer({
+  const isLessonPlan = content.attributes?.documentKind === "lesson_plan";
+  const documentPlan = isLessonPlan ? composeLessonDocumentPlan(request) : contentToDocumentPlan(content);
+  const markdown = serializeWordDocumentPlan(documentPlan);
+  const buffer = createDocxBufferWithoutQaNoise({
     markdown,
-    title: content.title,
-    template: request.stylePreset === "formal" ? "formal_doc" : "general",
-    prompt: undefined,
+    title: documentPlan.title || content.title,
+    template: templateFromAttributes(content.attributes, request.stylePreset),
+    prompt: isLessonPlan ? request.instruction || request.title : undefined,
+    intent: undefined,
     renderOptions: content.attributes
   });
   const fileName = `${safeBaseFileName(request.outputFileName || content.title)}.docx`;
