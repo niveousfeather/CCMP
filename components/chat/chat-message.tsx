@@ -90,7 +90,7 @@ export function ChatMessage({
                 className="mt-3 inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[var(--color-panel)] px-3 text-xs font-medium text-[var(--color-text)] shadow-sm transition hover:-translate-y-0.5 hover:bg-[var(--color-soft)]"
               >
                 <FileText className="h-3.5 w-3.5" />
-                查看写作过程
+                查看文档
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             ) : null}

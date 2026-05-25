@@ -3,6 +3,7 @@ export type DeepWritingTopicDomain =
   | "animation_course"
   | "primary_math"
   | "primary_english"
+  | "chemistry_course"
   | "general_course"
   | "general";
 
@@ -47,8 +48,8 @@ function normalizeFingerprint(value: string) {
 }
 
 function gradeFromText(text: string) {
-  const primary = text.match(/小学\s*([一二三四五六1-6])\s*年级/);
-  if (primary?.[1]) return `小学${chineseGradeMap[primary[1]] || primary[1]}年级`;
+  const full = text.match(/(小学|初中|高中|高职|中职|大学)\s*([一二三四五六七八九十1-9])\s*年级/);
+  if (full?.[1] && full?.[2]) return `${full[1]}${chineseGradeMap[full[2]] || full[2]}年级`;
   const grade = text.match(/([一二三四五六1-6])\s*年级/);
   if (grade?.[1]) return `${chineseGradeMap[grade[1]] || grade[1]}年级`;
   return undefined;
@@ -58,6 +59,7 @@ function subjectFromText(text: string) {
   if (/三维动画|3D\s*动画|3d\s*动画|动画课程/i.test(text)) return "三维动画";
   if (/语文|阅读|识字|课文|朗读/.test(text)) return "语文";
   if (/数学/.test(text)) return "数学";
+  if (/化学|实验|反应现象|化学方程式/.test(text)) return "化学";
   if (/英语/.test(text)) return "英语";
   const course = text.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,24})(?:课程|课)/)?.[1];
   return course ? cleanTopicText(course) || course : undefined;
@@ -68,6 +70,7 @@ function domainFor(subject?: string, grade?: string): DeepWritingTopicDomain {
   if (subject === "语文" && grade?.startsWith("小学")) return "primary_language";
   if (subject === "数学" && grade?.startsWith("小学")) return "primary_math";
   if (subject === "英语" && grade?.startsWith("小学")) return "primary_english";
+  if (subject === "化学") return "chemistry_course";
   if (subject) return "general_course";
   return "general";
 }

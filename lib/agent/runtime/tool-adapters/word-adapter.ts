@@ -28,6 +28,7 @@ import {
   type WordTaskMemory
 } from "@/lib/word-engine";
 import { composeDeepWritingDocxContent, composeDeepWritingDocxRequest } from "@/lib/word-engine/compose-deep-writing-docx";
+import { normalizeDocumentTitle } from "@/lib/word-engine/normalize-document-title";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const WORD_FAILED_MESSAGE = "Word 文档生成失败，请补充更明确的主题或稍后重试。";
@@ -127,6 +128,15 @@ function inferTitle(text: string, sourceText?: string) {
     .map((line) => line.trim())
     .find((line) => line.length >= 4);
   return sourceLine?.slice(0, 36) || "Word 文档";
+}
+
+function inferDocumentTitle(text: string, documentKind?: string, sourceText?: string) {
+  return normalizeDocumentTitle({
+    title: inferTitle(text, sourceText),
+    instruction: text,
+    documentKind,
+    fallback: "Word 文档"
+  });
 }
 
 function collectRecentSummary(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>, latestUserMessage: string) {
@@ -229,7 +239,7 @@ async function buildWordRequest(context: Parameters<ToolAdapter["execute"]>[1], 
   const sourceBundle = sources || (await collectWordSources(context));
   const recentSummary = sourceBundle.recentSummary;
   const sourceText = sourceBundle.sourceText;
-  const title = inferTitle(context.userText, sourceText);
+  const title = inferDocumentTitle(context.userText, undefined, sourceText);
 
   return {
     conversationId: context.conversationId,
@@ -288,7 +298,7 @@ async function buildDeepWritingMemory(
   return createDeepWritingTaskMemory({
     conversationId: context.conversationId,
     originalInstruction: safeInstruction,
-    topic: inferTitle(safeInstruction, sources.sourceText),
+    topic: inferDocumentTitle(safeInstruction, finalDetection.suggestedDocumentKind, sources.sourceText),
     detection: finalDetection,
     sourceFileNames: sources.sourceFileNames,
     sourceSummary: sources.sourceText,
@@ -325,7 +335,7 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
   return {
     result: {
       content: completed
-        ? "深度写作已完成，Word 文档已生成，可在下方卡片下载，也可以点击查看写作过程回看章节草稿。"
+        ? "文档已生成，可在下方卡片下载，也可以点击查看文档预览完整内容。"
         : "深度写作暂未完成，请稍后继续或重试。",
       modelUsed: "NexusAI Deep Writing Planner",
       providerUsed: "xheai" as const,

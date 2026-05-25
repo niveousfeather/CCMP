@@ -107,6 +107,20 @@ const checks: Check[] = [
     }
   },
   {
+    name: "normal lesson wording is not rejected as template text",
+    async run() {
+      const { text } = await generateText({
+        title: "化学课堂观察报告",
+        instruction: "根据资料整理成 Word 报告",
+        sourceText: "本节课的核心内容是化学反应速率。教师通过实验观察、反应现象、实验安全和概念建构组织课堂活动。",
+        contentOrigin: "existing_content",
+        outputFileName: "化学课堂观察报告"
+      });
+      assert(text.includes("核心内容"), "normal subject wording should remain in document body");
+      assert(text.includes("化学反应速率"), "chemistry topic should remain in document body");
+    }
+  },
+  {
     name: "plan request uses plan structure",
     async run() {
       const { text } = await generateText({

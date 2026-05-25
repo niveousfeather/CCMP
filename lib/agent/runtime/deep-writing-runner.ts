@@ -167,6 +167,8 @@ export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promis
     await emit(input.emit, "deep_writing_section_completed", {
       taskId: memory.taskId,
       sectionId: section.id,
+      title: section.title,
+      draft: accumulated,
       preview,
       progress: progressFor(index + 1, total, 18)
     });

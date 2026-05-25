@@ -190,6 +190,8 @@ function lessonPlanParagraphs(title: string, topic: string) {
   const subject = profile.subject || "本课程";
   const grade = profile.grade || "学生";
   if (profile.domain === "primary_language") return primaryLanguageLessonParagraphs(title, profile.topic, grade);
+  if (profile.domain === "primary_math") return primaryMathLessonParagraphs(title, profile.topic, grade);
+  if (profile.domain === "chemistry_course") return chemistryLessonParagraphs(title, profile.topic, grade);
   if (profile.domain === "animation_course") return animationLessonParagraphs(title, profile.topic);
   return neutralLessonParagraphs(title, profile.topic, subject, grade);
 }
@@ -225,10 +227,28 @@ function primaryLanguageLessonParagraphs(title: string, topic: string, grade: st
       "课堂主体采用教师范读、学生朗读、随文识字、重点句品读、小组交流和板书总结。授课内容应覆盖生字词、课文朗读、段落理解、语言训练、课堂练习和作业布置。"
     ]);
   }
-  if (/实训任务/.test(title)) {
+  if (/课堂练习/.test(title)) {
     return cleanParagraphs([
-      "课堂练习任务包括认读生字、书写重点字、分角色或分段朗读课文、圈画关键词句，并用自己的话说出课文主要内容。",
-      "课后作业可安排朗读打卡、词语积累、句子仿写和阅读拓展。教师根据书写规范、朗读表现、阅读回答和作业完成质量进行反馈。"
+      "课堂练习包括认读生字词、分段朗读课文、圈画关键词句、回答阅读理解问题，并用自己的话概括课文主要内容。",
+      "练习过程采用个人思考、同伴交流和全班反馈结合的方式，帮助学生把朗读感受、词句理解和语言表达连起来。"
+    ]);
+  }
+  if (/作业设计/.test(title)) {
+    return cleanParagraphs([
+      "作业设计包括朗读课文、抄写并听写生字词、积累课文中的优美句子，以及完成一项与课文主题相关的阅读或表达练习。",
+      "分层作业可设置基础识字、阅读理解和拓展表达三个层次，既巩固课堂学习，也照顾不同学生的语文基础。"
+    ]);
+  }
+  if (/板书设计/.test(title)) {
+    return cleanParagraphs([
+      "板书设计以课文题目为中心，左侧呈现生字词和重点词语，中间梳理段落层次，右侧归纳阅读方法和情感理解。",
+      "板书应帮助学生看见课文结构、关键词句和表达重点，便于课堂总结时回顾朗读、阅读理解和语言积累。"
+    ]);
+  }
+  if (/教学反思/.test(title)) {
+    return cleanParagraphs([
+      "教学反思重点观察学生识字掌握、朗读流利度、阅读理解和课堂表达情况，判断哪些环节真正促进了课文理解。",
+      "如果学生对重点词句理解不充分，后续可增加范读、情境朗读和板书支架；如果作业完成质量差异较大，可继续优化分层作业。"
     ]);
   }
   if (/考核评价/.test(title)) {
@@ -241,6 +261,122 @@ function primaryLanguageLessonParagraphs(title: string, topic: string, grade: st
     `${title}围绕${topic}教案展开，服务于识字、朗读、阅读、表达、板书和作业等完整语文课堂实施。`,
     "本节保持小学语文教学语境，避免使用泛化文档模板替代真实教案正文。"
   ]);
+}
+
+function primaryMathLessonParagraphs(title: string, topic: string, grade: string) {
+  if (/课程基本信息/.test(title)) {
+    return cleanParagraphs([
+      `${topic}教案面向${grade}学生，课程围绕概念理解、例题讲解、分层练习、计算推理和课堂检测组织教学。`,
+      "教学资源包括情境问题、直观教具或课件、典型例题、练习单和课堂检测题，帮助学生经历从理解到应用的完整过程。"
+    ]);
+  }
+  if (/学情分析/.test(title)) {
+    return cleanParagraphs([
+      `${grade}学生具备一定计算基础，但在抽象概念理解、数量关系表达和推理说明方面还需要具体情境与操作支撑。`,
+      "教学中应通过生活情境、图示表达、例题拆解和同伴交流，帮助学生把直观经验转化为数学语言。"
+    ]);
+  }
+  if (/教学目标/.test(title)) {
+    return cleanParagraphs([
+      "知识目标是理解本课核心概念和计算方法，能说明例题中的数量关系；能力目标是能够独立完成基础计算、变式练习和简单推理。",
+      "素养目标是形成认真审题、规范书写、主动检查和用数学语言表达思路的习惯。"
+    ]);
+  }
+  if (/重点|难点/.test(title)) {
+    return cleanParagraphs([
+      "教学重点是核心概念理解、例题讲解和基础计算方法的掌握，要求学生能把题目信息转化为算式或图示。",
+      "教学难点是从具体情境中抽象数量关系，并能说明计算或推理过程。教师应通过分层练习和课堂检测及时反馈。"
+    ]);
+  }
+  if (/教学过程/.test(title)) {
+    return cleanParagraphs([
+      "教学过程从生活情境导入，提出可计算、可比较的问题，引导学生观察信息、提出猜想并尝试列式。",
+      "主体环节包括概念理解、例题讲解、方法归纳、分层练习、同伴讲解和课堂检测，确保学生经历理解、练习、应用和反馈。"
+    ]);
+  }
+  if (/课堂练习/.test(title)) {
+    return cleanParagraphs([
+      "课堂练习分为基础题、变式题和提高题。基础题巩固计算方法，变式题训练审题和数量关系分析，提高题鼓励学生解释推理过程。",
+      "练习后安排学生展示不同解法，教师围绕计算准确性、推理清晰度和书写规范进行点评。"
+    ]);
+  }
+  if (/作业设计/.test(title)) {
+    return cleanParagraphs([
+      "作业包括基础计算、例题同类练习、一道生活应用题和一道思维拓展题，要求学生写清关键步骤。",
+      "分层作业可为基础薄弱学生保留必要计算训练，为能力较强学生增加开放性推理或课堂活动延伸。"
+    ]);
+  }
+  if (/板书设计/.test(title)) {
+    return cleanParagraphs([
+      "板书以核心概念为中心，呈现情境信息、例题算式、关键步骤、易错提醒和方法小结。",
+      "板书应突出数量关系和推理路径，让学生能根据板书复述解题思路。"
+    ]);
+  }
+  if (/教学反思/.test(title)) {
+    return cleanParagraphs([
+      "教学反思关注学生是否真正理解概念、能否独立完成例题迁移、计算错误集中在哪些环节。",
+      "后续可根据课堂检测结果调整练习层次，增加口头表达、图示推理和错题再练。"
+    ]);
+  }
+  return cleanParagraphs([`${title}围绕${topic}展开，服务于概念理解、例题讲解、练习巩固和课堂检测。`]);
+}
+
+function chemistryLessonParagraphs(title: string, topic: string, grade: string) {
+  if (/课程基本信息/.test(title)) {
+    return cleanParagraphs([
+      `${topic}教案面向${grade}学生，课程围绕实验观察、反应现象、实验安全、概念建构和化学方程式组织教学。`,
+      "教学资源包括实验器材、安全提示卡、现象记录表、微观示意图和课堂检测题。"
+    ]);
+  }
+  if (/学情分析/.test(title)) {
+    return cleanParagraphs([
+      "学生对实验现象通常兴趣较高，但容易停留在表面观察，对现象背后的概念和化学方程式理解不足。",
+      "教学应把安全规范、实验观察、证据记录和概念建构连起来，帮助学生形成基于证据解释反应的意识。"
+    ]);
+  }
+  if (/教学目标/.test(title)) {
+    return cleanParagraphs([
+      "知识目标是理解本课相关概念、反应条件和化学方程式含义；能力目标是能够规范观察实验现象并用化学语言解释。",
+      "素养目标是形成实验安全意识、证据意识和严谨记录习惯。"
+    ]);
+  }
+  if (/重点|难点/.test(title)) {
+    return cleanParagraphs([
+      "教学重点是实验观察、反应现象描述、核心概念理解和化学方程式书写。",
+      "教学难点是把宏观现象、微观解释和符号表达联系起来，避免只记结论不理解证据。"
+    ]);
+  }
+  if (/教学过程/.test(title)) {
+    return cleanParagraphs([
+      "教学过程从问题情境导入，明确实验安全要求，再组织学生观察实验、记录反应现象、交流证据并建构概念。",
+      "主体环节包括实验演示或分组观察、现象分析、化学方程式讲解、课堂练习和检测反馈。"
+    ]);
+  }
+  if (/课堂练习/.test(title)) {
+    return cleanParagraphs([
+      "课堂练习包括实验现象判断、概念辨析、化学方程式配平或书写，以及安全操作情境判断。",
+      "练习后通过同伴互评和教师讲评，纠正常见的现象描述不准确、符号表达不规范等问题。"
+    ]);
+  }
+  if (/作业设计/.test(title)) {
+    return cleanParagraphs([
+      "作业包括整理实验观察记录、完成化学方程式练习、解释一个生活中的相关化学现象。",
+      "拓展作业可要求学生画出宏观现象、微观粒子和符号表达之间的关系图。"
+    ]);
+  }
+  if (/板书设计/.test(title)) {
+    return cleanParagraphs([
+      "板书以核心反应或概念为中心，依次呈现实验安全、反应现象、概念解释、化学方程式和易错提醒。",
+      "板书应帮助学生把观察证据和符号表达对应起来。"
+    ]);
+  }
+  if (/教学反思/.test(title)) {
+    return cleanParagraphs([
+      "教学反思关注学生实验观察是否准确、安全规范是否到位、化学方程式书写是否规范。",
+      "如果学生只记住现象而不能解释原因，后续应增加微观示意和证据推理训练。"
+    ]);
+  }
+  return cleanParagraphs([`${title}围绕${topic}展开，服务于实验观察、概念建构和化学方程式表达。`]);
 }
 
 function animationLessonParagraphs(title: string, topic: string) {

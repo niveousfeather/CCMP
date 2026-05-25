@@ -131,7 +131,8 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
   if (event.type === "deep_writing_section_completed") {
     const sectionId = readString(payload.sectionId) || panel.currentSection?.id || "section-current";
     const title = readString(payload.title) || panel.currentSection?.title || findOutlineTitle(panel, sectionId) || "当前章节";
-    const preview = readString(payload.preview) || panel.currentSection?.draft?.slice(0, 120);
+    const draft = readString(payload.draft) || panel.currentSection?.draft || readString(payload.preview);
+    const preview = readString(payload.preview) || draft.slice(0, 120);
     const outline = panel.outline.map((item) =>
       item.id === sectionId
         ? {
@@ -144,6 +145,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
     return updatePanel(base, {
       ...panel,
       outline: outline.some((item) => item.id === sectionId) ? outline : [...outline, { id: sectionId, title, status: "completed", preview }],
+      completedSections: upsertCompletedSection(panel.completedSections || [], sectionId, title, draft),
       progress: progressFromOutline(outline)
     });
   }
@@ -164,6 +166,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       currentStage: "completed",
       progress: 100,
       canResume: false,
+      completedSections: panel.completedSections || [],
       downloadUrl: readString(payload.downloadUrl) || panel.downloadUrl
     });
   }
@@ -193,6 +196,7 @@ function panelStateFromTaskCard(taskCard: ChatTaskCard, fallback?: DeepWritingPa
     progress: fallback?.progress || (taskCard.status === "completed" ? 100 : 0),
     outline: fallback?.outline || [],
     currentSection: fallback?.currentSection,
+    completedSections: fallback?.completedSections || [],
     sources: fallback?.sources || [],
     canResume: taskCard.status !== "completed",
     downloadUrl: taskCard.downloadUrl || fallback?.downloadUrl || undefined
@@ -214,6 +218,7 @@ function normalizePanelState(panelState: DeepWritingPanelState): DeepWritingPane
           draft: panelState.currentSection.draft
         }
       : undefined,
+    completedSections: normalizeCompletedSections(panelState.completedSections),
     sources: normalizeSources(panelState.sources),
     canResume: Boolean(panelState.canResume),
     downloadUrl: panelState.downloadUrl
@@ -229,6 +234,7 @@ function createPanelState(taskId: string, title?: string, overrides: Partial<Dee
     progress: clampProgress(overrides.progress || 0),
     outline: overrides.outline || [],
     currentSection: overrides.currentSection,
+    completedSections: overrides.completedSections || [],
     sources: overrides.sources || [],
     canResume: overrides.canResume ?? true,
     downloadUrl: overrides.downloadUrl
@@ -313,6 +319,24 @@ function normalizeSources(value: unknown): DeepWritingPanelState["sources"] {
   return sources;
 }
 
+function normalizeCompletedSections(value: unknown): NonNullable<DeepWritingPanelState["completedSections"]> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const record = sanitizePayload(item as Record<string, unknown>);
+      const title = readString(record.title);
+      const draft = readString(record.draft);
+      if (!title || !draft) return null;
+      return {
+        id: readString(record.id) || `section-${index + 1}`,
+        title,
+        draft
+      };
+    })
+    .filter((item): item is NonNullable<DeepWritingPanelState["completedSections"]>[number] => Boolean(item));
+}
+
 function normalizeSourceEvent(payload: Record<string, unknown>): DeepWritingPanelState["sources"] {
   const fromArray = normalizeSources(payload.sources);
   return fromArray.length ? fromArray : normalizeSources([payload]);
@@ -346,6 +370,22 @@ function upsertOutlineStatus(
     return { ...item, title: item.title || title, status };
   });
   return found ? next : [...next, { id: sectionId, title, status }];
+}
+
+function upsertCompletedSection(
+  sections: NonNullable<DeepWritingPanelState["completedSections"]>,
+  id: string,
+  title: string,
+  draft: string
+) {
+  if (!draft) return sections;
+  let found = false;
+  const next = sections.map((section) => {
+    if (section.id !== id) return section;
+    found = true;
+    return { id, title: title || section.title, draft };
+  });
+  return found ? next : [...next, { id, title, draft }];
 }
 
 function findOutlineTitle(panel: DeepWritingPanelState, sectionId: string) {

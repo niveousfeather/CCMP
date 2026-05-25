@@ -91,6 +91,11 @@ export type DeepWritingPanelState = {
     title: string;
     draft: string;
   };
+  completedSections?: Array<{
+    id: string;
+    title: string;
+    draft: string;
+  }>;
   sources: Array<{
     title: string;
     summary: string;

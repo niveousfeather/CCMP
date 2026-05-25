@@ -35,6 +35,11 @@ function xmlEscape(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+function corePropertiesXml(title: string) {
+  const now = new Date().toISOString();
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(title)}</dc:title><dc:creator>User</dc:creator><cp:lastModifiedBy>User</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
+}
+
 function textRun(text: string, options: { bold?: boolean; italic?: boolean; color?: string; size?: number } = {}) {
   return `<w:r><w:rPr>${options.bold ? "<w:b/>" : ""}${options.italic ? "<w:i/>" : ""}${
     options.color ? `<w:color w:val="${options.color}"/>` : ""
@@ -459,7 +464,7 @@ export function createDocxBuffer({
     },
     {
       name: "docProps/core.xml",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>User</dc:creator><cp:lastModifiedBy>User</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified></cp:coreProperties>`
+      content: corePropertiesXml(title)
     },
     {
       name: "docProps/app.xml",

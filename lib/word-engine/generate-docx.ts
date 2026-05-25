@@ -2,6 +2,7 @@ import { createDocxBuffer } from "@/lib/document/create";
 import { serializeWordDocumentPlan, type WordDocumentPlan } from "@/lib/document/plan";
 import { DOCX_MIME, type DocumentTemplate } from "@/lib/document/types";
 import { composeLessonDocumentPlan } from "./compose-lesson-plan-content";
+import { normalizeDocumentFileBase, normalizeDocumentTitle } from "./normalize-document-title";
 import { assertTopicConsistencyForGeneratedDocx } from "./validate-topic-consistency";
 import type { WordContent, WordDocumentAttributes, WordGenerateResult, WordRequest, WordTaskMemory } from "./types";
 
@@ -57,8 +58,21 @@ function contentToDocumentPlan(content: WordContent, contentOrigin?: WordRequest
     };
   });
 
+  const appendTableToSection = (sectionPattern: RegExp, table: WordContent["tables"][number]) => {
+    const target = sections.find((section) => sectionPattern.test(section.heading));
+    if (!target) return false;
+    target.blocks.push({
+      type: "table",
+      headers: table.headers,
+      rows: table.rows
+    });
+    return true;
+  };
+
   for (const table of content.tables) {
     if (!table.headers.length) continue;
+    if (/教案基础信息表/.test(table.title) && appendTableToSection(/课程基本信息|基本信息/, table)) continue;
+    if (/教学过程设计表/.test(table.title) && appendTableToSection(/教学过程/, table)) continue;
     sections.push({
       heading: table.title,
       level: 1,
@@ -112,19 +126,31 @@ export function generateDocx({
   wordTaskMemory: WordTaskMemory;
 }): WordGenerateResult {
   assertTopicConsistencyForGeneratedDocx(request, content);
+  const normalizedTitle = normalizeDocumentTitle({
+    title: content.title || request.title,
+    instruction: request.instruction,
+    documentKind: content.attributes?.documentKind,
+    fallback: content.title || request.title
+  });
+  const normalizedContent = { ...content, title: normalizedTitle };
   const isLessonPlan = content.attributes?.documentKind === "lesson_plan";
   const shouldUseGeneratedContent = request.contentOrigin === "generated_content";
-  const documentPlan = isLessonPlan && !shouldUseGeneratedContent ? composeLessonDocumentPlan(request) : contentToDocumentPlan(content, request.contentOrigin);
+  const documentPlan = isLessonPlan && !shouldUseGeneratedContent ? composeLessonDocumentPlan(request) : contentToDocumentPlan(normalizedContent, request.contentOrigin);
   const markdown = serializeWordDocumentPlan(documentPlan);
   const buffer = createDocxBufferWithoutQaNoise({
     markdown,
-    title: documentPlan.title || content.title,
+    title: normalizedTitle,
     template: templateFromAttributes(content.attributes, request.stylePreset),
     prompt: isLessonPlan && !shouldUseGeneratedContent ? request.instruction || request.title : undefined,
     intent: undefined,
     renderOptions: content.attributes
   });
-  const fileName = `${safeBaseFileName(request.outputFileName || content.title)}.docx`;
+  const fileName = `${safeBaseFileName(normalizeDocumentFileBase({
+    title: request.outputFileName || normalizedTitle,
+    instruction: request.instruction,
+    documentKind: content.attributes?.documentKind,
+    fallback: normalizedTitle
+  }))}.docx`;
 
   return {
     fileName,

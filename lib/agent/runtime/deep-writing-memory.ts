@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { DeepWritingDetection, DeepWritingDocumentKind } from "@/lib/agent/runtime/deep-writing-detector";
 import type { DeepWritingSourceType } from "@/lib/agent/runtime/deep-writing-search-provider";
+import { normalizeDocumentTitle } from "@/lib/word-engine/normalize-document-title";
 import { extractDeepWritingTopicProfile, hasExplicitDifferentTopic } from "@/lib/word-engine/topic-profile";
 
 export type DeepWritingSectionStatus = "pending" | "writing" | "completed";
@@ -100,6 +101,11 @@ export type DeepWritingPanelState = {
     title: string;
     draft: string;
   };
+  completedSections?: Array<{
+    id: string;
+    title: string;
+    draft: string;
+  }>;
   sources: Array<{
     title: string;
     summary: string;
@@ -166,7 +172,7 @@ function outlineTitlesFor(kind: DeepWritingDocumentKind, writingMode: "deep" | "
   if (writingMode === "light") return ["写作目标", "正文草稿", "发布与使用建议"];
 
   const titlesByKind: Record<DeepWritingDocumentKind, string[]> = {
-    lesson_plan: ["课程基本信息", "学情分析", "教学目标", "教学重点与难点", "教学过程设计", "实训任务", "考核评价"],
+    lesson_plan: ["课程基本信息", "学情分析", "教学目标", "教学重点与难点", "教学过程设计", "课堂练习", "作业设计", "板书设计", "教学反思"],
     research: ["研究背景", "资料来源与范围", "现状分析", "趋势判断", "关键问题", "建议与结论"],
     report: ["摘要", "背景", "资料分析", "主要发现", "建议", "结论"],
     plan: ["项目背景", "目标定位", "实施路径", "时间安排", "风险与应对", "预期成果"],
@@ -190,7 +196,7 @@ function sourceQuestions(kind: DeepWritingDocumentKind, topic: string) {
   if (kind === "lesson_plan") {
     return [
       `${topic}的课程对象、课时和授课目标是什么？`,
-      `${topic}需要覆盖哪些完整授课内容和实训任务？`,
+      `${topic}需要覆盖哪些完整授课内容、课堂练习和作业设计？`,
       `${topic}如何设计教学过程、重点难点和考核评价？`
     ];
   }
@@ -204,7 +210,16 @@ function sourceQuestions(kind: DeepWritingDocumentKind, topic: string) {
 export function createDeepWritingTaskMemory(input: DeepWritingTaskMemoryInput): DeepWritingTaskMemory {
   const timestamp = nowIso();
   const topicProfile = extractDeepWritingTopicProfile(input.topic || input.originalInstruction);
-  const topic = compact(topicProfile.topic || input.topic || input.originalInstruction, 160) || "深度写作文档";
+  const rawTopic = compact(topicProfile.topic || input.topic || input.originalInstruction, 160) || "深度写作文档";
+  const topic =
+    input.detection.suggestedDocumentKind === "lesson_plan"
+      ? normalizeDocumentTitle({
+          title: input.topic || rawTopic,
+          instruction: input.originalInstruction,
+          documentKind: "lesson_plan",
+          fallback: rawTopic
+        })
+      : rawTopic;
   const writingMode = input.writingMode || "deep";
   const outline = outlineFor(input.detection.suggestedDocumentKind, writingMode);
   const needsSearch = /搜集资料|检索资料|调研|研究|行业分析|白皮书/.test(input.originalInstruction);
@@ -317,6 +332,13 @@ export function createDeepWritingPanelState(memory: DeepWritingTaskMemory, downl
           draft: current.draft || ""
         }
       : undefined,
+    completedSections: memory.outline
+      .filter((item) => item.status === "completed" && item.draft)
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        draft: item.draft || ""
+      })),
     sources: memory.adoptedSources.map((item) => ({
       title: item.title,
       summary: item.summary,
