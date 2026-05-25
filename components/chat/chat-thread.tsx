@@ -19,7 +19,8 @@ export function ChatThread({
   onPreviewAttachment,
   onOpenFile,
   onRetryImageGeneration,
-  onOpenWebContext
+  onOpenWebContext,
+  onOpenDeepWritingPanel
 }: {
   messages: ChatMessageType[];
   loading: boolean;
@@ -42,6 +43,7 @@ export function ChatThread({
   onOpenFile: (attachment: ChatAttachment) => void;
   onRetryImageGeneration?: (imageGeneration: ChatImageGenerationMeta) => void;
   onOpenWebContext?: (webContext: NonNullable<ChatMessageType["webContext"]>) => void;
+  onOpenDeepWritingPanel?: (taskCard: NonNullable<ChatMessageType["taskCard"]>) => void;
 }) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +103,7 @@ export function ChatThread({
               onOpenFile={onOpenFile}
               onRetryImageGeneration={onRetryImageGeneration}
               onOpenWebContext={onOpenWebContext}
+              onOpenDeepWritingPanel={onOpenDeepWritingPanel}
               onRevealTick={handleRevealTick}
             />
           ))}

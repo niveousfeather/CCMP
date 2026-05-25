@@ -72,6 +72,35 @@ export type ChatWebContext = {
   };
 };
 
+export type DeepWritingSectionStatus = "pending" | "writing" | "completed";
+
+export type DeepWritingPanelState = {
+  isOpen: boolean;
+  taskId: string;
+  title: string;
+  currentStage: string;
+  progress: number;
+  outline: Array<{
+    id: string;
+    title: string;
+    status: DeepWritingSectionStatus;
+    preview?: string;
+  }>;
+  currentSection?: {
+    id: string;
+    title: string;
+    draft: string;
+  };
+  sources: Array<{
+    title: string;
+    summary: string;
+    url?: string;
+    adopted: boolean;
+  }>;
+  canResume: boolean;
+  downloadUrl?: string;
+};
+
 export type ChatTaskCard = {
   kind: "task_card";
   taskType: "ppt" | "word" | "excel" | "image" | "file-analysis" | "teaching-diagram" | "knowledge-graph";
@@ -83,6 +112,12 @@ export type ChatTaskCard = {
   openUrl?: string | null;
   retryable?: boolean;
   failureReason?: string | null;
+  mode?: "deep_writing";
+  deepWritingTaskId?: string;
+  panelAvailable?: boolean;
+  panelAutoOpen?: boolean;
+  currentStage?: string;
+  deepWritingPanelState?: DeepWritingPanelState | null;
 };
 
 export type ChatMessage = {

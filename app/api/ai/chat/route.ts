@@ -124,6 +124,12 @@ type ChatTaskCard = {
   openUrl?: string | null;
   retryable?: boolean;
   failureReason?: string | null;
+  mode?: "deep_writing";
+  deepWritingTaskId?: string;
+  panelAvailable?: boolean;
+  panelAutoOpen?: boolean;
+  currentStage?: string;
+  deepWritingPanelState?: unknown | null;
 };
 
 class ChatRouteError extends Error {
@@ -775,6 +781,12 @@ function buildTaskCard(input: {
   openUrl?: string | null;
   retryable?: boolean;
   failureReason?: string | null;
+  mode?: "deep_writing";
+  deepWritingTaskId?: string;
+  panelAvailable?: boolean;
+  panelAutoOpen?: boolean;
+  currentStage?: string;
+  deepWritingPanelState?: unknown | null;
 }): ChatTaskCard {
   return {
     kind: "task_card",
@@ -786,7 +798,13 @@ function buildTaskCard(input: {
     downloadUrl: input.downloadUrl || null,
     openUrl: input.openUrl || null,
     retryable: input.retryable,
-    failureReason: input.failureReason || null
+    failureReason: input.failureReason || null,
+    mode: input.mode,
+    deepWritingTaskId: input.deepWritingTaskId,
+    panelAvailable: input.panelAvailable,
+    panelAutoOpen: input.panelAutoOpen,
+    currentStage: input.currentStage,
+    deepWritingPanelState: input.deepWritingPanelState || null
   };
 }
 
@@ -828,6 +846,12 @@ function buildAdapterTaskCard(input: {
     openUrl?: string | null;
     retryable?: boolean;
     failureReason?: string | null;
+    mode?: "deep_writing";
+    deepWritingTaskId?: string;
+    panelAvailable?: boolean;
+    panelAutoOpen?: boolean;
+    currentStage?: string;
+    deepWritingPanelState?: unknown | null;
   } | null;
   generatedAttachment?: { downloadUrl?: string; url?: string | null; name?: string } | null;
   imageGeneration?: unknown | null;
@@ -852,7 +876,13 @@ function buildAdapterTaskCard(input: {
     downloadUrl: generatedDownloadUrl || input.resultCard.downloadUrl || null,
     openUrl: input.resultCard.openUrl || null,
     retryable: input.resultCard.retryable ?? true,
-    failureReason: input.resultCard.failureReason || imageTask?.failureReason || null
+    failureReason: input.resultCard.failureReason || imageTask?.failureReason || null,
+    mode: input.resultCard.mode,
+    deepWritingTaskId: input.resultCard.deepWritingTaskId,
+    panelAvailable: input.resultCard.panelAvailable,
+    panelAutoOpen: input.resultCard.panelAutoOpen,
+    currentStage: input.resultCard.currentStage,
+    deepWritingPanelState: input.resultCard.deepWritingPanelState || null
   });
 }
 

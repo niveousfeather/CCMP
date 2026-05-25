@@ -12,6 +12,14 @@ import {
 } from "@/components/chat/chat-data";
 import { ChatComposer, ContentToolId } from "@/components/chat/chat-composer";
 import { ChatImagePreviewDialog } from "@/components/chat/chat-image-preview-dialog";
+import { DeepWritingPanel } from "@/components/chat/DeepWritingPanel";
+import {
+  closeDeepWritingPanel,
+  createInitialDeepWritingClientState,
+  openDeepWritingPanel,
+  reduceDeepWritingPanelEvent,
+  shouldShowDeepWritingProcessButton
+} from "@/components/chat/deep-writing-panel-state";
 import { KnowledgeGraphCanvas } from "@/components/chat/knowledge-graph-canvas";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { Button } from "@/components/ui/button";
@@ -77,6 +85,7 @@ type StreamChatEvent =
   | { event: "runtime_status"; data: { requestId?: string; stage?: string; message?: string } }
   | { event: "token"; data: { requestId?: string; text?: string } }
   | { event: "tool_status"; data: { requestId?: string; message?: string } }
+  | { event: `deep_writing_${string}`; data: Record<string, unknown> & { requestId?: string } }
   | {
       event: "final";
       data: AiChatResponse & {
@@ -399,6 +408,8 @@ export function ChatPage() {
   const [dragDepth, setDragDepth] = useState(0);
   const [previewAttachment, setPreviewAttachment] = useState<ChatAttachment | null>(null);
   const [activeWebContext, setActiveWebContext] = useState<ChatMessageType["webContext"] | null>(null);
+  const [deepWritingPanel, setDeepWritingPanel] = useState(createInitialDeepWritingClientState);
+  const autoOpenedDeepWritingTasksRef = useRef<Set<string>>(new Set());
   const previewUrlsRef = useRef<Set<string>>(new Set());
   const handledDraftTokenRef = useRef<string | null>(null);
   const requestedConversationId = activeView === "chat" ? searchParams.get("conversationId") : null;
@@ -426,6 +437,13 @@ export function ChatPage() {
   const shouldShowWelcomePrompts = isEmptyChat && attachments.length === 0;
   const isLoadingRequestedConversation =
     activeView === "chat" && Boolean(requestedConversationId) && requestedConversationId === activeConversationId && !messagesByConversation[activeConversationId];
+
+  useEffect(() => {
+    const latestDeepWritingMessage = [...messages]
+      .reverse()
+      .find((message) => message.role === "assistant" && message.taskCard && shouldShowDeepWritingProcessButton(message.taskCard));
+    if (latestDeepWritingMessage?.taskCard?.panelAutoOpen) syncDeepWritingFromAssistantMessage(latestDeepWritingMessage);
+  }, [messages]);
 
   useEffect(() => {
     return () => {
@@ -743,6 +761,7 @@ export function ChatPage() {
     setSelectedContentTool(null);
     setSelectedDiscoverAgent(null);
     setActiveWebContext(null);
+    setDeepWritingPanel(createInitialDeepWritingClientState());
     setPreviewAttachment(null);
     setLoading(false);
     setLoadingLabel("正在理解你的需求");
@@ -977,6 +996,27 @@ export function ChatPage() {
     }));
   }
 
+  function openDeepWritingFromTaskCard(taskCard: NonNullable<ChatMessageType["taskCard"]>, options: { force?: boolean } = {}) {
+    if (!shouldShowDeepWritingProcessButton(taskCard)) return;
+    const taskId = taskCard.deepWritingTaskId || taskCard.taskId || taskCard.deepWritingPanelState?.taskId;
+    if (!options.force) {
+      if (!taskCard.panelAutoOpen) return;
+      if (taskId && autoOpenedDeepWritingTasksRef.current.has(taskId)) return;
+    }
+    if (taskId) autoOpenedDeepWritingTasksRef.current.add(taskId);
+    setActiveWebContext(null);
+    setDeepWritingPanel((current) => openDeepWritingPanel(current, taskCard));
+  }
+
+  function syncDeepWritingFromAssistantMessage(message: ChatMessageType) {
+    if (!message.taskCard) return;
+    openDeepWritingFromTaskCard(message.taskCard);
+  }
+
+  function handleOpenDeepWritingPanel(taskCard: NonNullable<ChatMessageType["taskCard"]>) {
+    openDeepWritingFromTaskCard(taskCard, { force: true });
+  }
+
   function finalizeStreamingAssistant({
     conversationId,
     pendingAssistantId,
@@ -1041,6 +1081,7 @@ export function ChatPage() {
     });
     currentStreamingAssistantIdRef.current = finalMessage.id;
     streamingFinalizedRef.current = true;
+    syncDeepWritingFromAssistantMessage(finalMessage);
   }
 
   function parseSseEvents(buffer: string) {
@@ -1095,6 +1136,17 @@ export function ChatPage() {
     };
 
     const handleEvent = (item: StreamChatEvent) => {
+      if (item.event.startsWith("deep_writing_")) {
+        if (!isCurrentRequestEvent(item.data.requestId)) return;
+        setActiveWebContext(null);
+        setDeepWritingPanel((current) =>
+          reduceDeepWritingPanelEvent(current, {
+            type: item.event,
+            payload: item.data
+          })
+        );
+        return;
+      }
       if (item.event === "runtime_status") {
         if (!isCurrentRequestEvent(item.data.requestId)) return;
         if (currentStreamingAssistantIdRef.current !== pendingAssistantId) return;
@@ -1355,6 +1407,8 @@ export function ChatPage() {
       return;
     }
 
+    syncDeepWritingFromAssistantMessage(assistantMessageForPending);
+
     if (persistedConversationId !== conversationId) {
       setMessagesByConversation((current) => {
         const next = { ...current };
@@ -1604,7 +1658,11 @@ export function ChatPage() {
             onPreviewAttachment={setPreviewAttachment}
             onOpenFile={openFileNotice}
             onRetryImageGeneration={retryImageGeneration}
-            onOpenWebContext={setActiveWebContext}
+            onOpenWebContext={(webContext) => {
+              setDeepWritingPanel(closeDeepWritingPanel);
+              setActiveWebContext(webContext);
+            }}
+            onOpenDeepWritingPanel={handleOpenDeepWritingPanel}
           />
         )}
 
@@ -1630,15 +1688,23 @@ export function ChatPage() {
       </section>
       {activeView === "chat" ? (
         <>
-          {activeWebContext ? (
+          {activeWebContext || deepWritingPanel.isOpen ? (
             <button
               type="button"
               className="absolute inset-0 z-30 bg-black/5 backdrop-blur-[1px] md:bg-transparent md:backdrop-blur-0"
-              onClick={() => setActiveWebContext(null)}
-              aria-label="关闭搜索结果遮罩"
+              onClick={() => {
+                setActiveWebContext(null);
+                setDeepWritingPanel(closeDeepWritingPanel);
+              }}
+              aria-label="关闭右侧面板遮罩"
             />
           ) : null}
           <SearchResultsPanel webContext={activeWebContext} onClose={() => setActiveWebContext(null)} />
+          <DeepWritingPanel
+            open={deepWritingPanel.isOpen}
+            state={deepWritingPanel.panelState}
+            onClose={() => setDeepWritingPanel(closeDeepWritingPanel)}
+          />
         </>
       ) : null}
     </div>
