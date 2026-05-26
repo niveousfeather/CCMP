@@ -150,6 +150,7 @@ const CHAT_TIMEOUT_MS = 60_000;
 const CHAT_AGENT_FAST_TIMEOUT_MS = 90_000;
 const AGENT_LONG_TASK_TIMEOUT_MS = 180_000;
 const AGENT_FILE_TASK_TIMEOUT_MS = 240_000;
+const WORD_WRITE_TASK_TIMEOUT_MS = 1_800_000;
 const CHAT_IMAGE_MODEL = "gpt-image-2";
 const CHAT_IMAGE_RESOLUTION = "1K";
 const CHAT_IMAGE_PROMPT_TIMEOUT_MS = 4500;
@@ -218,7 +219,11 @@ function normalizeTools(value: unknown): AgentToolSelection | undefined {
 function getChatTimeoutMs(parsed: ParsedRequest) {
   if (parsed.files.length > 0) return AGENT_FILE_TASK_TIMEOUT_MS;
   if (parsed.mode !== "agent") return CHAT_TIMEOUT_MS;
-  if (parsed.tools?.webSearch || parsed.tools?.contentMode === "write" || parsed.tools?.contentMode === "ppt" || parsed.tools?.contentMode === "image") {
+  if (parsed.tools?.contentMode === "write") {
+    const configured = Number(process.env.AGENT_WORD_WRITE_TIMEOUT_MS || WORD_WRITE_TASK_TIMEOUT_MS);
+    return Math.max(Number.isFinite(configured) ? configured : WORD_WRITE_TASK_TIMEOUT_MS, AGENT_LONG_TASK_TIMEOUT_MS);
+  }
+  if (parsed.tools?.webSearch || parsed.tools?.contentMode === "ppt" || parsed.tools?.contentMode === "image") {
     return AGENT_LONG_TASK_TIMEOUT_MS;
   }
   const fastTimeoutMs = Number(process.env.AGENT_FAST_CHAT_TIMEOUT_MS || CHAT_AGENT_FAST_TIMEOUT_MS);

@@ -19,6 +19,7 @@ export function ChatMessage({
   onRetryImageGeneration,
   onOpenWebContext,
   onOpenDeepWritingPanel,
+  onResumeDeepWriting,
   onRevealTick
 }: {
   message: ChatMessageType;
@@ -27,6 +28,7 @@ export function ChatMessage({
   onRetryImageGeneration?: (imageGeneration: ChatImageGenerationMeta) => void;
   onOpenWebContext?: (webContext: NonNullable<ChatMessageType["webContext"]>) => void;
   onOpenDeepWritingPanel?: (taskCard: NonNullable<ChatMessageType["taskCard"]>) => void;
+  onResumeDeepWriting?: (taskCard: NonNullable<ChatMessageType["taskCard"]>) => void;
   onRevealTick?: () => void;
 }) {
   const isUser = message.role === "user";
@@ -84,15 +86,27 @@ export function ChatMessage({
           <>
             <GeneratedFileCard taskCard={taskCard} createdAt={message.createdAt} />
             {shouldShowDeepWritingProcessButton(taskCard) ? (
-              <button
-                type="button"
-                onClick={() => onOpenDeepWritingPanel?.(taskCard)}
-                className="mt-3 inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[var(--color-panel)] px-3 text-xs font-medium text-[var(--color-text)] shadow-sm transition hover:-translate-y-0.5 hover:bg-[var(--color-soft)]"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                查看文档
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenDeepWritingPanel?.(taskCard)}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[var(--color-panel)] px-3 text-xs font-medium text-[var(--color-text)] shadow-sm transition hover:-translate-y-0.5 hover:bg-[var(--color-soft)]"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  查看文档
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+                {shouldShowDeepWritingResumeButton(taskCard) ? (
+                  <button
+                    type="button"
+                    onClick={() => onResumeDeepWriting?.(taskCard)}
+                    className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--color-text)] px-3 text-xs font-medium text-[var(--color-panel)] shadow-sm transition hover:-translate-y-0.5"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    继续生成
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </>
         ) : null}
@@ -929,6 +943,12 @@ function GeneratedFileCard({
 function getGeneratedCardTitle(taskCard: NonNullable<ChatMessageType["taskCard"]>) {
   const preferred = taskCard.description || taskCard.title;
   return preferred.replace(/\s+/g, " ").trim() || taskCard.title;
+}
+
+function shouldShowDeepWritingResumeButton(taskCard: NonNullable<ChatMessageType["taskCard"]>) {
+  if (!shouldShowDeepWritingProcessButton(taskCard)) return false;
+  if (taskCard.status === "completed" || taskCard.documentReady) return false;
+  return taskCard.currentStage === "interrupted" || taskCard.deepWritingPanelState?.canResume === true;
 }
 
 function getGeneratedCardVisual(fileKind: GeneratedFileKind, failed: boolean) {

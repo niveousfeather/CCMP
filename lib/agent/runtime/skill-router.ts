@@ -61,6 +61,10 @@ function referencesPptRegenerationFollowup(text: string) {
   return /重新生成|再生成|重新做|重新制作|生成.*新版|新版|另生成|重新出一版|更正式版本|regenerate/i.test(text);
 }
 
+function referencesWordResume(text: string) {
+  return /继续|继续生成|接着写|续写|重试|继续刚才|继续生成文档/i.test(text);
+}
+
 export function matchAgentSkill({
   text,
   input,
@@ -110,6 +114,10 @@ export function matchAgentSkill({
     candidates.push({ skillId: "ppt-simple", confidence: 0.84, reasons: ["current_conversation_ppt_reference"] });
   } else if (!activeKind && referencesCurrentPpt(text)) {
     candidates.push({ skillId: "ppt-simple", confidence: 0.82, reasons: ["missing_current_conversation_ppt_reference"] });
+  }
+
+  if (activeKind === "word" && referencesWordResume(text)) {
+    candidates.push({ skillId: "word", confidence: 0.97, reasons: ["current_conversation_word_resume"] });
   }
 
   if (input.tools?.contentMode === "image") {

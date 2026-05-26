@@ -313,6 +313,7 @@ async function deepWritingRunResult(memory: DeepWritingTaskMemory, context: Para
     memory,
     sourceText: memory.sourceSummary,
     conversationSummary: memory.sourceSummary,
+    signal: context.signal,
     contentGenerationMode,
     generateDraftContent: context.generateWritingContent,
     generateSectionContent: context.generateWritingSectionContent,

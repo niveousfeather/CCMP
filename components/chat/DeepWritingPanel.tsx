@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 export function DeepWritingPanel({
   open,
   state,
-  onClose
+  onClose,
+  onResume
 }: {
   open: boolean;
   state?: DeepWritingPanelState | null;
@@ -124,6 +125,15 @@ export function DeepWritingPanel({
               <Download className="h-3.5 w-3.5" />
               下载 Word
             </a>
+          ) : stage === "interrupted" && panel?.canResume ? (
+            <button
+              type="button"
+              onClick={onResume}
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--color-text)] px-3 text-xs font-medium text-[var(--color-panel)] transition hover:-translate-y-0.5"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              继续生成
+            </button>
           ) : (
             <span className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[var(--color-text-muted)]">
               {stage === "interrupted" || stage === "failed" ? <FileText className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}

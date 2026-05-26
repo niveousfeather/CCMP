@@ -1017,6 +1017,17 @@ export function ChatPage() {
     openDeepWritingFromTaskCard(taskCard, { force: true });
   }
 
+  function handleResumeDeepWriting(taskCard?: NonNullable<ChatMessageType["taskCard"]>) {
+    if (loading) return;
+    if (taskCard) openDeepWritingFromTaskCard(taskCard, { force: true });
+    void sendMessage({
+      textOverride: "继续生成文档",
+      appendUserMessage: false,
+      toolSelectionOverride: { ...getToolSelection(), contentMode: "write" },
+      suppressInputRestore: true
+    });
+  }
+
   function finalizeStreamingAssistant({
     conversationId,
     pendingAssistantId,
@@ -1274,9 +1285,17 @@ export function ChatPage() {
     return { failed: true };
   }
 
-  async function sendMessage() {
-    const rawInput = input.trim();
-    const pendingAttachments = attachments;
+  async function sendMessage(
+    options: {
+      textOverride?: string;
+      appendUserMessage?: boolean;
+      toolSelectionOverride?: ChatToolSelection;
+      suppressInputRestore?: boolean;
+    } = {}
+  ) {
+    const appendUserMessage = options.appendUserMessage !== false;
+    const rawInput = (options.textOverride ?? input).trim();
+    const pendingAttachments = appendUserMessage ? attachments : [];
     const defaultText = pendingAttachments.length ? "我上传了文件，请帮我分析。" : "";
     const text = (rawInput || defaultText).trim();
     if (!text || loading) return;
@@ -1298,8 +1317,8 @@ export function ChatPage() {
     };
     const referenceImages = getImageReferencePreviews(sentAttachments);
     const localImagePendingMessage =
-      selectedContentTool === "image" ? createLocalImagePendingMessage(text, referenceImages) : null;
-    const localFilePendingMessage = !localImagePendingMessage
+      appendUserMessage && selectedContentTool === "image" ? createLocalImagePendingMessage(text, referenceImages) : null;
+    const localFilePendingMessage = appendUserMessage && !localImagePendingMessage
       ? createLocalFilePendingMessage(text, selectedContentTool)
       : null;
     if (localImagePendingMessage) {
@@ -1314,12 +1333,17 @@ export function ChatPage() {
     }
     const streamingAssistantMessage = localImagePendingMessage || localFilePendingMessage ? null : createStreamingAssistantMessage(requestId);
     const apiMessages = [...messages, userMessage];
+    const visibleBaseMessages = appendUserMessage ? apiMessages : messages;
     const localPendingMessage = localImagePendingMessage || localFilePendingMessage;
     const pendingAssistantMessage = localPendingMessage || streamingAssistantMessage;
-    const nextMessages = localPendingMessage ? [...apiMessages, localPendingMessage] : streamingAssistantMessage ? [...apiMessages, streamingAssistantMessage] : apiMessages;
+    const nextMessages = localPendingMessage
+      ? [...visibleBaseMessages, localPendingMessage]
+      : streamingAssistantMessage
+        ? [...visibleBaseMessages, streamingAssistantMessage]
+        : visibleBaseMessages;
 
     setMessagesByConversation((current) => ({ ...current, [conversationId]: nextMessages }));
-    updateConversationAfterSend(conversationId, text);
+    if (appendUserMessage) updateConversationAfterSend(conversationId, text);
     setInput("");
     setAttachments([]);
     setActiveView("chat");
@@ -1339,23 +1363,29 @@ export function ChatPage() {
           : "正在分析上下文"
     );
 
-    const result = await requestAssistantReply(apiMessages, pendingAttachments, pendingAssistantMessage?.id, requestId);
+    const result = await requestAssistantReply(
+      apiMessages,
+      pendingAttachments,
+      pendingAssistantMessage?.id,
+      requestId,
+      options.toolSelectionOverride || getToolSelection()
+    );
 
     if (result.failed) {
       if (localPendingMessage) {
         setMessagesByConversation((current) => ({
           ...current,
-          [conversationId]: apiMessages
+          [conversationId]: visibleBaseMessages
         }));
       }
       if (streamingAssistantMessage) {
         setMessagesByConversation((current) => ({
           ...current,
-          [conversationId]: apiMessages
+          [conversationId]: visibleBaseMessages
         }));
       }
-      setInput(rawInput);
-      setAttachments(pendingAttachments);
+      if (!options.suppressInputRestore) setInput(appendUserMessage ? rawInput : "");
+      if (appendUserMessage) setAttachments(pendingAttachments);
       setLoading(false);
       setRuntimeStatusSteps([]);
       currentStreamingAssistantIdRef.current = null;
@@ -1663,6 +1693,7 @@ export function ChatPage() {
               setActiveWebContext(webContext);
             }}
             onOpenDeepWritingPanel={handleOpenDeepWritingPanel}
+            onResumeDeepWriting={handleResumeDeepWriting}
           />
         )}
 
@@ -1704,6 +1735,7 @@ export function ChatPage() {
             open={deepWritingPanel.isOpen}
             state={deepWritingPanel.panelState}
             onClose={() => setDeepWritingPanel(closeDeepWritingPanel)}
+            onResume={() => handleResumeDeepWriting()}
           />
         </>
       ) : null}

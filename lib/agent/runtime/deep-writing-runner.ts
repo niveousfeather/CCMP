@@ -70,6 +70,8 @@ export type DeepWritingRunnerInput = {
   memory: DeepWritingTaskMemory;
   sourceText?: string;
   conversationSummary?: string;
+  signal?: AbortSignal;
+  sectionRetryLimit?: number;
   searchProvider?: DeepWritingSearchProvider;
   contentGenerationMode?: WritingContentGenerationMode;
   generateDraftContent?: (input: DeepWritingContentGeneratorInput) => Promise<DeepWritingContentGeneratorResult> | DeepWritingContentGeneratorResult;
@@ -79,6 +81,7 @@ export type DeepWritingRunnerInput = {
 };
 
 const completedStages = new Set<DeepWritingTaskStage>(["completed"]);
+const DEFAULT_SECTION_RETRY_LIMIT = 120;
 
 export async function runDeepWritingDraft(input: DeepWritingRunnerInput): Promise<DeepWritingTaskMemory> {
   const memory = cloneMemory(input.memory);
@@ -318,58 +321,78 @@ async function streamModelGeneratedSections(input: DeepWritingRunnerInput, memor
     });
 
     let accumulated = startingPartial;
-    try {
-      const result = await input.generateSectionContent({
-        memory,
-        section: { ...section, draft: accumulated, status: "writing" },
-        sectionIndex: index,
-        previousSections: completedSectionsForWriter(memory),
-        currentPartialText: startingPartial,
-        sourceText: input.sourceText,
-        conversationSummary: input.conversationSummary,
-        onDelta: async (delta) => {
-          const safeDelta = cleanGeneratedText(delta, 2000);
-          if (!safeDelta) return;
-          accumulated += safeDelta;
-          memory.currentSectionPartialText = accumulated;
-          memory.resumeCursor = `${section.id}:${accumulated.length}`;
-          updateSection(memory, section.id, { status: "writing", draft: accumulated });
-          memory.updatedAt = new Date().toISOString();
-          await emit(input.emit, "deep_writing_section_delta", {
+    const retryLimit = sectionRetryLimit(input);
+    for (let attempt = 1; attempt <= retryLimit; attempt += 1) {
+      const attemptStartingPartial = accumulated;
+      try {
+        const result = await input.generateSectionContent({
+          memory,
+          section: { ...section, draft: accumulated, status: "writing" },
+          sectionIndex: index,
+          previousSections: completedSectionsForWriter(memory),
+          currentPartialText: attemptStartingPartial,
+          sourceText: input.sourceText,
+          conversationSummary: input.conversationSummary,
+          onDelta: async (delta) => {
+            const safeDelta = cleanGeneratedText(delta, 2000);
+            if (!safeDelta) return;
+            accumulated += safeDelta;
+            memory.currentSectionPartialText = accumulated;
+            memory.resumeCursor = `${section.id}:${accumulated.length}`;
+            updateSection(memory, section.id, { status: "writing", draft: accumulated });
+            memory.updatedAt = new Date().toISOString();
+            await emit(input.emit, "deep_writing_section_delta", {
+              taskId: memory.taskId,
+              sectionId: section.id,
+              title: section.title,
+              delta: safeDelta,
+              accumulatedPreview: accumulated.slice(0, 220),
+              progress: progressFor(index, total, 18)
+            });
+          }
+        });
+        const returnedText = typeof result === "string" ? result : result.text;
+        const finalText = normalizeCompletedSectionText(returnedText, attemptStartingPartial, accumulated);
+        if (!finalText.trim()) throw new Error("WRITING_CONTENT_GENERATION_EMPTY");
+        accumulated = finalText;
+        break;
+      } catch (error) {
+        memory.currentSectionPartialText = accumulated;
+        memory.resumeCursor = `${section.id}:${accumulated.length}`;
+        memory.failureReason = safeFailureReason(error);
+        updateSection(memory, section.id, { status: "writing", draft: accumulated });
+        memory.updatedAt = new Date().toISOString();
+
+        if (canRetrySectionGeneration(error, input, attempt, retryLimit)) {
+          await emit(input.emit, "deep_writing_section_started", {
             taskId: memory.taskId,
             sectionId: section.id,
             title: section.title,
-            delta: safeDelta,
+            progress: progressFor(index, total, 18),
             accumulatedPreview: accumulated.slice(0, 220),
-            progress: progressFor(index, total, 18)
+            retrying: true,
+            retryAttempt: attempt + 1
           });
+          continue;
         }
-      });
-      const returnedText = typeof result === "string" ? result : result.text;
-      const finalText = normalizeCompletedSectionText(returnedText, startingPartial, accumulated);
-      if (!finalText.trim()) throw new Error("WRITING_CONTENT_GENERATION_EMPTY");
-      accumulated = finalText;
-    } catch (error) {
-      memory.currentStage = "interrupted";
-      memory.generationStatus = "interrupted";
-      memory.canResume = true;
-      memory.failureReason = safeFailureReason(error);
-      memory.currentSectionPartialText = accumulated;
-      memory.resumeCursor = `${section.id}:${accumulated.length}`;
-      updateSection(memory, section.id, { status: "writing", draft: accumulated });
-      memory.pendingSectionIds = memory.outline.filter((item) => item.status !== "completed").map((item) => item.id);
-      memory.updatedAt = new Date().toISOString();
-      await emit(input.emit, "deep_writing_interrupted", {
-        taskId: memory.taskId,
-        currentStage: "interrupted",
-        sectionId: section.id,
-        title: section.title,
-        progress: progressFor(index, total, 18),
-        canResume: true,
-        accumulatedPreview: accumulated.slice(0, 220),
-        failureReason: memory.failureReason
-      });
-      return { ok: false };
+
+        memory.currentStage = "interrupted";
+        memory.generationStatus = "interrupted";
+        memory.canResume = true;
+        memory.pendingSectionIds = memory.outline.filter((item) => item.status !== "completed").map((item) => item.id);
+        memory.updatedAt = new Date().toISOString();
+        await emit(input.emit, "deep_writing_interrupted", {
+          taskId: memory.taskId,
+          currentStage: "interrupted",
+          sectionId: section.id,
+          title: section.title,
+          progress: progressFor(index, total, 18),
+          canResume: true,
+          accumulatedPreview: accumulated.slice(0, 220),
+          failureReason: memory.failureReason
+        });
+        return { ok: false };
+      }
     }
 
     const preview = accumulated.replace(/\s+/g, " ").trim().slice(0, 180);
@@ -409,6 +432,39 @@ function normalizeCompletedSectionText(returnedText: string, startingPartial: st
   if (!cleaned) return accumulated;
   if (startingPartial && !cleaned.startsWith(startingPartial)) return `${startingPartial}${cleaned}`;
   return cleaned.length >= accumulated.length ? cleaned : accumulated;
+}
+
+function sectionRetryLimit(input: DeepWritingRunnerInput) {
+  const value = Number(input.sectionRetryLimit || DEFAULT_SECTION_RETRY_LIMIT);
+  if (!Number.isFinite(value)) return DEFAULT_SECTION_RETRY_LIMIT;
+  return Math.min(240, Math.max(1, Math.floor(value)));
+}
+
+function canRetrySectionGeneration(
+  error: unknown,
+  input: DeepWritingRunnerInput,
+  attempt: number,
+  retryLimit: number
+) {
+  if (input.signal?.aborted) return false;
+  if (attempt >= retryLimit) return false;
+  return isRetryableSectionGenerationError(error);
+}
+
+function isRetryableSectionGenerationError(error: unknown) {
+  const raw = error instanceof Error ? `${error.name} ${error.message}` : String(error || "");
+  if (!raw.trim()) return true;
+  if (isProviderHttpFailure(error, raw)) return false;
+  if (/api[_-]?key|unauthori[sz]ed|forbidden|permission|credential|invalid[_\s-]?token|quota|billing|insufficient|content[_\s-]?policy|safety/i.test(raw)) {
+    return false;
+  }
+  return /abort|aborted|timeout|timed\s*out|network|fetch|socket|econnreset|etimedout|und_err|stream|empty|rate|temporar|unavailable/i.test(raw);
+}
+
+function isProviderHttpFailure(error: unknown, raw: string) {
+  const status = typeof error === "object" && error ? Number((error as { status?: unknown }).status) : NaN;
+  if (Number.isFinite(status) && status >= 400 && status <= 599) return true;
+  return /PROVIDER_ERROR_[45]\d\d|HTTP[_\s-]?[45]\d\d|status[=:]\s*[45]\d\d/i.test(raw);
 }
 
 async function generateDraft(input: DeepWritingRunnerInput, memory: DeepWritingTaskMemory): Promise<

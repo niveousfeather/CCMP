@@ -165,6 +165,14 @@ const cases: RuntimeCase[] = [
       tools: { webSearch: false, contentMode: "write" }
     }),
     expected: { targetTool: "excel", nextAction: "run_legacy_tool" }
+  },
+  {
+    name: "Word interrupted resume continues active document",
+    input: "\u7ee7\u7eed",
+    runtimeInput: input("\u7ee7\u7eed", {
+      activeTask: { id: "word-task-1", kind: "word", title: "\u9ad8\u4e2d\u4e00\u5e74\u7ea7\u8bed\u6587\u6559\u6848", status: "running" }
+    }),
+    expected: { targetTool: "word", nextAction: "run_legacy_tool" }
   }
 ];
 

@@ -6,11 +6,11 @@ const fileGenerationSkills = new Set(["word", "excel", "ppt-simple"]);
 const subjectRequiredSkills = new Set(["word", "ppt-simple", "teaching-diagram"]);
 
 function hasExecutionVerb(text: string) {
-  return /生成|创建|制作|导出|下载|保存|分析|总结|读取|转换|修改|编辑|改成|改为|换成|标题|构建|帮我|给我|做一个|做一份|继续刚才|再总结|generate|create|make|export|download|analyze|summarize|convert|edit|build/i.test(text);
+  return /生成|创建|制作|导出|下载|保存|分析|总结|读取|转换|修改|编辑|改成|改为|换成|标题|构建|帮我|给我|做一个|做一份|继续|继续刚才|再总结|generate|create|make|export|download|analyze|summarize|convert|edit|build/i.test(text);
 }
 
 function hasModernChineseExecutionVerb(text: string) {
-  return /生成|创建|制作|导出|下载|保存|分析|总结|读取|转换|修改|编辑|整理|做成|新增|增加|整理成/i.test(text);
+  return /生成|创建|制作|导出|下载|保存|分析|总结|读取|转换|修改|编辑|整理|做成|新增|增加|整理成|继续|接着写|续写|重试/i.test(text);
 }
 
 function isHowToQuestion(text: string) {
@@ -27,6 +27,10 @@ function referencesConversationText(text: string) {
 
 function referencesPriorObject(text: string) {
   return /刚才|上一|上一个|上一份|这个文件|这份文件|这个文档|这份文档|这个附件|那张图|这张图|继续/i.test(text);
+}
+
+function referencesResumeRequest(text: string) {
+  return /继续|继续生成|接着写|续写|重试|继续刚才|继续生成文档/i.test(text);
 }
 
 function referencesCurrentFileForWord(text: string) {
@@ -89,7 +93,13 @@ function buildMissingInputs(text: string, legacyTask: AgentTask, skillId: string
   if (skillId === "word" && referencesConversationText(text)) {
     missing.delete("documentType");
   }
-  if (skillId && subjectRequiredSkills.has(skillId) && !hasSubjectAfterToolMention(text, skillId) && !(skillId === "word" && referencesCurrentFileForWord(text) && activeTaskKind)) {
+  if (
+    skillId &&
+    subjectRequiredSkills.has(skillId) &&
+    !hasSubjectAfterToolMention(text, skillId) &&
+    !(skillId === "word" && referencesCurrentFileForWord(text) && activeTaskKind) &&
+    !(skillId === "word" && activeTaskKind === "word" && referencesResumeRequest(text))
+  ) {
     missing.add("subject");
   }
   if (skillId === "excel" && /导出|export/i.test(text) && !legacyTask.hasFiles && !hasInlineDataSource(text)) {

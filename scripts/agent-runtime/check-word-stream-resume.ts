@@ -255,6 +255,126 @@ const checks: Check[] = [
     }
   },
   {
+    name: "transient model stream failure auto retries current section",
+    async run() {
+      const events: SafeDeepWritingEvent[] = [];
+      let failedOnce = false;
+      let retrySawPartial = false;
+      const memory = await runDeepWritingDraft({
+        memory: makeMemory(),
+        contentGenerationMode: "model_generated",
+        sectionRetryLimit: 3,
+        generateSectionContent: async ({ section, sectionIndex, currentPartialText, onDelta }) => {
+          if (!failedOnce) {
+            failedOnce = true;
+            await onDelta("partial opening.");
+            throw new Error("MODEL_STREAM_TIMEOUT");
+          }
+          if (sectionIndex === 0) {
+            retrySawPartial = currentPartialText.includes("partial opening.");
+          }
+          const continuation = sectionIndex === 0 ? " automatic continuation." : sectionText(section.title, "");
+          await onDelta(continuation);
+          return `${currentPartialText || ""}${continuation}`;
+        },
+        emit: (event) => {
+          events.push(event);
+        }
+      });
+      assert(failedOnce, "first model stream call should fail once");
+      assert(retrySawPartial, "retry should receive currentSectionPartialText");
+      assert(memory.currentStage === "completed", "transient section failure should auto retry to completion");
+      assert(!events.some((event) => event.type === "deep_writing_interrupted"), "transient retry should not emit interrupted");
+      assert(memory.outline[0].draft?.includes("partial opening. automatic continuation."), "section draft should continue original partial text");
+    }
+  },
+  {
+    name: "repeated transient model failures keep retrying until section completes",
+    async run() {
+      let calls = 0;
+      const memory = await runDeepWritingDraft({
+        memory: makeMemory(),
+        contentGenerationMode: "model_generated",
+        generateSectionContent: async ({ section, sectionIndex, currentPartialText, onDelta }) => {
+          calls += 1;
+          if (sectionIndex === 0 && calls <= 5) {
+            if (!currentPartialText) await onDelta("start.");
+            throw new Error("PROVIDER_TIMEOUT");
+          }
+          const text = sectionIndex === 0 ? `${currentPartialText || ""}done.` : sectionText(section.title, "");
+          await onDelta(sectionIndex === 0 ? "done." : text);
+          return text;
+        },
+        emit: () => undefined
+      });
+      assert(calls >= 6, "runner should retry repeated transient model failures");
+      assert(memory.currentStage === "completed", "repeated transient failures should still complete");
+      assert(memory.outline[0].draft?.includes("start.done."), "retry should continue from preserved partial");
+    }
+  },
+  {
+    name: "many transient model failures still auto complete long document section",
+    async run() {
+      let calls = 0;
+      const memory = await runDeepWritingDraft({
+        memory: makeMemory(),
+        contentGenerationMode: "model_generated",
+        generateSectionContent: async ({ section, sectionIndex, currentPartialText, onDelta }) => {
+          calls += 1;
+          if (sectionIndex === 0 && calls <= 30) {
+            if (!currentPartialText) await onDelta("long-start.");
+            throw new Error("MODEL_STREAM_ABORT");
+          }
+          const text = sectionIndex === 0 ? `${currentPartialText || ""}long-done.` : sectionText(section.title, "");
+          await onDelta(sectionIndex === 0 ? "long-done." : text);
+          return text;
+        },
+        emit: () => undefined
+      });
+      assert(calls >= 31, "runner should tolerate many transient model interruptions");
+      assert(memory.currentStage === "completed", "many transient failures should still complete");
+      assert(memory.outline[0].draft?.includes("long-start.long-done."), "long retry should continue from preserved partial");
+    }
+  },
+  {
+    name: "provider 502 or 404 stops for manual continue instead of endless retry",
+    async run() {
+      for (const status of [502, 404]) {
+        let calls = 0;
+        const providerError = Object.assign(new Error(`PROVIDER_ERROR_${status}`), { status });
+        const memory = await runDeepWritingDraft({
+          memory: makeMemory(),
+          contentGenerationMode: "model_generated",
+          generateSectionContent: async () => {
+            calls += 1;
+            throw providerError;
+          },
+          emit: () => undefined
+        });
+        assert(calls === 1, `provider HTTP ${status} should not be retried forever`);
+        assert(memory.currentStage === "interrupted", `provider HTTP ${status} should require manual continue`);
+      }
+    }
+  },
+  {
+    name: "non-recoverable server configuration error does not retry forever",
+    async run() {
+      let calls = 0;
+      const memory = await runDeepWritingDraft({
+        memory: makeMemory(),
+        contentGenerationMode: "model_generated",
+        generateSectionContent: async () => {
+          calls += 1;
+          throw new Error("apiKey unauthorized");
+        },
+        emit: () => undefined
+      });
+      assert(calls === 1, "non-recoverable server configuration failures should not be retried");
+      assert(memory.currentStage === "interrupted", "non-recoverable issue should leave manual resume state");
+      assert(memory.canResume === true, "manual resume should remain available after server issue");
+    }
+  },
+  {
     name: "interrupted status is resumable and keeps partial",
     async run() {
       const memory = await runDeepWritingDraft({
@@ -291,6 +411,7 @@ const checks: Check[] = [
       const interrupted = await runDeepWritingDraft({
         memory,
         contentGenerationMode: "model_generated",
+        sectionRetryLimit: 1,
         generateSectionContent: async ({ section, sectionIndex, onDelta }) => {
           calls += 1;
           await onDelta(sectionText(section.title, ""));
@@ -538,7 +659,7 @@ const checks: Check[] = [
   {
     name: "script reports exact pass count",
     run() {
-      assert(checks.length === 24, `expected 24 checks, got ${checks.length}`);
+      assert(checks.length === 29, `expected 29 checks, got ${checks.length}`);
     }
   }
 ];
