@@ -51,6 +51,8 @@ export { detectWordAttributes } from "./detect-word-attributes";
 export { sanitizeWordContent } from "./sanitize-word-content";
 export { composeLessonPlanContent } from "./compose-lesson-plan-content";
 export { composeDeepWritingDocxContent, composeDeepWritingDocxRequest } from "./compose-deep-writing-docx";
+export { normalizeDocumentStructure, normalizedBlocksToPlainText, stripHeadingNumber } from "./normalize-document-structure";
+export type { NormalizedDocumentBlock } from "./normalize-document-structure";
 export {
   WordTaskMemoryError,
   createWordTaskMemory,

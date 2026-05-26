@@ -41,7 +41,7 @@ export type WordGenerationIntent = {
 
 export type WordSection = {
   heading: string;
-  level: 1 | 2 | 3;
+  level: 1 | 2 | 3 | 4;
   intro?: string;
   blocks: WordBlock[];
 };
@@ -172,8 +172,8 @@ function normalizeWordDocumentPlan(value: unknown): WordDocumentPlan | null {
       const intro = cleanText(section.intro, 1200) || undefined;
       if (!intro && !blocks.length) return null;
       const rawLevel = Number(section.level || 1);
-      const level = (rawLevel === 2 || rawLevel === 3 ? rawLevel : 1) as 1 | 2 | 3;
-      return { heading: stripHeadingNumber(heading), level, intro, blocks };
+      const level = (rawLevel === 2 || rawLevel === 3 || rawLevel === 4 ? rawLevel : 1) as 1 | 2 | 3 | 4;
+      return { heading, level, intro, blocks };
     })
     .filter((section): section is WordSection => section !== null);
   if (!sections.length) return null;
@@ -1583,7 +1583,7 @@ function buildGenericPlan(markdown: string, title: string, template: DocumentTem
     if (block.type === "heading") {
       if (block.level === 1 && cleanText(block.text) === planTitle && !current && !sections.length) continue;
       pushCurrent();
-      current = { heading: stripHeadingNumber(block.text), level: Math.min(Math.max(block.level, 1), 3) as 1 | 2 | 3, blocks: [] };
+      current = { heading: stripHeadingNumber(block.text), level: Math.min(Math.max(block.level, 1), 4) as 1 | 2 | 3 | 4, blocks: [] };
       continue;
     }
 

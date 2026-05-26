@@ -207,10 +207,10 @@ const checks: Check[] = [
     }
   },
   {
-    name: "zero sources are weakly displayed",
+    name: "zero sources are hidden from main document page",
     async run() {
       const source = await sourceOf("components/chat/DeepWritingPanel.tsx");
-      assert(source.includes("当前基于用户输入和已有对话生成"), "zero sources should use weak hint");
+      assert(!source.includes("当前基于用户输入和已有对话生成"), "zero-source hint should be hidden");
       assert(!source.includes("0 条"), "zero sources should not emphasize 0 items");
     }
   },

@@ -1,4 +1,5 @@
 import type { ChatTaskCard, DeepWritingPanelState, DeepWritingSectionStatus } from "@/components/chat/chat-data";
+import { normalizeDocumentStructure, normalizedBlocksToPlainText, type NormalizedDocumentBlock } from "@/lib/word-engine/normalize-document-structure";
 
 export type DeepWritingClientState = {
   isOpen: boolean;
@@ -107,7 +108,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       ...panel,
       currentStage: "writing_sections",
       currentSection: { id: sectionId, title, draft: "" },
-      directDocumentBody: buildDirectDocumentBody(panel.completedSections || [], { id: sectionId, title, draft: "" }),
+      ...documentPreviewPatch(panel.completedSections || [], { id: sectionId, title, draft: "" }),
       outline: upsertOutlineStatus(panel.outline, sectionId, title, "writing")
     });
   }
@@ -125,7 +126,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
         title,
         draft: `${currentDraft}${delta}`
       },
-      directDocumentBody: buildDirectDocumentBody(panel.completedSections || [], {
+      ...documentPreviewPatch(panel.completedSections || [], {
         id: sectionId,
         title,
         draft: `${currentDraft}${delta}`
@@ -152,7 +153,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       ...panel,
       outline: outline.some((item) => item.id === sectionId) ? outline : [...outline, { id: sectionId, title, status: "completed", preview }],
       completedSections: upsertCompletedSection(panel.completedSections || [], sectionId, title, draft),
-      directDocumentBody: buildDirectDocumentBody(upsertCompletedSection(panel.completedSections || [], sectionId, title, draft), undefined),
+      ...documentPreviewPatch(upsertCompletedSection(panel.completedSections || [], sectionId, title, draft), undefined),
       progress: progressFromOutline(outline)
     });
   }
@@ -174,7 +175,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       progress: 100,
       canResume: false,
       completedSections: panel.completedSections || [],
-      directDocumentBody: panel.directDocumentBody || buildDirectDocumentBody(panel.completedSections || [], panel.currentSection),
+      ...documentPreviewPatch(panel.completedSections || [], panel.currentSection),
       downloadUrl: readString(payload.downloadUrl) || panel.downloadUrl
     });
   }
@@ -184,7 +185,7 @@ export function reduceDeepWritingPanelEvent(state: DeepWritingClientState, event
       ...panel,
       currentStage: event.type === "deep_writing_failed" ? "failed" : "interrupted",
       canResume: true,
-      directDocumentBody: panel.directDocumentBody || buildDirectDocumentBody(panel.completedSections || [], panel.currentSection)
+      ...documentPreviewPatch(panel.completedSections || [], panel.currentSection)
     });
   }
 
@@ -207,6 +208,7 @@ function panelStateFromTaskCard(taskCard: ChatTaskCard, fallback?: DeepWritingPa
     currentSection: fallback?.currentSection,
     completedSections: fallback?.completedSections || [],
     directDocumentBody: fallback?.directDocumentBody,
+    normalizedBlocks: fallback?.normalizedBlocks,
     sources: fallback?.sources || [],
     canResume: taskCard.status !== "completed",
     downloadUrl: taskCard.downloadUrl || fallback?.downloadUrl || undefined
@@ -229,7 +231,7 @@ function normalizePanelState(panelState: DeepWritingPanelState): DeepWritingPane
         }
       : undefined,
     completedSections: normalizeCompletedSections(panelState.completedSections),
-    directDocumentBody: readString(panelState.directDocumentBody) || buildDirectDocumentBody(normalizeCompletedSections(panelState.completedSections), panelState.currentSection),
+    ...documentPreviewPatch(normalizeCompletedSections(panelState.completedSections), panelState.currentSection, panelState.normalizedBlocks),
     sources: normalizeSources(panelState.sources),
     canResume: Boolean(panelState.canResume),
     downloadUrl: panelState.downloadUrl
@@ -246,7 +248,7 @@ function createPanelState(taskId: string, title?: string, overrides: Partial<Dee
     outline: overrides.outline || [],
     currentSection: overrides.currentSection,
     completedSections: overrides.completedSections || [],
-    directDocumentBody: overrides.directDocumentBody,
+    ...documentPreviewPatch(overrides.completedSections || [], overrides.currentSection, overrides.normalizedBlocks),
     sources: overrides.sources || [],
     canResume: overrides.canResume ?? true,
     downloadUrl: overrides.downloadUrl
@@ -412,6 +414,37 @@ function buildDirectDocumentBody(
     else sections.push(next);
   }
   return sections.map((section) => `${section.title}\n${section.draft}`.trim()).filter(Boolean).join("\n\n");
+}
+
+function documentPreviewPatch(
+  completedSections: NonNullable<DeepWritingPanelState["completedSections"]>,
+  currentSection?: DeepWritingPanelState["currentSection"] | null,
+  existingBlocks?: NormalizedDocumentBlock[]
+): Pick<DeepWritingPanelState, "directDocumentBody" | "normalizedBlocks"> {
+  const sections = [...completedSections];
+  if (currentSection?.draft) {
+    const existing = sections.findIndex((section) => section.id === currentSection.id);
+    const next = { id: currentSection.id, title: currentSection.title, draft: currentSection.draft };
+    if (existing >= 0) sections[existing] = next;
+    else sections.push(next);
+  }
+  const normalizedBlocks = existingBlocks?.length
+    ? existingBlocks
+    : normalizeDocumentStructure({
+        sections: sections.map((section) => ({
+          heading: section.title,
+          paragraphs: [section.draft]
+        })),
+        documentKind: looksLikeLessonPlan(sections) ? "lesson_plan" : "general"
+      }).blocks;
+  return {
+    normalizedBlocks,
+    directDocumentBody: normalizedBlocksToPlainText(normalizedBlocks) || buildDirectDocumentBody(completedSections, currentSection)
+  };
+}
+
+function looksLikeLessonPlan(sections: Array<{ title: string; draft: string }>) {
+  return sections.some((section) => /课程|教学|学情|课时|板书|作业|课堂|目标|重点|难点|教案/.test(`${section.title}\n${section.draft}`));
 }
 
 function findOutlineTitle(panel: DeepWritingPanelState, sectionId: string) {

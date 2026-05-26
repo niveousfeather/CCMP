@@ -262,12 +262,25 @@ function staticTocXml(sections: WordSection[], theme: ReturnType<typeof resolveT
   const items = sections
     .filter((section) => section.level === 1)
     .slice(0, 18)
-    .map((section, index) => `${index + 1}. ${section.heading}`);
+    .map((section, index) => (hasLeadingSectionNumber(section.heading) ? section.heading : `${chineseNumber(index + 1)}、${section.heading}`));
   if (!items.length) return "";
   return [
     paragraphXml({ text: "目录", style: "Heading1", before: 260, after: 150, bold: true, color: theme.accent }),
     ...items.map((item) => paragraphXml({ text: item, before: 20, after: 70 }))
   ].join("\n");
+}
+
+function hasLeadingSectionNumber(value: string) {
+  return /^(?:[一二三四五六七八九十]+、|\d+[.)、])/.test(value.trim());
+}
+
+function chineseNumber(value: number) {
+  const numerals = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  if (value <= 10) return numerals[value];
+  if (value < 20) return `十${numerals[value - 10]}`;
+  const tens = Math.floor(value / 10);
+  const ones = value % 10;
+  return `${numerals[tens]}十${ones ? numerals[ones] : ""}`;
 }
 
 function headerXml(title: string, theme: ReturnType<typeof resolveTheme>) {
@@ -408,6 +421,7 @@ function stylesXml(renderOptions?: WordDocumentRenderOptions) {
   <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="260" w:after="200"/></w:pPr><w:rPr><w:b/><w:rFonts w:ascii="Aptos Display" w:hAnsi="Aptos Display" w:eastAsia="Microsoft YaHei"/><w:sz w:val="32"/><w:color w:val="${theme.accent}"/></w:rPr></w:style>
   <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="210" w:after="130"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="${theme.muted}"/></w:rPr></w:style>
   <w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="170" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="334155"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="120" w:after="80"/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="475569"/></w:rPr></w:style>
   <w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:style>
   <w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="0" w:after="0"/><w:shd w:val="clear" w:fill="F8FAFC"/><w:ind w:left="240" w:right="240"/></w:pPr><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:eastAsia="Microsoft YaHei"/><w:sz w:val="19"/></w:rPr></w:style>
   <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="8" w:color="${theme.border}"/><w:left w:val="single" w:sz="8" w:color="${theme.border}"/><w:bottom w:val="single" w:sz="8" w:color="${theme.border}"/><w:right w:val="single" w:sz="8" w:color="${theme.border}"/><w:insideH w:val="single" w:sz="6" w:color="${theme.light}"/><w:insideV w:val="single" w:sz="6" w:color="${theme.light}"/></w:tblBorders></w:tblPr></w:style>

@@ -3,6 +3,7 @@ import { serializeWordDocumentPlan, type WordDocumentPlan } from "@/lib/document
 import { DOCX_MIME, type DocumentTemplate } from "@/lib/document/types";
 import { composeLessonDocumentPlan } from "./compose-lesson-plan-content";
 import { normalizeDocumentFileBase, normalizeDocumentTitle } from "./normalize-document-title";
+import { normalizeDocumentStructure } from "./normalize-document-structure";
 import { assertTopicConsistencyForGeneratedDocx } from "./validate-topic-consistency";
 import type { WordContent, WordDocumentAttributes, WordGenerateResult, WordRequest, WordTaskMemory } from "./types";
 
@@ -99,6 +100,50 @@ function debugWordQaEnabled() {
   return process.env.DEBUG_AGENT === "1" || process.env.NEXT_PUBLIC_DEBUG_AGENT === "1";
 }
 
+function normalizedContentToDocumentPlan(content: WordContent, contentOrigin?: WordRequest["contentOrigin"]): WordDocumentPlan {
+  const normalized = normalizeDocumentStructure({
+    title: content.title,
+    documentKind: content.attributes?.documentKind,
+    sections: content.sections,
+    tables: content.tables
+  });
+  const sections: WordDocumentPlan["sections"] = [];
+  let current: WordDocumentPlan["sections"][number] | null = null;
+
+  const ensureSection = () => {
+    if (current) return current;
+    current = { heading: "正文", level: 1, blocks: [] };
+    sections.push(current);
+    return current;
+  };
+
+  for (const block of normalized.blocks) {
+    if (block.type === "heading") {
+      current = { heading: block.text, level: block.level, blocks: [] };
+      sections.push(current);
+      continue;
+    }
+    const target = ensureSection();
+    if (block.type === "paragraph") {
+      if (!target.intro) target.intro = block.text;
+      else target.blocks.push({ type: "paragraph", text: block.text });
+      continue;
+    }
+    if (block.type === "list") {
+      target.blocks.push({ type: block.ordered ? "numbered_list" : "bullet_list", items: block.items });
+      continue;
+    }
+    target.blocks.push({ type: "table", headers: block.headers, rows: block.rows });
+  }
+
+  return {
+    title: content.title,
+    subtitle: content.subtitle,
+    documentType: documentTypeForContent(content, contentOrigin),
+    sections
+  };
+}
+
 function createDocxBufferWithoutQaNoise(input: Parameters<typeof createDocxBuffer>[0]) {
   if (debugWordQaEnabled()) return createDocxBuffer(input);
 
@@ -135,7 +180,7 @@ export function generateDocx({
   const normalizedContent = { ...content, title: normalizedTitle };
   const isLessonPlan = content.attributes?.documentKind === "lesson_plan";
   const shouldUseGeneratedContent = request.contentOrigin === "generated_content";
-  const documentPlan = isLessonPlan && !shouldUseGeneratedContent ? composeLessonDocumentPlan(request) : contentToDocumentPlan(normalizedContent, request.contentOrigin);
+  const documentPlan = isLessonPlan && !shouldUseGeneratedContent ? composeLessonDocumentPlan(request) : normalizedContentToDocumentPlan(normalizedContent, request.contentOrigin);
   const markdown = serializeWordDocumentPlan(documentPlan);
   const buffer = createDocxBufferWithoutQaNoise({
     markdown,

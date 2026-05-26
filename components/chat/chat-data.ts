@@ -1,3 +1,5 @@
+import type { NormalizedDocumentBlock } from "@/lib/word-engine/normalize-document-structure";
+
 export type Conversation = {
   userId: string;
   conversationId: string;
@@ -97,6 +99,7 @@ export type DeepWritingPanelState = {
     draft: string;
   }>;
   directDocumentBody?: string;
+  normalizedBlocks?: NormalizedDocumentBlock[];
   sources: Array<{
     title: string;
     summary: string;

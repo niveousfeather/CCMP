@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, Loader2, X } from "lucide-react";
 
 import type { DeepWritingPanelState } from "@/components/chat/chat-data";
+import type { NormalizedDocumentBlock } from "@/lib/word-engine/normalize-document-structure";
 import { cn } from "@/lib/utils";
 
 export function DeepWritingPanel({
@@ -19,22 +21,63 @@ export function DeepWritingPanel({
   const panel = state || null;
   const completedSections = panel?.completedSections || [];
   const currentSection = panel?.currentSection || null;
-  const sources = (panel?.sources || []).filter((source) => source.title || source.summary);
   const progress = panel?.progress ?? 0;
   const stage = panel?.currentStage || "planning";
   const stageLabel = getStageLabel(stage);
   const badge = getStageBadge(stage);
   const fullDocument = buildDocumentPreview(completedSections, currentSection);
   const directBody = panel?.directDocumentBody || fullDocument.map((section) => `${section.title}\n${section.draft}`.trim()).join("\n\n");
+  const normalizedBlocks = useMemo(() => panel?.normalizedBlocks || fallbackBlocks(fullDocument), [panel?.normalizedBlocks, fullDocument]);
+  const [panelWidth, setPanelWidth] = useState(560);
+  const dragState = useRef<{ startX: number; startWidth: number } | null>(null);
+  const canDownload = stage === "completed" && Boolean(panel?.downloadUrl);
+
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem("deepWritingPanelWidth") || "");
+    if (Number.isFinite(saved)) setPanelWidth(clampPanelWidth(saved));
+  }, []);
+
+  useEffect(() => {
+    function handleMove(event: MouseEvent) {
+      if (!dragState.current) return;
+      const delta = dragState.current.startX - event.clientX;
+      const nextWidth = clampPanelWidth(dragState.current.startWidth + delta);
+      setPanelWidth(nextWidth);
+      window.localStorage.setItem("deepWritingPanelWidth", String(nextWidth));
+    }
+    function handleUp() {
+      dragState.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, []);
 
   return (
     <aside
       className={cn(
-        "absolute inset-y-0 right-0 z-40 flex w-[min(560px,calc(100vw-24px))] flex-col border-l border-[color:var(--color-border)] bg-[var(--color-panel)] shadow-[-18px_0_44px_rgba(15,23,42,0.10)] transition-transform duration-300",
+        "absolute inset-y-0 right-0 z-40 flex w-[calc(100vw-24px)] max-w-full flex-col border-l border-[color:var(--color-border)] bg-[var(--color-panel)] shadow-[-18px_0_44px_rgba(15,23,42,0.10)] transition-transform duration-300 md:max-w-[70vw]",
         open ? "translate-x-0" : "translate-x-full"
       )}
+      style={{ width: `min(${panelWidth}px, calc(100vw - 24px), 70vw)` }}
       aria-hidden={!open}
     >
+      <button
+        type="button"
+        aria-label="拖拽调整文档预览宽度"
+        className="absolute inset-y-0 left-0 hidden w-2 -translate-x-1 cursor-col-resize border-l border-transparent transition hover:border-[var(--color-primary)] md:block"
+        onMouseDown={(event) => {
+          dragState.current = { startX: event.clientX, startWidth: panelWidth };
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+        }}
+      />
+
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-[color:var(--color-border)] px-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -70,56 +113,26 @@ export function DeepWritingPanel({
         <section className="mt-5">
           <PanelHeading title={stage === "completed" ? "文档正文" : "正文预览"} meta={currentSection?.title || (directBody ? "实时生成" : "准备生成")} />
           <div className="mt-3 min-h-[52vh] rounded-lg border border-[color:var(--color-border)] bg-[var(--color-panel)] px-4 py-4">
-            {fullDocument.length ? (
-              <div className="space-y-5">
-                {fullDocument.map((section) => (
-                  <article key={section.id} className="scroll-mt-4">
-                    <h3 className="text-base font-semibold leading-7 text-[var(--color-text)]">{section.title}</h3>
-                    <div className="mt-2 space-y-2">
-                      {splitDraft(section.draft).map((paragraph, index) => (
-                        <p key={`${section.id}-${index}`} className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text)]">
-                          {paragraph}
-                        </p>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
+            {normalizedBlocks.length ? (
+              <DocumentBlocks blocks={normalizedBlocks} />
             ) : directBody ? (
-              <div className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text)]">{directBody}</div>
+              <div className="whitespace-pre-wrap break-words text-sm leading-7 text-[var(--color-text)]">{directBody}</div>
             ) : (
               <EmptyLine text="正文开始生成后会在这里实时显示。" />
             )}
           </div>
-        </section>
-
-        <section className="mt-5 rounded-lg border border-[color:var(--color-border)] bg-[var(--color-soft)] px-4 py-3">
-          {sources.length ? (
-            <>
-              <PanelHeading title="资料摘要" meta={`${sources.length} 条`} />
-              <div className="mt-2 grid gap-2">
-                {sources.slice(0, 3).map((source, index) => (
-                  <p key={`${source.title}-${index}`} className="line-clamp-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                    {source.title ? `${source.title}：` : ""}
-                    {source.summary}
-                  </p>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p className="text-xs leading-5 text-[var(--color-text-muted)]">当前基于用户输入和已有对话生成。</p>
-          )}
         </section>
       </div>
 
       <div className="shrink-0 border-t border-[color:var(--color-border)] px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 text-xs leading-5 text-[var(--color-text-muted)]">
-            {stage === "completed" ? "文档已完成，可下载 Word。" : stage === "interrupted" ? "生成已暂停，输入“继续”可接着生成。" : "文档正在生成，完成后会整理为 Word。"}
+            {stage === "completed" ? "文档已完成，可下载 Word。" : stage === "interrupted" ? "生成已暂停，可继续生成。" : "文档正在生成，完成后会整理为 Word。"}
           </div>
-          {panel?.downloadUrl ? (
+          {canDownload ? (
             <a
-              href={panel.downloadUrl}
+              href={panel?.downloadUrl}
+              download
               className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--color-text)] px-3 text-xs font-medium text-[var(--color-panel)] transition hover:-translate-y-0.5"
             >
               <Download className="h-3.5 w-3.5" />
@@ -135,7 +148,10 @@ export function DeepWritingPanel({
               继续生成
             </button>
           ) : (
-            <span className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[var(--color-text-muted)]">
+            <span
+              aria-disabled="true"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[var(--color-text-muted)]"
+            >
               {stage === "interrupted" || stage === "failed" ? <FileText className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {stage === "interrupted" ? "可继续生成" : stage === "failed" ? "生成未完成" : "整理 Word"}
             </span>
@@ -143,6 +159,75 @@ export function DeepWritingPanel({
         </div>
       </div>
     </aside>
+  );
+}
+
+function DocumentBlocks({ blocks }: { blocks: NormalizedDocumentBlock[] }) {
+  return (
+    <div className="space-y-3 break-words text-[var(--color-text)]">
+      {blocks.map((block, index) => {
+        if (block.type === "heading") {
+          const className =
+            block.level === 1
+              ? "mt-5 text-lg font-bold leading-8"
+              : block.level === 2
+                ? "mt-4 text-base font-semibold leading-7"
+                : block.level === 3
+                  ? "mt-3 text-sm font-semibold leading-7"
+                  : "mt-2 text-sm font-semibold leading-6";
+          return (
+            <h3 key={`${block.type}-${index}`} className={className}>
+              {block.text}
+            </h3>
+          );
+        }
+        if (block.type === "list") {
+          const ListTag = block.ordered ? "ol" : "ul";
+          return (
+            <ListTag key={`${block.type}-${index}`} className={cn("space-y-1 pl-5 text-sm leading-7", block.ordered ? "list-decimal" : "list-disc")}>
+              {block.items.map((item, itemIndex) => (
+                <li key={`${index}-${itemIndex}`} className="whitespace-pre-wrap break-words">
+                  {item}
+                </li>
+              ))}
+            </ListTag>
+          );
+        }
+        if (block.type === "table") {
+          return (
+            <div key={`${block.type}-${index}`} className="overflow-x-auto rounded-md border border-[color:var(--color-border)]">
+              <table className="w-full min-w-[520px] table-fixed border-collapse text-left text-xs leading-5">
+                <thead className="bg-[var(--color-soft)] text-[var(--color-text)]">
+                  <tr>
+                    {block.headers.map((header, headerIndex) => (
+                      <th key={`${index}-h-${headerIndex}`} className="break-words border-b border-[color:var(--color-border)] px-2 py-2 font-semibold">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={`${index}-r-${rowIndex}`}>
+                      {block.headers.map((_, cellIndex) => (
+                        <td key={`${index}-r-${rowIndex}-${cellIndex}`} className="break-words border-b border-[color:var(--color-border)] px-2 py-2 align-top text-[var(--color-text)]">
+                          {row[cellIndex] || ""}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        return (
+          <p key={`${block.type}-${index}`} className="whitespace-pre-wrap break-words text-sm leading-7 text-[var(--color-text)]">
+            {block.text}
+          </p>
+        );
+      })}
+    </div>
   );
 }
 
@@ -196,9 +281,17 @@ function buildDocumentPreview(
   return sections.filter((section) => section.title && section.draft);
 }
 
-function splitDraft(draft: string) {
-  return draft
-    .split(/\n{2,}|\r?\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+function fallbackBlocks(sections: ReturnType<typeof buildDocumentPreview>): NormalizedDocumentBlock[] {
+  return sections.flatMap((section, index) => [
+    { type: "heading" as const, level: 1 as const, text: `${index + 1}. ${section.title}` },
+    ...section.draft
+      .split(/\n{2,}|\r?\n/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean)
+      .map((text) => ({ type: "paragraph" as const, text }))
+  ]);
+}
+
+function clampPanelWidth(value: number) {
+  return Math.max(360, Math.min(960, Math.round(value)));
 }
