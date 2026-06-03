@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
+import { useMemo } from "react";
 
+import { GraphCanvasShell, type GraphCanvasBounds } from "@/components/capability-map/graph-canvas-shell";
 import type {
   CourseAbilityGraphPayload,
   CourseTaskNode,
@@ -16,12 +16,28 @@ type NodeKind = "course" | "workflow" | "module" | "task";
 const CANVAS_WIDTH = 1460;
 const CANVAS_PADDING_TOP = 48;
 const CANVAS_PADDING_BOTTOM = 48;
+const COLUMN_HEADER_Y = 20;
+const COLUMN_HEADER_WIDTH = 166;
+const COLUMN_HEADER_HEIGHT = 42;
 const COLUMN_X: Record<NodeKind, number> = {
   course: 165,
   workflow: 540,
   module: 860,
   task: 1200
 };
+const COLUMN_LABELS: Record<NodeKind, string> = {
+  course: "课程",
+  workflow: "工作流程",
+  module: "教学模块",
+  task: "任务/能力点"
+};
+const COLUMN_INDEX: Record<NodeKind, string> = {
+  course: "1",
+  workflow: "2",
+  module: "3",
+  task: "4"
+};
+const COLUMN_ORDER: NodeKind[] = ["course", "workflow", "module", "task"];
 
 const NODE_SIZE: Record<NodeKind, { width: number; height: number }> = {
   course: { width: 240, height: 128 },
@@ -36,11 +52,7 @@ const STAGE_GAP = 46;
 const MODULE_BLOCK_PAD_Y = 17;
 const MIN_MODULE_BLOCK_HEIGHT = 150;
 const EDGE_INSET = 8;
-const DRAG_THRESHOLD = 4;
 const FIT_PADDING = 28;
-const MAX_ZOOM = 1.35;
-const MIN_ZOOM = 0.25;
-const ZOOM_STEP = 0.1;
 
 type DisplayNode = {
   id: string;
@@ -69,30 +81,6 @@ type ModuleLayoutBlock = {
   tasks: CourseTaskNode[];
   y: number;
 };
-
-type CanvasDragState = {
-  moved: boolean;
-  panX: number;
-  panY: number;
-  pointerId: number;
-  startX: number;
-  startY: number;
-};
-
-type CanvasPan = {
-  x: number;
-  y: number;
-};
-
-function shouldIgnoreCanvasDrag(target: EventTarget | null) {
-  if (!(target instanceof Element)) return true;
-  return Boolean(target.closest('[data-graph-node="true"], button, a, input, textarea, select, [role="button"]'));
-}
-
-function shouldIgnoreCanvasKeydown(target: EventTarget | null) {
-  if (!(target instanceof Element)) return false;
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
-}
 
 function taskStackHeight(taskCount: number) {
   if (taskCount <= 0) return 0;
@@ -276,8 +264,30 @@ function buildRelatedIds(graph: CourseAbilityGraphPayload, selectedNodeId: strin
   return ids;
 }
 
-function clampZoom(value: number) {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+function buildNodeBounds(nodes: DisplayNode[]): GraphCanvasBounds {
+  if (!nodes.length) {
+    return {
+      maxX: CANVAS_WIDTH,
+      maxY: CANVAS_PADDING_TOP + CANVAS_PADDING_BOTTOM,
+      minX: 0,
+      minY: 0
+    };
+  }
+
+  return nodes.reduce<GraphCanvasBounds>(
+    (bounds, node) => ({
+      maxX: Math.max(bounds.maxX, node.x + node.width / 2 + EDGE_INSET),
+      maxY: Math.max(bounds.maxY, node.y + node.height / 2),
+      minX: Math.min(bounds.minX, node.x - node.width / 2 - EDGE_INSET),
+      minY: Math.min(bounds.minY, node.y - node.height / 2)
+    }),
+    {
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY
+    }
+  );
 }
 
 export function CourseAbilityGraphView({
@@ -293,191 +303,69 @@ export function CourseAbilityGraphView({
   onSelectNode: (nodeId: string) => void;
   selectedNodeId: string;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const dragStateRef = useRef<CanvasDragState | null>(null);
-  const [isPanning, setIsPanning] = useState(false);
-  const [pan, setPan] = useState<CanvasPan>({ x: FIT_PADDING, y: FIT_PADDING });
-  const [zoom, setZoom] = useState(1);
   const { canvasHeight, edges, nodes } = useMemo(() => buildDisplay(graph), [graph]);
+  const graphBounds = useMemo(() => buildNodeBounds(nodes), [nodes]);
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const relatedNodeIds = buildRelatedIds(graph, selectedNodeId);
   const mappableModuleIdSet = new Set(mappableModuleIds);
   const rootId = graph.courseAbilityMap.rootNode.id;
 
-  function handleCanvasPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 || shouldIgnoreCanvasDrag(event.target)) return;
-
-    const canvasElement = scrollRef.current;
-    if (!canvasElement) return;
-
-    dragStateRef.current = {
-      moved: false,
-      panX: pan.x,
-      panY: pan.y,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY
-    };
-    canvasElement.focus({ preventScroll: true });
-    canvasElement.setPointerCapture(event.pointerId);
-    setIsPanning(true);
-  }
-
-  function handleCanvasPointerMove(event: PointerEvent<HTMLDivElement>) {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    const deltaX = event.clientX - dragState.startX;
-    const deltaY = event.clientY - dragState.startY;
-    if (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD) {
-      dragState.moved = true;
-    }
-
-    if (!dragState.moved) return;
-
-    event.preventDefault();
-    setPan({ x: dragState.panX + deltaX, y: dragState.panY + deltaY });
-  }
-
-  function endCanvasDrag(event: PointerEvent<HTMLDivElement>) {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    const canvasElement = scrollRef.current;
-    if (canvasElement?.hasPointerCapture(event.pointerId)) {
-      canvasElement.releasePointerCapture(event.pointerId);
-    }
-    dragStateRef.current = null;
-    setIsPanning(false);
-  }
-
-  function updateZoom(nextZoomValue: number) {
-    const canvasElement = scrollRef.current;
-    setZoom((currentZoom) => {
-      const nextZoom = clampZoom(nextZoomValue);
-
-      if (canvasElement) {
-        const centerX = (canvasElement.clientWidth / 2 - pan.x) / currentZoom;
-        const centerY = (canvasElement.clientHeight / 2 - pan.y) / currentZoom;
-        setPan({
-          x: canvasElement.clientWidth / 2 - centerX * nextZoom,
-          y: canvasElement.clientHeight / 2 - centerY * nextZoom
-        });
-      }
-
-      return nextZoom;
-    });
-  }
-
-  function resetView() {
-    setZoom(1);
-    setPan({ x: FIT_PADDING, y: FIT_PADDING });
-  }
-
-  function fitToView() {
-    const canvasElement = scrollRef.current;
-    if (!canvasElement) return;
-
-    const nextZoom = clampZoom(
-      Math.min((canvasElement.clientWidth - FIT_PADDING) / CANVAS_WIDTH, (canvasElement.clientHeight - FIT_PADDING) / canvasHeight, 1)
-    );
-
-    setZoom(nextZoom);
-    setPan({
-      x: (canvasElement.clientWidth - CANVAS_WIDTH * nextZoom) / 2,
-      y: (canvasElement.clientHeight - canvasHeight * nextZoom) / 2
-    });
-  }
-
-  function handleCanvasKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (shouldIgnoreCanvasKeydown(event.target)) return;
-
-    const key = event.key.toLowerCase();
-    if (key === "+" || key === "=") {
-      event.preventDefault();
-      updateZoom(zoom + ZOOM_STEP);
-    }
-    if (key === "-" || key === "_") {
-      event.preventDefault();
-      updateZoom(zoom - ZOOM_STEP);
-    }
-    if (key === "0") {
-      event.preventDefault();
-      resetView();
-    }
-    if (key === "f") {
-      event.preventDefault();
-      fitToView();
-    }
-  }
-
   return (
-    <div className="rounded-[28px] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 p-3">
-      <div
-        ref={scrollRef}
-        data-capability-graph-canvas="true"
-        tabIndex={0}
-        onKeyDown={handleCanvasKeyDown}
-        onPointerCancel={endCanvasDrag}
-        onPointerDown={handleCanvasPointerDown}
-        onPointerMove={handleCanvasPointerMove}
-        onPointerUp={endCanvasDrag}
-        className={cn(
-          "relative h-[720px] cursor-grab overflow-hidden rounded-[24px] border border-blue-100 bg-[length:auto,44px_44px,44px_44px] outline-none focus:ring-4 focus:ring-blue-200",
-          isPanning && "cursor-grabbing select-none"
-        )}
-        style={{ backgroundImage: "var(--cap-graph-bg)" }}
-      >
-        <div className="absolute right-4 top-4 z-50 flex w-fit items-center gap-1 rounded-full border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur">
-          <button
-            type="button"
-            aria-label="适应窗口"
-            onClick={fitToView}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
-            title="适应窗口"
-          >
-            <Maximize2 className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="缩小"
-            onClick={() => updateZoom(zoom - ZOOM_STEP)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
-            title="缩小"
-          >
-            <Minus className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <span className="min-w-12 text-center text-xs font-black text-slate-600">{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            aria-label="放大"
-            onClick={() => updateZoom(zoom + ZOOM_STEP)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
-            title="放大"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="重置视图"
-            onClick={resetView}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
-            title="重置视图"
-          >
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
+    <GraphCanvasShell
+      bounds={graphBounds}
+      contentHeight={canvasHeight}
+      contentWidth={CANVAS_WIDTH}
+      fitKey={`${graph.course.courseName}-${canvasHeight}`}
+      fitPadding={FIT_PADDING}
+      viewportClassName="h-[720px]"
+    >
+      <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full" viewBox={`0 0 ${CANVAS_WIDTH} ${canvasHeight}`} aria-hidden="true">
+              {COLUMN_ORDER.map((kind, index) => {
+                const headerX = COLUMN_X[kind] - COLUMN_HEADER_WIDTH / 2;
+                const nextKind = COLUMN_ORDER[index + 1];
 
-        <div className="absolute inset-0">
-          <div
-            className="absolute left-0 top-0 origin-top-left"
-            style={{
-              height: canvasHeight,
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              width: CANVAS_WIDTH
-            }}
-          >
-            <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full" viewBox={`0 0 ${CANVAS_WIDTH} ${canvasHeight}`} aria-hidden="true">
+                return (
+                  <g key={kind}>
+                    {nextKind ? (
+                      <path
+                        d={`M ${COLUMN_X[kind] + COLUMN_HEADER_WIDTH / 2 + 18} ${COLUMN_HEADER_Y + COLUMN_HEADER_HEIGHT / 2} L ${
+                          COLUMN_X[nextKind] - COLUMN_HEADER_WIDTH / 2 - 18
+                        } ${COLUMN_HEADER_Y + COLUMN_HEADER_HEIGHT / 2}`}
+                        fill="none"
+                        stroke="rgba(37,99,235,0.32)"
+                        strokeDasharray="5 8"
+                        strokeLinecap="round"
+                        strokeWidth={1.3}
+                      />
+                    ) : null}
+                    <rect
+                      x={headerX}
+                      y={COLUMN_HEADER_Y}
+                      width={COLUMN_HEADER_WIDTH}
+                      height={COLUMN_HEADER_HEIGHT}
+                      rx={14}
+                      fill="rgba(15,23,42,0.72)"
+                      stroke="rgba(148,163,184,0.38)"
+                    />
+                    <rect
+                      x={headerX + 10}
+                      y={COLUMN_HEADER_Y + 10}
+                      width={22}
+                      height={22}
+                      rx={8}
+                      fill="rgba(37,99,235,0.2)"
+                      stroke="rgba(96,165,250,0.48)"
+                    />
+                    <text x={headerX + 21} y={COLUMN_HEADER_Y + 25} textAnchor="middle" className="fill-blue-200 text-[10px] font-black">
+                      {COLUMN_INDEX[kind]}
+                    </text>
+                    <text x={headerX + 42} y={COLUMN_HEADER_Y + 26} className="fill-slate-100 text-[12px] font-black">
+                      {COLUMN_LABELS[kind]}
+                    </text>
+                  </g>
+                );
+              })}
+
               {edges.map((edge) => {
                 const source = nodeMap.get(edge.source);
                 const target = nodeMap.get(edge.target);
@@ -563,9 +451,6 @@ export function CourseAbilityGraphView({
                 </div>
               );
             })}
-          </div>
-        </div>
-      </div>
-    </div>
+    </GraphCanvasShell>
   );
 }

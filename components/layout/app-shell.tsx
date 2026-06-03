@@ -4,6 +4,8 @@ import {
   BarChart3,
   Bot,
   ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
   FileText,
   History,
   Image,
@@ -70,6 +72,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
   const isAcademicPptWorkbench = pathname === "/smart-tools/academic-ppt";
   const isTeachingArchitectureWorkbench = pathname === "/smart-tools/teaching-architecture-diagram";
   const isCapabilityMapWorkbench = pathname === "/smart-tools/capability-map";
+  const [capabilitySidebarCollapsed, setCapabilitySidebarCollapsed] = useState(false);
   const isWidePage =
     pathname === "/chat" ||
     pathname === "/model3d" ||
@@ -108,17 +111,38 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
 
   return (
     <div className="min-h-screen">
-      <aside className="fixed left-0 top-0 z-30 hidden h-screen w-56 border-r border-[color:var(--color-border)] bg-[var(--color-bg-elevated)] p-3 backdrop-blur lg:block">
-        <Link href="/" className="mb-8 flex h-12 items-center gap-3 px-2">
-          <BrandLogo />
-        </Link>
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-30 hidden h-screen border-r border-[color:var(--color-border)] bg-[var(--color-bg-elevated)] p-3 backdrop-blur transition-[width] duration-200 lg:block",
+          isCapabilityMapWorkbench && capabilitySidebarCollapsed ? "w-16" : "w-56"
+        )}
+      >
+        <div className={cn("mb-8 flex h-12 items-center", capabilitySidebarCollapsed ? "justify-center" : "justify-between gap-2")}>
+          <Link href="/" className={cn("flex min-w-0 items-center", capabilitySidebarCollapsed ? "justify-center" : "gap-3 px-2")}>
+            <BrandLogo showText={!capabilitySidebarCollapsed} />
+          </Link>
+          {isCapabilityMapWorkbench ? (
+            <button
+              type="button"
+              onClick={() => setCapabilitySidebarCollapsed((current) => !current)}
+              className={cn(
+                "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--color-border)] text-[var(--color-text-muted)] transition hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus:outline-none focus:ring-4 focus:ring-blue-200",
+                capabilitySidebarCollapsed && "absolute -right-4 top-4 bg-[var(--color-bg-elevated)] shadow-sm"
+              )}
+              aria-label={capabilitySidebarCollapsed ? "展开侧栏" : "收起侧栏"}
+              title={capabilitySidebarCollapsed ? "展开侧栏" : "收起侧栏"}
+            >
+              {capabilitySidebarCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+            </button>
+          ) : null}
+        </div>
 
         <nav className="grid gap-1">
-          {isAgentPage ? <AgentNavigation items={items} /> : <DefaultNavigation items={items} pathname={pathname} />}
+          {isAgentPage ? <AgentNavigation items={items} /> : <DefaultNavigation collapsed={isCapabilityMapWorkbench && capabilitySidebarCollapsed} items={items} pathname={pathname} />}
         </nav>
       </aside>
 
-      <div className="lg:pl-56">
+      <div className={cn("transition-[padding] duration-200", isCapabilityMapWorkbench && capabilitySidebarCollapsed ? "lg:pl-16" : "lg:pl-56")}>
         <header className="sticky top-0 z-20 border-b border-[color:var(--color-border)] bg-[var(--color-bg)] px-4 backdrop-blur md:px-8">
           <div
             className={cn(
@@ -181,9 +205,11 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
 }
 
 function DefaultNavigation({
+  collapsed = false,
   items,
   pathname
 }: {
+  collapsed?: boolean;
   items: Array<{ href: string; label: string; icon: typeof Bot }>;
   pathname: string;
 }) {
@@ -195,14 +221,16 @@ function DefaultNavigation({
         return (
           <Link
             key={item.href}
+            title={collapsed ? item.label : undefined}
             href={item.href}
             className={cn(
               "flex h-10 items-center gap-3 rounded-lg border border-transparent px-3 text-sm text-[var(--color-text-muted)] transition hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
+              collapsed && "justify-center px-0",
               active && navActiveClass
             )}
           >
             <Icon className="h-4 w-4" />
-            {item.label}
+            {collapsed ? <span className="sr-only">{item.label}</span> : item.label}
           </Link>
         );
       })}

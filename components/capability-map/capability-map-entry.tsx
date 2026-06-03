@@ -14,6 +14,7 @@ import {
 } from "@/components/capability-map/course-request-panel";
 import { IcebergModel } from "@/components/capability-map/iceberg-model";
 import { IndustryImpactPaths } from "@/components/capability-map/industry-impact-paths";
+import { ProcessGraphStageDetail, ProcessGraphStageView } from "@/components/capability-map/process-graph-stage-view";
 import { createMockCourseAbilityGraph } from "@/lib/capability-map/course-ability-graph";
 import type {
   CourseAbilityGraphInput,
@@ -28,7 +29,17 @@ const defaultForm: CourseAbilityGraphInput = {
   region: "重庆"
 };
 
-type CapabilityMapViewMode = "overview" | "mapping";
+const DATA_NOTICE = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。";
+
+type CapabilityMapViewMode = "industry" | "regionalJobs" | "majorAbilities" | "overview" | "mapping";
+
+const PROCESS_STEPS: Array<{ description: string; id: CapabilityMapViewMode; label: string }> = [
+  { id: "industry", label: "产业图谱", description: "从产业变化识别课程内容更新方向。" },
+  { id: "regionalJobs", label: "区域岗位图谱", description: "从区域岗位需求定位课程服务对象。" },
+  { id: "majorAbilities", label: "专业能力图谱", description: "从岗位能力抽取专业能力结构。" },
+  { id: "overview", label: "课程能力图谱", description: "将专业能力转化为课程流程、模块与任务。" },
+  { id: "mapping", label: "课程映射", description: "将教学模块映射到典型工作项目和七个课程建设维度。" }
+];
 
 function normalizeForm(form: CourseAbilityGraphInput): CourseAbilityGraphInput {
   return {
@@ -45,6 +56,7 @@ export function CapabilityMapEntry() {
   const [graph, setGraph] = useState<CourseAbilityGraphPayload>(() => createMockCourseAbilityGraph(defaultForm));
   const [selectedNodeId, setSelectedNodeId] = useState<string>(graph.courseAbilityMap.rootNode.id);
   const [viewMode, setViewMode] = useState<CapabilityMapViewMode>("overview");
+  const [selectedProcessNodeId, setSelectedProcessNodeId] = useState<string | null>(null);
   const [activeMappingModuleId, setActiveMappingModuleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -54,6 +66,14 @@ export function CapabilityMapEntry() {
     ? graph.moduleMappings.find((mapping) => mapping.moduleId === activeMappingModuleId) || null
     : null;
   const mappingViewActive = viewMode === "mapping" && Boolean(activeModuleMapping);
+  const activeProcessStage =
+    viewMode === "industry"
+      ? graph.industryGraph
+      : viewMode === "regionalJobs"
+        ? graph.regionalJobGraph
+        : viewMode === "majorAbilities"
+          ? graph.majorAbilityGraph
+          : null;
 
   function parseRequest() {
     const parsed = parseCourseRequestText(requestText, form);
@@ -76,6 +96,7 @@ export function CapabilityMapEntry() {
     setLastParsedText(requestText);
     setGraph(nextGraph);
     setSelectedNodeId(nextGraph.courseAbilityMap.rootNode.id);
+    setSelectedProcessNodeId(null);
     setViewMode("overview");
     setActiveMappingModuleId(null);
     setEditMode(false);
@@ -85,20 +106,48 @@ export function CapabilityMapEntry() {
 
   function selectNode(nodeId: string) {
     setSelectedNodeId(nodeId);
+    setSelectedProcessNodeId(null);
     setActiveMappingModuleId(null);
     setViewMode("overview");
+  }
+
+  function selectProcessStep(nextMode: CapabilityMapViewMode) {
+    if (nextMode === "mapping") {
+      const selectedMapping = graph.moduleMappings.find((mapping) => mapping.moduleId === selectedNodeId);
+      const fallbackMapping = graph.moduleMappings[0];
+      const mapping = selectedMapping || activeModuleMapping || fallbackMapping;
+      if (mapping) openCourseMappingFromModule(mapping.moduleId);
+      return;
+    }
+
+    setViewMode(nextMode);
+    setActiveMappingModuleId(null);
+    if (nextMode === "overview") {
+      setSelectedProcessNodeId(null);
+      return;
+    }
+
+    const stage =
+      nextMode === "industry"
+        ? graph.industryGraph
+        : nextMode === "regionalJobs"
+          ? graph.regionalJobGraph
+          : graph.majorAbilityGraph;
+    setSelectedProcessNodeId(stage.nodes[0]?.id || null);
   }
 
   function openCourseMappingFromModule(moduleId: string) {
     const mapping = graph.moduleMappings.find((item) => item.moduleId === moduleId);
     if (!mapping) return;
     setSelectedNodeId(moduleId);
+    setSelectedProcessNodeId(null);
     setActiveMappingModuleId(mapping.moduleId);
     setViewMode("mapping");
   }
 
   function returnToOverview() {
     setViewMode("overview");
+    setSelectedProcessNodeId(null);
     setActiveMappingModuleId(null);
   }
 
@@ -226,7 +275,7 @@ export function CapabilityMapEntry() {
     <main className={cn(styles.root, "capability-map-root min-h-screen")}>
       <div className="w-full px-4 py-4 lg:px-5">
         <header className="mb-4 rounded-3xl border border-blue-100 bg-white px-5 py-4 shadow-[0_12px_36px_rgba(37,99,235,0.06)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
                 <ShieldCheck className="h-4 w-4" />
@@ -235,6 +284,9 @@ export function CapabilityMapEntry() {
               <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
                 重庆地区影视动画专业《{graph.course.courseName}》课程能力图谱
               </h1>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-900">
+              {DATA_NOTICE}
             </div>
           </div>
         </header>
@@ -253,25 +305,33 @@ export function CapabilityMapEntry() {
           </aside>
 
           <section className="min-w-0 rounded-3xl border border-blue-100 bg-white p-5 shadow-[0_24px_70px_rgba(37,99,235,0.1)]">
+            <ProcessStepNav activeMode={viewMode} onSelect={selectProcessStep} />
+
             <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
-                  {mappingViewActive ? <Layers3 className="h-4 w-4" /> : <Network className="h-4 w-4" />}
-                  {mappingViewActive ? "课程映射展开画布" : "课程能力图谱主画布"}
+                  {mappingViewActive || activeProcessStage ? <Layers3 className="h-4 w-4" /> : <Network className="h-4 w-4" />}
+                  {mappingViewActive ? "课程映射展开画布" : activeProcessStage ? "图谱生成过程视图" : "课程能力图谱主画布"}
                 </p>
                 <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
                   {mappingViewActive && activeModuleMapping
                     ? `当前教学模块：${activeModuleMapping.moduleName}`
+                    : activeProcessStage
+                      ? activeProcessStage.title
                     : `${graph.course.majorDirection} · 《${graph.course.courseName}》`}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   {mappingViewActive
                     ? "从当前教学模块展开典型工作项目、七个课程映射维度和具体小点，解释这个模块为什么这样设置。"
+                    : activeProcessStage
+                      ? activeProcessStage.lead
                     : "主画布按课程、工作流程、教学模块和任务/能力点四级展开，帮助教师看到课程内容如何落到项目任务。"}
                 </p>
                 <p className="mt-2 text-sm font-semibold leading-6 text-blue-700">
                   {mappingViewActive
                     ? "点击典型工作项目、维度或小点，可同步高亮相关节点和连线。"
+                    : activeProcessStage
+                      ? "点击轻量节点可在右侧查看阶段说明。当前仍为本地示例推导，不代表真实资料库结果。"
                     : "点击教学模块本身查看详情；点击教学模块下方“课程映射”徽标可切换到映射展开画布。"}
                 </p>
               </div>
@@ -292,7 +352,7 @@ export function CapabilityMapEntry() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditNotice("智能生成能力暂未开启，后续接入 GPT-5.4 后可用。")}
+                  onClick={() => setEditNotice("当前仅根据本地示例数据刷新页面状态；本轮不接入外部模型、RAG、爬虫或图数据库。")}
                   className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 font-bold text-slate-500 transition hover:border-blue-200 hover:text-blue-700"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
@@ -319,6 +379,12 @@ export function CapabilityMapEntry() {
                 onUpdateMappingItem={updateMappingItem}
                 onUpdateTypicalWorkProject={updateTypicalWorkProject}
               />
+            ) : activeProcessStage ? (
+              <ProcessGraphStageView
+                onSelectNode={setSelectedProcessNodeId}
+                selectedNodeId={selectedProcessNodeId}
+                stage={activeProcessStage}
+              />
             ) : (
               <CourseAbilityGraphView
                 graph={graph}
@@ -331,24 +397,28 @@ export function CapabilityMapEntry() {
           </section>
 
           <aside className="xl:col-start-2 2xl:sticky 2xl:top-5 2xl:col-start-auto">
-            <CourseAbilityDetailPanel
-              editMode={editMode}
-              graph={graph}
-              onOpenCourseMapping={() => {
-                if (graph.moduleMappings.some((mapping) => mapping.moduleId === selectedNodeId)) {
-                  openCourseMappingFromModule(selectedNodeId);
-                }
-              }}
-              onUpdateCourse={updateCourse}
-              onUpdateTask={updateTask}
-              onUpdateTeachingModule={updateTeachingModule}
-              onUpdateWorkflow={updateWorkflow}
-              selectedNodeId={selectedNodeId}
-            />
+            {activeProcessStage ? (
+              <ProcessGraphStageDetail selectedNodeId={selectedProcessNodeId} stage={activeProcessStage} />
+            ) : (
+              <CourseAbilityDetailPanel
+                editMode={editMode}
+                graph={graph}
+                onOpenCourseMapping={() => {
+                  if (graph.moduleMappings.some((mapping) => mapping.moduleId === selectedNodeId)) {
+                    openCourseMappingFromModule(selectedNodeId);
+                  }
+                }}
+                onUpdateCourse={updateCourse}
+                onUpdateTask={updateTask}
+                onUpdateTeachingModule={updateTeachingModule}
+                onUpdateWorkflow={updateWorkflow}
+                selectedNodeId={selectedNodeId}
+              />
+            )}
           </aside>
         </div>
 
-        {!mappingViewActive ? (
+        {!mappingViewActive && !activeProcessStage ? (
           <>
             <div className="mt-6 flex justify-center text-blue-500" aria-hidden="true">
               <ArrowDown className="h-5 w-5" />
@@ -368,5 +438,43 @@ export function CapabilityMapEntry() {
         ) : null}
       </div>
     </main>
+  );
+}
+
+function ProcessStepNav({
+  activeMode,
+  onSelect
+}: {
+  activeMode: CapabilityMapViewMode;
+  onSelect: (mode: CapabilityMapViewMode) => void;
+}) {
+  const activeStep = PROCESS_STEPS.find((step) => step.id === activeMode) || PROCESS_STEPS[3];
+
+  return (
+    <nav className="mb-4 overflow-x-auto rounded-[28px] border border-blue-100 bg-blue-50/70 p-2" aria-label="图谱生成过程">
+      <div className="flex min-w-max items-center gap-2">
+        {PROCESS_STEPS.map((step, index) => {
+          const active = activeMode === step.id || (step.id === "mapping" && activeMode === "mapping");
+          return (
+            <div key={step.id} className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onSelect(step.id)}
+                className={cn(
+                  "rounded-2xl border px-4 py-2 text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-blue-200",
+                  active
+                    ? "border-blue-500 bg-blue-600 text-white shadow-[0_12px_30px_rgba(37,99,235,0.2)]"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700"
+                )}
+              >
+                {step.label}
+              </button>
+              {index < PROCESS_STEPS.length - 1 ? <span className="text-sm font-black text-blue-300">→</span> : null}
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 px-2 text-xs font-bold leading-5 text-blue-700">{activeStep.description}</p>
+    </nav>
   );
 }
