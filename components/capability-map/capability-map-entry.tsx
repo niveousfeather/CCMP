@@ -7,6 +7,7 @@ import { CapabilityAnalysisSections } from "@/components/capability-map/capabili
 import { CourseAbilityDetailPanel } from "@/components/capability-map/course-ability-detail-panel";
 import { CourseAbilityGraphView } from "@/components/capability-map/course-ability-graph-view";
 import { CourseMappingView } from "@/components/capability-map/course-mapping-view";
+import { CoreCourseSuggestionDetail, CoreCourseSuggestionView } from "@/components/capability-map/core-course-suggestion-view";
 import {
   CourseRequestPanel,
   DEFAULT_COURSE_REQUEST,
@@ -31,13 +32,14 @@ const defaultForm: CourseAbilityGraphInput = {
 
 const DATA_NOTICE = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。";
 
-type CapabilityMapViewMode = "industry" | "regionalJobs" | "majorAbilities" | "overview" | "mapping";
+type CapabilityMapViewMode = "industry" | "regionalJobs" | "majorAbilities" | "coreCourses" | "overview" | "mapping";
 
 const PROCESS_STEPS: Array<{ description: string; id: CapabilityMapViewMode; label: string }> = [
   { id: "industry", label: "产业图谱", description: "从产业变化识别课程内容更新方向。" },
   { id: "regionalJobs", label: "区域岗位图谱", description: "从区域岗位需求定位课程服务对象。" },
   { id: "majorAbilities", label: "专业能力图谱", description: "从岗位能力抽取专业能力结构。" },
-  { id: "overview", label: "课程能力图谱", description: "将专业能力转化为课程流程、模块与任务。" },
+  { id: "coreCourses", label: "核心课程建议", description: "从专业能力结构推导专业核心课程体系。" },
+  { id: "overview", label: "课程能力图谱", description: "将某一门核心课程拆解为工作流程、教学模块与任务能力点。" },
   { id: "mapping", label: "课程映射", description: "将教学模块映射到典型工作项目和七个课程建设维度。" }
 ];
 
@@ -57,6 +59,7 @@ export function CapabilityMapEntry() {
   const [selectedNodeId, setSelectedNodeId] = useState<string>(graph.courseAbilityMap.rootNode.id);
   const [viewMode, setViewMode] = useState<CapabilityMapViewMode>("overview");
   const [selectedProcessNodeId, setSelectedProcessNodeId] = useState<string | null>(null);
+  const [selectedCoreCourseId, setSelectedCoreCourseId] = useState<string | null>(null);
   const [activeMappingModuleId, setActiveMappingModuleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -74,6 +77,9 @@ export function CapabilityMapEntry() {
         : viewMode === "majorAbilities"
           ? graph.majorAbilityGraph
           : null;
+  const coreCourseViewActive = viewMode === "coreCourses";
+  const currentCoreCourse = graph.coreCourseSuggestions.find((course) => course.isCurrentCourse) || graph.coreCourseSuggestions[0] || null;
+  const activeCoreCourseId = selectedCoreCourseId || currentCoreCourse?.id || null;
 
   function parseRequest() {
     const parsed = parseCourseRequestText(requestText, form);
@@ -97,6 +103,7 @@ export function CapabilityMapEntry() {
     setGraph(nextGraph);
     setSelectedNodeId(nextGraph.courseAbilityMap.rootNode.id);
     setSelectedProcessNodeId(null);
+    setSelectedCoreCourseId(nextGraph.coreCourseSuggestions.find((course) => course.isCurrentCourse)?.id || null);
     setViewMode("overview");
     setActiveMappingModuleId(null);
     setEditMode(false);
@@ -107,6 +114,7 @@ export function CapabilityMapEntry() {
   function selectNode(nodeId: string) {
     setSelectedNodeId(nodeId);
     setSelectedProcessNodeId(null);
+    setSelectedCoreCourseId(null);
     setActiveMappingModuleId(null);
     setViewMode("overview");
   }
@@ -122,8 +130,14 @@ export function CapabilityMapEntry() {
 
     setViewMode(nextMode);
     setActiveMappingModuleId(null);
+    if (nextMode === "coreCourses") {
+      setSelectedProcessNodeId(null);
+      setSelectedCoreCourseId(currentCoreCourse?.id || null);
+      return;
+    }
     if (nextMode === "overview") {
       setSelectedProcessNodeId(null);
+      setSelectedCoreCourseId(null);
       return;
     }
 
@@ -141,6 +155,7 @@ export function CapabilityMapEntry() {
     if (!mapping) return;
     setSelectedNodeId(moduleId);
     setSelectedProcessNodeId(null);
+    setSelectedCoreCourseId(null);
     setActiveMappingModuleId(mapping.moduleId);
     setViewMode("mapping");
   }
@@ -148,7 +163,16 @@ export function CapabilityMapEntry() {
   function returnToOverview() {
     setViewMode("overview");
     setSelectedProcessNodeId(null);
+    setSelectedCoreCourseId(null);
     setActiveMappingModuleId(null);
+  }
+
+  function openCurrentCourseGraph() {
+    setViewMode("overview");
+    setSelectedProcessNodeId(null);
+    setSelectedCoreCourseId(null);
+    setActiveMappingModuleId(null);
+    setSelectedNodeId(graph.courseAbilityMap.rootNode.id);
   }
 
   function updateCourse(patch: { courseName: string; majorDirection: string; region: string; positioning: string }) {
@@ -310,26 +334,32 @@ export function CapabilityMapEntry() {
             <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
-                  {mappingViewActive || activeProcessStage ? <Layers3 className="h-4 w-4" /> : <Network className="h-4 w-4" />}
-                  {mappingViewActive ? "课程映射展开画布" : activeProcessStage ? "图谱生成过程视图" : "课程能力图谱主画布"}
+                  {mappingViewActive || activeProcessStage || coreCourseViewActive ? <Layers3 className="h-4 w-4" /> : <Network className="h-4 w-4" />}
+                  {mappingViewActive ? "课程映射展开画布" : activeProcessStage || coreCourseViewActive ? "图谱生成过程视图" : "课程能力图谱主画布"}
                 </p>
                 <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
                   {mappingViewActive && activeModuleMapping
                     ? `当前教学模块：${activeModuleMapping.moduleName}`
-                    : activeProcessStage
+                    : coreCourseViewActive
+                      ? graph.coreCourseGraph.title
+                      : activeProcessStage
                       ? activeProcessStage.title
                     : `${graph.course.majorDirection} · 《${graph.course.courseName}》`}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   {mappingViewActive
                     ? "从当前教学模块展开典型工作项目、七个课程映射维度和具体小点，解释这个模块为什么这样设置。"
+                    : coreCourseViewActive
+                      ? graph.coreCourseGraph.lead
                     : activeProcessStage
                       ? activeProcessStage.lead
-                    : "主画布按课程、工作流程、教学模块和任务/能力点四级展开，帮助教师看到课程内容如何落到项目任务。"}
+                    : "主画布按课程、工作流程、教学模块和任务/能力点四级展开，帮助教师看到某一门核心课程如何落到项目任务。"}
                 </p>
                 <p className="mt-2 text-sm font-semibold leading-6 text-blue-700">
                   {mappingViewActive
                     ? "点击典型工作项目、维度或小点，可同步高亮相关节点和连线。"
+                    : coreCourseViewActive
+                      ? "点击核心课程节点可查看课程定位、支撑能力和岗位；当前课程可继续进入课程能力图谱。"
                     : activeProcessStage
                       ? "点击轻量节点可在右侧查看阶段说明。当前仍为本地示例推导，不代表真实资料库结果。"
                     : "点击教学模块本身查看详情；点击教学模块下方“课程映射”徽标可切换到映射展开画布。"}
@@ -379,6 +409,13 @@ export function CapabilityMapEntry() {
                 onUpdateMappingItem={updateMappingItem}
                 onUpdateTypicalWorkProject={updateTypicalWorkProject}
               />
+            ) : coreCourseViewActive ? (
+              <CoreCourseSuggestionView
+                graph={graph}
+                onOpenCurrentCourseGraph={openCurrentCourseGraph}
+                onSelectCourse={setSelectedCoreCourseId}
+                selectedCourseId={activeCoreCourseId}
+              />
             ) : activeProcessStage ? (
               <ProcessGraphStageView
                 onSelectNode={setSelectedProcessNodeId}
@@ -397,7 +434,13 @@ export function CapabilityMapEntry() {
           </section>
 
           <aside className="xl:col-start-2 2xl:sticky 2xl:top-5 2xl:col-start-auto">
-            {activeProcessStage ? (
+            {coreCourseViewActive ? (
+              <CoreCourseSuggestionDetail
+                graph={graph}
+                onOpenCurrentCourseGraph={openCurrentCourseGraph}
+                selectedCourseId={activeCoreCourseId}
+              />
+            ) : activeProcessStage ? (
               <ProcessGraphStageDetail selectedNodeId={selectedProcessNodeId} stage={activeProcessStage} />
             ) : (
               <CourseAbilityDetailPanel
@@ -418,7 +461,7 @@ export function CapabilityMapEntry() {
           </aside>
         </div>
 
-        {!mappingViewActive && !activeProcessStage ? (
+        {!mappingViewActive && !activeProcessStage && !coreCourseViewActive ? (
           <>
             <div className="mt-6 flex justify-center text-blue-500" aria-hidden="true">
               <ArrowDown className="h-5 w-5" />
@@ -448,7 +491,7 @@ function ProcessStepNav({
   activeMode: CapabilityMapViewMode;
   onSelect: (mode: CapabilityMapViewMode) => void;
 }) {
-  const activeStep = PROCESS_STEPS.find((step) => step.id === activeMode) || PROCESS_STEPS[3];
+  const activeStep = PROCESS_STEPS.find((step) => step.id === activeMode) || PROCESS_STEPS[4];
 
   return (
     <nav className="mb-4 overflow-x-auto rounded-[28px] border border-blue-100 bg-blue-50/70 p-2" aria-label="图谱生成过程">

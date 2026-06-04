@@ -113,9 +113,19 @@ export type CourseAbilityEdge = {
   label: string;
 };
 
-export type ProcessGraphStageId = "industry" | "regionalJobs" | "majorAbilities";
+export type ProcessGraphStageId = "industry" | "regionalJobs" | "majorAbilities" | "coreCourses";
 
-export type ProcessGraphNodeType = "industry" | "trend" | "impact" | "region" | "job" | "ability" | "element" | "courseModule";
+export type ProcessGraphNodeType =
+  | "industry"
+  | "trend"
+  | "impact"
+  | "region"
+  | "job"
+  | "ability"
+  | "element"
+  | "coreCourse"
+  | "coursePosition"
+  | "courseModule";
 
 export type ProcessGraphNode = {
   id: string;
@@ -151,6 +161,19 @@ export type ProcessGraphStage = {
   nodes: ProcessGraphNode[];
   edges: ProcessGraphEdge[];
   keyItems: ProcessGraphKeyItem[];
+};
+
+export type CoreCourseSuggestion = {
+  id: string;
+  name: string;
+  position: string;
+  supportedAbilityIds?: string[];
+  supportedAbilityNames: string[];
+  relatedJobIds?: string[];
+  relatedJobNames: string[];
+  description?: string;
+  isCurrentCourse?: boolean;
+  status?: "available" | "placeholder";
 };
 
 export type CourseAbilityMap = {
@@ -289,6 +312,8 @@ export type CourseAbilityGraphPayload = {
   industryGraph: ProcessGraphStage;
   regionalJobGraph: ProcessGraphStage;
   majorAbilityGraph: ProcessGraphStage;
+  coreCourseSuggestions: CoreCourseSuggestion[];
+  coreCourseGraph: ProcessGraphStage;
   courseAbilityMap: CourseAbilityMap;
   courseMappings: CourseMapping[];
   workflowStages: WorkflowStage[];
@@ -1038,6 +1063,146 @@ function createMockCourseAbilityGraph(input: CourseAbilityGraphInput = DEFAULT_I
     }))
   };
 
+  const coreCourseSuggestions: CoreCourseSuggestion[] = [
+    {
+      id: "core_course_ai_full_pipeline",
+      name: course.courseName,
+      position: "面向 AIGC 动画生产流程的综合项目课程，承担 AI 工具链与动画全流程项目实践训练。",
+      supportedAbilityIds: ["ability_ai_tool", "ability_script_storyboard", "ability_animation", "ability_render_output", "ability_showcase"],
+      supportedAbilityNames: ["AI工具使用", "剧本与分镜设计", "动画制作", "渲染合成与输出", "项目展示与评价"],
+      relatedJobIds: ["job_ai_animator", "job_aigc_creator", "job_storyboard_artist", "job_post_producer"],
+      relatedJobNames: ["AI动画制作员", "AIGC内容创作者", "动画分镜师", "影视动画后期制作"],
+      description: `《${course.courseName}》是${course.majorDirection}专业核心课程之一，承担“AI工具链 + 动画全流程项目实践”的综合训练功能。`,
+      isCurrentCourse: true,
+      status: "available"
+    },
+    {
+      id: "core_course_script_storyboard",
+      name: "动画剧本与分镜设计",
+      position: "支撑前期策划与视觉叙事表达。",
+      supportedAbilityIds: ["ability_script_storyboard", "ability_ai_tool"],
+      supportedAbilityNames: ["故事结构设计", "分镜表达", "视觉叙事", "AI辅助脚本生成"],
+      relatedJobIds: ["job_storyboard_artist", "job_aigc_creator"],
+      relatedJobNames: ["动画分镜师", "AIGC内容创作者", "动画导演助理"],
+      description: "面向动画前期创作，训练故事结构、镜头拆解、视觉叙事和 AI 辅助脚本生成能力。",
+      status: "placeholder"
+    },
+    {
+      id: "core_course_model_assets",
+      name: "三维模型生成与资产制作",
+      position: "支撑角色、道具、场景等数字资产生产。",
+      supportedAbilityIds: ["ability_model_optimization"],
+      supportedAbilityNames: ["模型生成与优化", "角色模型", "道具模型", "资产规范整理"],
+      relatedJobIds: ["job_3d_animator", "job_ai_animator"],
+      relatedJobNames: ["三维动画师", "数字资产制作员", "AI动画制作员"],
+      description: "面向数字资产生产，训练模型生成、资产修正、结构检查和项目交付规范。",
+      status: "placeholder"
+    },
+    {
+      id: "core_course_character_motion",
+      name: "角色动画与运动表现",
+      position: "支撑角色绑定、动作设计与动画表现。",
+      supportedAbilityIds: ["ability_animation"],
+      supportedAbilityNames: ["骨骼绑定", "角色动画", "运动节奏", "表演表达"],
+      relatedJobIds: ["job_3d_animator", "job_ai_animator"],
+      relatedJobNames: ["角色动画师", "三维动画师", "AI动画制作员"],
+      description: "面向角色动画制作，训练绑定、关键帧、动作节奏和角色表演镜头制作能力。",
+      status: "placeholder"
+    },
+    {
+      id: "core_course_scene_render",
+      name: "动画场景设计与渲染",
+      position: "支撑场景搭建、空间组织、灯光材质与渲染。",
+      supportedAbilityIds: ["ability_scene_building", "ability_render_output"],
+      supportedAbilityNames: ["场景搭建", "材质灯光", "渲染输出", "视觉风格控制"],
+      relatedJobIds: ["job_3d_animator", "job_post_producer"],
+      relatedJobNames: ["场景设计师", "三维动画师", "影视动画后期制作"],
+      description: "面向场景设计与镜头空间，训练场景生成、空间组织、灯光材质和风格控制能力。",
+      status: "placeholder"
+    },
+    {
+      id: "core_course_post_compositing",
+      name: "影视动画后期合成",
+      position: "支撑声音、合成、剪辑、输出与作品包装。",
+      supportedAbilityIds: ["ability_render_output", "ability_showcase"],
+      supportedAbilityNames: ["渲染合成与输出", "音效与配音", "剪辑包装", "作品展示"],
+      relatedJobIds: ["job_post_producer", "job_digital_project_executor"],
+      relatedJobNames: ["影视动画后期制作", "数字内容项目执行"],
+      description: "面向动画短片成片交付，训练声音、合成、剪辑、输出和作品包装能力。",
+      status: "placeholder"
+    },
+    {
+      id: "core_course_project_training",
+      name: "数字内容项目实训",
+      position: "综合训练项目策划、生产协作、成果交付与评价。",
+      supportedAbilityIds: ["ability_showcase", "ability_ai_tool"],
+      supportedAbilityNames: ["项目展示与评价", "团队协作", "项目管理", "作品复盘"],
+      relatedJobIds: ["job_digital_project_executor", "job_aigc_creator", "job_ai_animator"],
+      relatedJobNames: ["数字内容项目执行", "AIGC内容创作者", "AI动画制作员"],
+      description: "面向真实项目化交付，训练项目策划、协作生产、成果交付、展示答辩和复盘评价。",
+      status: "placeholder"
+    }
+  ];
+
+  const coreAbilityNodes: ProcessGraphNode[] = [
+    { id: "core_ability_script_storyboard", type: "ability", title: "剧本与分镜设计", subtitle: "专业能力类别", description: "支撑故事结构、分镜表达、视觉叙事与前期策划课程。", level: 1, weight: 16 },
+    { id: "core_ability_ai_tool", type: "ability", title: "AI工具使用", subtitle: "专业能力类别", description: "支撑提示词、生成结果筛选、AI 辅助分镜、图像、视频和人工优化。", level: 1, weight: 16 },
+    { id: "core_ability_model_optimization", type: "ability", title: "模型生成与优化", subtitle: "专业能力类别", description: "支撑角色、道具和数字资产生成、修正、规范整理。", level: 1, weight: 18 },
+    { id: "core_ability_animation", type: "ability", title: "动画制作", subtitle: "专业能力类别", description: "支撑绑定、角色动画、运动节奏和镜头表演。", level: 1, weight: 18 },
+    { id: "core_ability_scene_building", type: "ability", title: "场景搭建", subtitle: "专业能力类别", description: "支撑动画场景设计、空间组织、镜头调度和风格控制。", level: 1, weight: 12 },
+    { id: "core_ability_render_output", type: "ability", title: "渲染合成与输出", subtitle: "专业能力类别", description: "支撑灯光材质、剪辑合成、音效配音和成片输出。", level: 1, weight: 12 },
+    { id: "core_ability_showcase", type: "ability", title: "项目展示与评价", subtitle: "专业能力类别", description: "支撑作品展示、项目复盘、过程说明和课程评价。", level: 1, weight: 8 }
+  ];
+
+  const coreCourseGraph: ProcessGraphStage = {
+    id: "coreCourses",
+    title: "专业核心课程建设建议",
+    lead: "从专业能力结构推导专业核心课程体系。",
+    summary: `${course.majorDirection}专业核心课程建议从专业能力类别出发，形成核心课程体系，并说明每门课程的定位、支撑岗位和后续课程图谱生成状态。`,
+    notice: DATA_NOTICE,
+    nodes: [
+      ...coreAbilityNodes,
+      ...coreCourseSuggestions.map<ProcessGraphNode>((suggestion) => ({
+        id: suggestion.id,
+        type: "coreCourse",
+        title: suggestion.name,
+        subtitle: suggestion.isCurrentCourse ? "当前课程能力图谱入口" : "建议核心课程",
+        description: suggestion.description || suggestion.position,
+        level: 2,
+        tags: suggestion.supportedAbilityNames.slice(0, 3),
+        weight: suggestion.isCurrentCourse ? 100 : undefined
+      })),
+      ...coreCourseSuggestions.map<ProcessGraphNode>((suggestion) => ({
+        id: `${suggestion.id}_position`,
+        type: "coursePosition",
+        title: suggestion.status === "available" ? "可查看课程能力图谱" : "后续可生成课程能力图谱",
+        subtitle: "课程定位 / 支撑岗位",
+        description: `${suggestion.position} 支撑岗位：${suggestion.relatedJobNames.join("、")}。`,
+        level: 3,
+        tags: suggestion.relatedJobNames.slice(0, 2)
+      }))
+    ],
+    edges: [
+      ...coreCourseSuggestions.flatMap<ProcessGraphEdge>((suggestion) =>
+        (suggestion.supportedAbilityIds || []).map((abilityId) => ({
+          source: `core_${abilityId}`,
+          target: suggestion.id,
+          label: "支撑"
+        }))
+      ),
+      ...coreCourseSuggestions.map<ProcessGraphEdge>((suggestion) => ({
+        source: suggestion.id,
+        target: `${suggestion.id}_position`,
+        label: suggestion.status === "available" ? "进入" : "占位"
+      }))
+    ],
+    keyItems: coreCourseSuggestions.map((suggestion) => ({
+      title: suggestion.name,
+      description: suggestion.position,
+      metric: suggestion.status === "available" ? "可查看图谱" : "后续可生成"
+    }))
+  };
+
   const impactPaths: ImpactPath[] = [
     {
       id: "impact_ai_pipeline",
@@ -1101,6 +1266,8 @@ function createMockCourseAbilityGraph(input: CourseAbilityGraphInput = DEFAULT_I
     industryGraph,
     regionalJobGraph,
     majorAbilityGraph,
+    coreCourseSuggestions,
+    coreCourseGraph,
     courseAbilityMap,
     courseMappings: [],
     workflowStages,

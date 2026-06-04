@@ -25,6 +25,8 @@ const NODE_WIDTH: Record<ProcessGraphNode["level"], number> = {
 const TYPE_LABEL: Record<ProcessGraphNode["type"], string> = {
   ability: "专业能力",
   courseModule: "课程模块",
+  coreCourse: "核心课程",
+  coursePosition: "课程定位",
   element: "能力要素",
   impact: "课程影响",
   industry: "产业领域",
@@ -36,6 +38,8 @@ const TYPE_LABEL: Record<ProcessGraphNode["type"], string> = {
 const TYPE_CLASS: Record<ProcessGraphNode["type"], string> = {
   ability: "border-violet-200 bg-violet-50 text-violet-800",
   courseModule: "border-blue-200 bg-blue-50 text-blue-800",
+  coreCourse: "border-blue-200 bg-blue-50 text-blue-800",
+  coursePosition: "border-cyan-200 bg-cyan-50 text-cyan-800",
   element: "border-indigo-200 bg-indigo-50 text-indigo-800",
   impact: "border-rose-200 bg-rose-50 text-rose-800",
   industry: "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -59,6 +63,11 @@ const COLUMN_LABELS: Record<ProcessGraphStage["id"], Record<ProcessGraphNode["le
     1: "专业能力类别",
     2: "能力要素",
     3: "对应课程模块"
+  },
+  coreCourses: {
+    1: "专业能力类别",
+    2: "建议核心课程",
+    3: "课程定位 / 支撑岗位"
   }
 };
 
@@ -85,9 +94,10 @@ function measureNode(node: ProcessGraphNode) {
   const subtitleLines = lineCount(node.subtitle, charsPerLine + 4, 1);
   const descriptionLines = lineCount(node.description, charsPerLine + 2, 2);
   const hasTags = Boolean(node.tags?.length);
+  const actionSpace = node.type === "coreCourse" ? 32 : 0;
 
   return {
-    height: Math.max(128, 72 + titleLines * 20 + subtitleLines * 16 + descriptionLines * 17 + (hasTags ? 30 : 0)),
+    height: Math.max(128, 72 + titleLines * 20 + subtitleLines * 16 + descriptionLines * 17 + (hasTags ? 30 : 0) + actionSpace),
     width
   };
 }
@@ -189,10 +199,14 @@ function edgePath(source: LayoutNode, target: LayoutNode) {
 }
 
 export function ProcessGraphStageView({
+  currentNodeIds = [],
+  nodeActions = {},
   onSelectNode,
   selectedNodeId,
   stage
 }: {
+  currentNodeIds?: string[];
+  nodeActions?: Record<string, { disabled?: boolean; label: string; onClick?: () => void; variant?: "primary" | "muted" }>;
   onSelectNode: (nodeId: string) => void;
   selectedNodeId: string | null;
   stage: ProcessGraphStage;
@@ -297,16 +311,16 @@ export function ProcessGraphStageView({
         {nodes.map((node) => {
           const selected = activeNodeId === node.id;
           const related = relatedNodeIds.has(node.id);
+          const current = currentNodeIds.includes(node.id);
+          const nodeAction = nodeActions[node.id];
           const visibleTags = node.tags?.slice(0, 2) || [];
           return (
-            <button
+            <div
               key={node.id}
-              type="button"
               data-graph-node="true"
-              onClick={() => onSelectNode(node.id)}
               className={cn(
-                "absolute flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-200",
-                selected && "z-20 scale-[1.02] border-blue-500 ring-4 ring-blue-200 shadow-[0_20px_50px_rgba(37,99,235,0.2)]",
+                "absolute -translate-x-1/2 -translate-y-1/2",
+                selected && "z-20 scale-[1.02]",
                 !selected && !related && "opacity-40"
               )}
               style={{
@@ -317,29 +331,59 @@ export function ProcessGraphStageView({
               }}
               title={node.description}
             >
-              <div className="flex items-start justify-between gap-2">
-                <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black", TYPE_CLASS[node.type])}>
-                  {TYPE_LABEL[node.type]}
-                </span>
-                {typeof node.weight === "number" ? (
-                  <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">
-                    {node.weight}%
+              <button
+                type="button"
+                onClick={() => onSelectNode(node.id)}
+                className={cn(
+                  "flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-200",
+                  selected && "border-blue-500 ring-4 ring-blue-200 shadow-[0_20px_50px_rgba(37,99,235,0.2)]",
+                  current && !selected && "border-blue-300 shadow-[0_14px_34px_rgba(37,99,235,0.14)]"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black", TYPE_CLASS[node.type])}>
+                    {TYPE_LABEL[node.type]}
+                  </span>
+                  {typeof node.weight === "number" ? (
+                    <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">
+                      {node.weight}%
+                    </span>
+                  ) : null}
+                </div>
+                <span className="mt-2 line-clamp-3 break-words text-sm font-black leading-5 text-slate-950">{node.title}</span>
+                <span className="mt-1 line-clamp-1 break-words text-[11px] font-bold leading-4 text-slate-500">{node.subtitle}</span>
+                <span className="mt-1.5 line-clamp-2 break-words text-[11px] font-semibold leading-4 text-slate-600">{node.description}</span>
+                {visibleTags.length ? (
+                  <span className="mt-auto flex flex-wrap gap-1.5 pt-2">
+                    {visibleTags.map((tag) => (
+                      <span key={tag} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                        {tag}
+                      </span>
+                    ))}
                   </span>
                 ) : null}
-              </div>
-              <span className="mt-2 line-clamp-3 break-words text-sm font-black leading-5 text-slate-950">{node.title}</span>
-              <span className="mt-1 line-clamp-1 break-words text-[11px] font-bold leading-4 text-slate-500">{node.subtitle}</span>
-              <span className="mt-1.5 line-clamp-2 break-words text-[11px] font-semibold leading-4 text-slate-600">{node.description}</span>
-              {visibleTags.length ? (
-                <span className="mt-auto flex flex-wrap gap-1.5 pt-2">
-                  {visibleTags.map((tag) => (
-                    <span key={tag} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                      {tag}
-                    </span>
-                  ))}
-                </span>
+              </button>
+              {nodeAction ? (
+                <button
+                  type="button"
+                  disabled={nodeAction.disabled}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!nodeAction.disabled) nodeAction.onClick?.();
+                  }}
+                  className={cn(
+                    "absolute bottom-3 right-3 rounded-full border px-2.5 py-1 text-[10px] font-black transition",
+                    nodeAction.variant === "primary"
+                      ? "border-blue-500 bg-blue-600 text-white shadow-[0_10px_20px_rgba(37,99,235,0.22)] hover:bg-blue-700"
+                      : "border-slate-200 bg-slate-50 text-slate-500",
+                    nodeAction.disabled && "cursor-not-allowed opacity-80"
+                  )}
+                >
+                  {nodeAction.label}
+                </button>
               ) : null}
-            </button>
+            </div>
           );
         })}
       </GraphCanvasShell>
