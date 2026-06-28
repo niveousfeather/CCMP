@@ -10,12 +10,15 @@ import type {
   TeachingModuleNode,
   WorkflowStage
 } from "@/lib/capability-map/course-ability-graph";
-
-const DATA_NOTICE = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。";
+import { capabilityMapSourceNotice } from "@/lib/capability-map/source-status";
 
 function findById<T extends { id: string }>(items: T[], ids: string[]) {
   const idSet = new Set(ids);
   return items.filter((item) => idSet.has(item.id));
+}
+
+function evidenceStatusText(graph: CourseAbilityGraphPayload) {
+  return capabilityMapSourceNotice(graph);
 }
 
 export function CourseAbilityDetailPanel({
@@ -136,7 +139,7 @@ function CourseRootDetail({
       </DetailSection>
 
       <DetailSection icon={FileText} title="证据状态">
-        <EvidenceNotice />
+        <EvidenceNotice graph={graph} />
       </DetailSection>
     </>
   );
@@ -196,7 +199,7 @@ function WorkflowDetail({
       </DetailSection>
 
       <DetailSection icon={FileText} title="证据状态">
-        <EvidenceNotice />
+        <EvidenceNotice graph={graph} />
       </DetailSection>
     </>
   );
@@ -287,7 +290,7 @@ function ModuleDetail({
       </DetailSection>
 
       <DetailSection icon={FileText} title="证据状态">
-        <EvidenceNotice />
+        <EvidenceNotice graph={graph} />
       </DetailSection>
     </>
   );
@@ -363,7 +366,7 @@ function TaskDetail({
       </DetailSection>
 
       <DetailSection icon={FileText} title="证据状态">
-        <EvidenceNotice />
+        <EvidenceNotice graph={graph} />
       </DetailSection>
     </>
   );
@@ -480,10 +483,10 @@ function SaveCancel({ onCancel, onSave }: { onCancel: () => void; onSave: () => 
   );
 }
 
-function EvidenceNotice() {
+function EvidenceNotice({ graph }: { graph: CourseAbilityGraphPayload }) {
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-      {DATA_NOTICE}
+      {evidenceStatusText(graph)}
     </div>
   );
 }

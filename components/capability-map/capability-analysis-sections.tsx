@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { BarChart3, BriefcaseBusiness, FileText, GraduationCap, WalletCards } from "lucide-react";
 
 import type { CourseAbilityGraphPayload, CourseEvidenceSource, CourseRelatedJob, CourseUpdateSuggestion } from "@/lib/capability-map/course-ability-graph";
+import { capabilityMapSourceNotice } from "@/lib/capability-map/source-status";
 import { cn } from "@/lib/utils";
 
 const sourceTypeLabels: Record<CourseEvidenceSource["sourceType"], string> = {
@@ -31,9 +32,13 @@ type AnalysisTab = "skills" | "salary" | "evidence";
 
 const tabs: Array<{ id: AnalysisTab; label: string; description: string }> = [
   { id: "skills", label: "技能与岗位", description: "能力权重与岗位关联" },
-  { id: "salary", label: "薪资与就业", description: "就业方向与本地示例区间" },
+  { id: "salary", label: "薪资与就业", description: "就业方向与待校准区间" },
   { id: "evidence", label: "证据与建议", description: "依据状态与课程更新动作" }
 ];
+
+function evidenceStatusText(graph: CourseAbilityGraphPayload) {
+  return capabilityMapSourceNotice(graph);
+}
 
 export function CapabilityAnalysisSections({
   graph,
@@ -197,7 +202,7 @@ function SalaryAndEmployment({
         <JobList jobs={focusedJobs.length ? focusedJobs : graph.relatedJobs} focusedJobIds={context.jobIds} />
       </AnalysisCard>
 
-      <AnalysisCard icon={WalletCards} title="薪资区间" subtitle="本地示例区间，需由真实岗位数据校准">
+      <AnalysisCard icon={WalletCards} title="薪资区间" subtitle="当前为待校准区间，后续需由真实岗位数据校准">
         <div className="grid gap-3">
           {visibleSalaries.map((salary) => (
             <div key={salary.jobTitle} className={cn("rounded-2xl border border-slate-200 bg-slate-50 p-4", focusedJobTitles.has(salary.jobTitle) && "border-blue-200 bg-blue-50")}>
@@ -243,7 +248,7 @@ function EvidenceAndSuggestions({
                 <Pill>可信度 {reliabilityLabels[source.reliability]}</Pill>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-600">{source.summary}</p>
-              <p className="mt-3 text-xs font-medium text-amber-700">当前为本地示例数据，未接入真实资料库，不能作为正式引用。</p>
+              <p className="mt-3 text-xs font-medium text-amber-700">{evidenceStatusText(graph)}</p>
             </div>
           ))}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -27,9 +27,9 @@ type CanvasPan = {
 };
 
 const DRAG_THRESHOLD = 4;
-const DEFAULT_FIT_PADDING = 48;
+const DEFAULT_FIT_PADDING = 88;
 const MAX_ZOOM = 1.35;
-const MIN_ZOOM = 0.25;
+const MIN_ZOOM = 0.16;
 const ZOOM_STEP = 0.1;
 
 function shouldIgnoreCanvasDrag(target: EventTarget | null) {
@@ -90,16 +90,18 @@ export function GraphCanvasShell({
   const [zoom, setZoom] = useState(1);
   const activeBounds = normalizedBounds(bounds, contentWidth, contentHeight);
 
-  function fitToView() {
+  const fitToView = useCallback(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
     const boundsWidth = Math.max(1, activeBounds.maxX - activeBounds.minX);
     const boundsHeight = Math.max(1, activeBounds.maxY - activeBounds.minY);
+    const availableWidth = Math.max(80, viewport.clientWidth - fitPadding * 2);
+    const availableHeight = Math.max(80, viewport.clientHeight - fitPadding * 2);
     const nextZoom = clampZoom(
       Math.min(
-        (viewport.clientWidth - fitPadding * 2) / boundsWidth,
-        (viewport.clientHeight - fitPadding * 2) / boundsHeight,
+        availableWidth / boundsWidth,
+        availableHeight / boundsHeight,
         MAX_ZOOM
       )
     );
@@ -109,7 +111,7 @@ export function GraphCanvasShell({
       x: (viewport.clientWidth - boundsWidth * nextZoom) / 2 - activeBounds.minX * nextZoom,
       y: (viewport.clientHeight - boundsHeight * nextZoom) / 2 - activeBounds.minY * nextZoom
     });
-  }
+  }, [activeBounds.maxX, activeBounds.maxY, activeBounds.minX, activeBounds.minY, fitPadding]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -118,16 +120,22 @@ export function GraphCanvasShell({
 
     return () => cancelAnimationFrame(frame);
     // fitKey intentionally forces a fresh fit when a different graph stage is shown.
-  }, [
-    activeBounds.maxX,
-    activeBounds.maxY,
-    activeBounds.minX,
-    activeBounds.minY,
-    contentHeight,
-    contentWidth,
-    fitKey,
-    fitPadding
-  ]);
+  }, [contentHeight, contentWidth, fitKey, fitToView]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fitToView);
+    });
+    observer.observe(viewport);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [fitToView]);
 
   function handleCanvasPointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || shouldIgnoreCanvasDrag(event.target)) return;

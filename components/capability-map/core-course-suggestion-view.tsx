@@ -44,6 +44,7 @@ export function CoreCourseSuggestionView({
   return (
     <ProcessGraphStageView
       currentNodeIds={currentCourse ? [currentCourse.id] : []}
+      generationKey={graph.meta.generatedAt}
       nodeActions={Object.fromEntries(
         graph.coreCourseSuggestions.map((course) => [
           course.id,

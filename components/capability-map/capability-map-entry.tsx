@@ -21,6 +21,18 @@ import type {
   CourseAbilityGraphInput,
   CourseAbilityGraphPayload
 } from "@/lib/capability-map/course-ability-graph";
+import {
+  courseAbilityDiagnosticLabel,
+  courseAbilityDiagnosticWarning,
+  extractCourseAbilityDiagnosticCodes,
+  sanitizeCourseAbilityWarning
+} from "@/lib/capability-map/diagnostics";
+import {
+  CAPABILITY_MAP_MOCK_NOTICE,
+  capabilityMapDiagnosticSummary,
+  capabilityMapSourceBadge,
+  capabilityMapSourceNotice
+} from "@/lib/capability-map/source-status";
 import styles from "@/components/capability-map/capability-map-theme.module.css";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +42,24 @@ const defaultForm: CourseAbilityGraphInput = {
   region: "重庆"
 };
 
-const DATA_NOTICE = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。";
+const STAGE_STATUS_LABELS: Record<string, string> = {
+  LOCAL_EXPANSION_COURSE_GRAPH: "阶段状态：课程能力图谱由本地结构扩展生成",
+  LOCAL_EXPANSION_MAPPING_ANALYSIS: "阶段状态：课程映射与辅助分析由本地结构扩展生成",
+  LOCAL_EXPANSION_PROCESS_GRAPHS: "阶段状态：前置图谱与核心课程建议由本地结构扩展生成",
+  MODULE_MAPPING_ALL_PLACEHOLDER_USED: "课程映射状态：所有模块映射使用本地占位补齐",
+  MODULE_MAPPING_MATCHED_BY_ID: "课程映射状态：已按教学模块 ID 对齐",
+  MODULE_MAPPING_MATCHED_BY_NAME: "课程映射状态：已按教学模块名称对齐",
+  MODULE_MAPPING_PARTIAL_PLACEHOLDER_USED: "课程映射状态：部分模块使用本地占位补齐",
+  NORMALIZE_COURSE_GRAPH_OK: "结构校验：课程能力图谱主结构正常",
+  NORMALIZE_MODULE_MAPPING_PATCHED: "结构校验：课程映射已按最终教学模块补齐",
+  NORMALIZE_PROCESS_GRAPH_OK: "结构校验：前置图谱结构正常",
+  STAGE_1_SEMANTIC_SKELETON_FAILED: "阶段状态：前置图谱语义骨架使用本地示例补齐",
+  STAGE_1_SEMANTIC_SKELETON_USED_MODEL: "阶段状态：前置图谱语义骨架由 GPT-5.4 生成",
+  STAGE_2_COURSE_STRUCTURE_FAILED: "阶段状态：课程结构骨架使用本地示例补齐",
+  STAGE_2_COURSE_STRUCTURE_USED_MODEL: "阶段状态：课程结构骨架由 GPT-5.4 生成",
+  STAGE_3_MAPPING_SKELETON_FAILED: "阶段状态：课程映射骨架使用本地示例补齐",
+  STAGE_3_MAPPING_SKELETON_USED_MODEL: "阶段状态：课程映射骨架由 GPT-5.4 生成"
+};
 
 type CapabilityMapViewMode = "industry" | "regionalJobs" | "majorAbilities" | "coreCourses" | "overview" | "mapping";
 
@@ -51,6 +80,38 @@ function normalizeForm(form: CourseAbilityGraphInput): CourseAbilityGraphInput {
   };
 }
 
+function graphDiagnosticMessages(graph: CourseAbilityGraphPayload) {
+  if (graph.meta.source !== "mock-fallback" && !graph.meta.warnings.length) return [];
+
+  const codes = extractCourseAbilityDiagnosticCodes(graph.meta.warnings);
+  const codeMessages = codes.map((code) => `生成失败原因：${courseAbilityDiagnosticLabel(code)}`);
+  if (codeMessages.length) return codeMessages;
+
+  const stageMessages = graph.meta.warnings
+    .map((warning) => STAGE_STATUS_LABELS[warning])
+    .filter((message): message is string => Boolean(message));
+  if (stageMessages.length) return Array.from(new Set(stageMessages));
+
+  return graph.meta.warnings
+    .filter((warning) => warning !== CAPABILITY_MAP_MOCK_NOTICE && !warning.includes("本地示例数据"))
+    .map(sanitizeCourseAbilityWarning)
+    .filter((warning): warning is string => Boolean(warning))
+    .map((warning) => `生成失败原因：${warning}`);
+}
+
+function createClientFallbackGraph(input: CourseAbilityGraphInput) {
+  const reason = courseAbilityDiagnosticWarning("MODEL_CALL_FAILED");
+  const graph = createMockCourseAbilityGraph(input, [reason]);
+  return {
+    ...graph,
+    meta: {
+      ...graph.meta,
+      source: "mock-fallback" as const,
+      warnings: Array.from(new Set([CAPABILITY_MAP_MOCK_NOTICE, reason, ...graph.meta.warnings]))
+    }
+  };
+}
+
 export function CapabilityMapEntry() {
   const [requestText, setRequestText] = useState(DEFAULT_COURSE_REQUEST);
   const [lastParsedText, setLastParsedText] = useState(DEFAULT_COURSE_REQUEST);
@@ -62,6 +123,7 @@ export function CapabilityMapEntry() {
   const [selectedCoreCourseId, setSelectedCoreCourseId] = useState<string | null>(null);
   const [activeMappingModuleId, setActiveMappingModuleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editNotice, setEditNotice] = useState<string | null>(null);
   const mappableModuleIds = graph.moduleMappings.map((mapping) => mapping.moduleId);
@@ -80,6 +142,10 @@ export function CapabilityMapEntry() {
   const coreCourseViewActive = viewMode === "coreCourses";
   const currentCoreCourse = graph.coreCourseSuggestions.find((course) => course.isCurrentCourse) || graph.coreCourseSuggestions[0] || null;
   const activeCoreCourseId = selectedCoreCourseId || currentCoreCourse?.id || null;
+  const sourceNotice = capabilityMapSourceNotice(graph);
+  const diagnosticSummary = capabilityMapDiagnosticSummary(graph);
+  const sourceBadge = capabilityMapSourceBadge(graph);
+  const diagnosticMessages = graphDiagnosticMessages(graph);
 
   function parseRequest() {
     const parsed = parseCourseRequestText(requestText, form);
@@ -88,7 +154,7 @@ export function CapabilityMapEntry() {
     setError(null);
   }
 
-  function generateLocalGraph() {
+  async function generateLocalGraph() {
     const parsedForm = requestText === lastParsedText ? form : parseCourseRequestText(requestText, form);
     const nextForm = normalizeForm(parsedForm);
 
@@ -97,18 +163,46 @@ export function CapabilityMapEntry() {
       return;
     }
 
-    const nextGraph = createMockCourseAbilityGraph(nextForm);
-    setForm(nextForm);
-    setLastParsedText(requestText);
-    setGraph(nextGraph);
-    setSelectedNodeId(nextGraph.courseAbilityMap.rootNode.id);
-    setSelectedProcessNodeId(null);
-    setSelectedCoreCourseId(nextGraph.coreCourseSuggestions.find((course) => course.isCurrentCourse)?.id || null);
-    setViewMode("overview");
-    setActiveMappingModuleId(null);
-    setEditMode(false);
-    setEditNotice(null);
+    setGenerating(true);
     setError(null);
+
+    try {
+      const response = await fetch("/api/capability-map/course-ability-graph", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextForm)
+      });
+      if (!response.ok) {
+        throw new Error(`CAPABILITY_MAP_API_${response.status}`);
+      }
+      const nextGraph = await response.json() as CourseAbilityGraphPayload;
+      setForm(nextForm);
+      setLastParsedText(requestText);
+      setGraph(nextGraph);
+      setSelectedNodeId(nextGraph.courseAbilityMap.rootNode.id);
+      setSelectedProcessNodeId(null);
+      setSelectedCoreCourseId(nextGraph.coreCourseSuggestions.find((course) => course.isCurrentCourse)?.id || null);
+      setViewMode("overview");
+      setActiveMappingModuleId(null);
+      setEditMode(false);
+      setEditNotice(nextGraph.meta.source === "mock" ? null : capabilityMapSourceNotice(nextGraph));
+      setError(null);
+    } catch {
+      const fallbackGraph = createClientFallbackGraph(nextForm);
+      setForm(nextForm);
+      setLastParsedText(requestText);
+      setGraph(fallbackGraph);
+      setSelectedNodeId(fallbackGraph.courseAbilityMap.rootNode.id);
+      setSelectedProcessNodeId(null);
+      setSelectedCoreCourseId(fallbackGraph.coreCourseSuggestions.find((course) => course.isCurrentCourse)?.id || null);
+      setViewMode("overview");
+      setActiveMappingModuleId(null);
+      setEditMode(false);
+      setEditNotice(capabilityMapSourceNotice(fallbackGraph));
+      setError(null);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function selectNode(nodeId: string) {
@@ -306,11 +400,11 @@ export function CapabilityMapEntry() {
                 面向高校教师的课程能力图谱产品原型
               </p>
               <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
-                重庆地区影视动画专业《{graph.course.courseName}》课程能力图谱
+                {graph.course.region}地区{graph.course.majorDirection}专业《{graph.course.courseName}》课程能力图谱
               </h1>
             </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-900">
-              {DATA_NOTICE}
+            <div className="max-w-xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-900">
+              <p>{sourceNotice}</p>
             </div>
           </div>
         </header>
@@ -320,11 +414,15 @@ export function CapabilityMapEntry() {
             <CourseRequestPanel
               error={error}
               form={form}
+              diagnosticSummary={diagnosticSummary}
+              diagnosticMessages={diagnosticMessages}
+              generating={generating}
               onFormChange={setForm}
               onGenerate={generateLocalGraph}
               onParse={parseRequest}
               onPromptChange={setRequestText}
               prompt={requestText}
+              sourceNotice={sourceNotice}
             />
           </aside>
 
@@ -361,13 +459,13 @@ export function CapabilityMapEntry() {
                     : coreCourseViewActive
                       ? "点击核心课程节点可查看课程定位、支撑能力和岗位；当前课程可继续进入课程能力图谱。"
                     : activeProcessStage
-                      ? "点击轻量节点可在右侧查看阶段说明。当前仍为本地示例推导，不代表真实资料库结果。"
+                      ? "点击轻量节点可在右侧查看阶段说明。当前结果需人工审核，不代表正式资料库结论。"
                     : "点击教学模块本身查看详情；点击教学模块下方“课程映射”徽标可切换到映射展开画布。"}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
                 <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-blue-700">{graph.course.region}</span>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">本地示例</span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">{sourceBadge}</span>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">不可正式引用</span>
                 <button
                   type="button"
@@ -382,7 +480,7 @@ export function CapabilityMapEntry() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditNotice("当前仅根据本地示例数据刷新页面状态；本轮不接入外部模型、RAG、爬虫或图数据库。")}
+                  onClick={() => setEditNotice("当前编辑模式仅刷新页面状态；不会接入 RAG、爬虫、向量数据库或图数据库。")}
                   className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 font-bold text-slate-500 transition hover:border-blue-200 hover:text-blue-700"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
@@ -392,7 +490,7 @@ export function CapabilityMapEntry() {
             </div>
             {editMode ? (
               <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold leading-6 text-blue-700">
-                编辑模式已开启：本轮修改只保存在当前页面，刷新后恢复本地示例数据。
+                编辑模式已开启：本轮修改只保存在当前页面，刷新后恢复当前演示数据。
               </div>
             ) : null}
             {editNotice ? (
@@ -418,6 +516,7 @@ export function CapabilityMapEntry() {
               />
             ) : activeProcessStage ? (
               <ProcessGraphStageView
+                generationKey={graph.meta.generatedAt}
                 onSelectNode={setSelectedProcessNodeId}
                 selectedNodeId={selectedProcessNodeId}
                 stage={activeProcessStage}
@@ -441,7 +540,11 @@ export function CapabilityMapEntry() {
                 selectedCourseId={activeCoreCourseId}
               />
             ) : activeProcessStage ? (
-              <ProcessGraphStageDetail selectedNodeId={selectedProcessNodeId} stage={activeProcessStage} />
+              <ProcessGraphStageDetail
+                selectedNodeId={selectedProcessNodeId}
+                stage={activeProcessStage}
+                teachingModules={graph.teachingModules}
+              />
             ) : (
               <CourseAbilityDetailPanel
                 editMode={editMode}

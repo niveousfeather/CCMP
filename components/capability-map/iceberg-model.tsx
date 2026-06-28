@@ -3,6 +3,7 @@
 import { Anchor, BriefcaseBusiness, ClipboardCheck, FileText, GraduationCap, Layers3, Lightbulb, TrendingUp } from "lucide-react";
 
 import type { CourseAbilityGraphPayload } from "@/lib/capability-map/course-ability-graph";
+import { capabilityMapSourceNotice } from "@/lib/capability-map/source-status";
 
 function unique(items: string[]) {
   return Array.from(new Set(items.filter(Boolean)));
@@ -12,6 +13,10 @@ function take(items: string[], limit = 3) {
   const visible = items.slice(0, limit);
   const rest = items.length - visible.length;
   return rest > 0 ? [...visible, `另有 ${rest} 项`] : visible;
+}
+
+function evidenceStatusText(graph: CourseAbilityGraphPayload) {
+  return capabilityMapSourceNotice(graph);
 }
 
 export function IcebergModel({ graph }: { graph: CourseAbilityGraphPayload }) {
@@ -32,7 +37,7 @@ export function IcebergModel({ graph }: { graph: CourseAbilityGraphPayload }) {
           <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">教师看到课程变化，背后是产业、岗位与专业能力在变化</h2>
         </div>
         <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
-          当前为本地示例数据，未接入真实资料库，不能作为正式引用。
+          {evidenceStatusText(graph)}
         </div>
       </div>
 

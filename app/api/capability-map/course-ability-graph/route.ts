@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireUser } from "@/lib/auth";
-import { generateCourseAbilityGraph } from "@/lib/capability-map/course-ability-graph";
-import type { CourseAbilityGraphInput, CourseAbilityGraphPayload } from "@/lib/capability-map/course-ability-graph";
+import type { CourseAbilityGraphInput } from "@/lib/capability-map/course-ability-graph";
+import {
+  createMockFallbackCourseAbilityGraph,
+  generateCourseAbilityGraph
+} from "@/lib/capability-map/course-ability-graph-server";
+import { courseAbilityDiagnosticCodeFromError } from "@/lib/capability-map/diagnostics";
 
 export const maxDuration = 120;
 
-const REQUEST_TIMEOUT_MS = 95_000;
+const REQUEST_TIMEOUT_MS = 115_000;
 
 function jsonError(code: string, message: string, status: number) {
   return NextResponse.json({ code, message }, { status });
@@ -14,11 +18,6 @@ function jsonError(code: string, message: string, status: number) {
 
 function cleanInput(value: unknown, maxLength = 40) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
-function sanitizeGraphPayload(graph: CourseAbilityGraphPayload) {
-  const { meta: _meta, ...safeGraph } = graph;
-  return safeGraph;
 }
 
 export async function POST(request: NextRequest) {
@@ -45,7 +44,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const graph = await generateCourseAbilityGraph(input, { signal: controller.signal });
-    return NextResponse.json(sanitizeGraphPayload(graph));
+    return NextResponse.json(graph);
+  } catch (error) {
+    const code = courseAbilityDiagnosticCodeFromError(error);
+    console.warn(`[capability-map:api] generation_route_fallback code=${code}`);
+    return NextResponse.json(createMockFallbackCourseAbilityGraph(input, code));
   } finally {
     clearTimeout(timeout);
     request.signal.removeEventListener("abort", abort);

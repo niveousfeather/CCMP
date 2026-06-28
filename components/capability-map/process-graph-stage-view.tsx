@@ -7,19 +7,19 @@ import type { ProcessGraphNode, ProcessGraphStage } from "@/lib/capability-map/c
 import { cn } from "@/lib/utils";
 
 const LEVELS = [1, 2, 3] as const;
-const CANVAS_PAD_X = 92;
+const CANVAS_PAD_X = 56;
 const CANVAS_PAD_TOP = 34;
 const CANVAS_PAD_BOTTOM = 74;
-const COLUMN_GAP = 190;
+const COLUMN_GAP = 110;
 const COLUMN_HEADER_HEIGHT = 42;
 const COLUMN_HEADER_GAP = 34;
-const NODE_GAP = 34;
+const NODE_GAP = 24;
 const EDGE_INSET = 16;
 const COLUMN_HEADER_WIDTH = 176;
 const NODE_WIDTH: Record<ProcessGraphNode["level"], number> = {
-  1: 260,
-  2: 292,
-  3: 270
+  1: 230,
+  2: 250,
+  3: 240
 };
 
 const TYPE_LABEL: Record<ProcessGraphNode["type"], string> = {
@@ -90,14 +90,14 @@ function lineCount(text: string | undefined, charsPerLine: number, maxLines: num
 function measureNode(node: ProcessGraphNode) {
   const width = NODE_WIDTH[node.level];
   const charsPerLine = Math.max(8, Math.floor((width - 36) / 14));
-  const titleLines = lineCount(node.title, charsPerLine, node.level === 2 ? 3 : 2);
+  const titleLines = lineCount(node.title, charsPerLine, 2);
   const subtitleLines = lineCount(node.subtitle, charsPerLine + 4, 1);
-  const descriptionLines = lineCount(node.description, charsPerLine + 2, 2);
-  const hasTags = Boolean(node.tags?.length);
-  const actionSpace = node.type === "coreCourse" ? 32 : 0;
+  const descriptionLines = lineCount(node.description, charsPerLine + 2, node.type === "coreCourse" ? 1 : 2);
+  const hasTags = node.type !== "coreCourse" && Boolean(node.tags?.length);
+  const actionSpace = node.type === "coreCourse" ? 28 : 0;
 
   return {
-    height: Math.max(128, 72 + titleLines * 20 + subtitleLines * 16 + descriptionLines * 17 + (hasTags ? 30 : 0) + actionSpace),
+    height: Math.max(118, 52 + titleLines * 21 + subtitleLines * 16 + descriptionLines * 18 + (hasTags ? 24 : 0) + actionSpace),
     width
   };
 }
@@ -200,12 +200,14 @@ function edgePath(source: LayoutNode, target: LayoutNode) {
 
 export function ProcessGraphStageView({
   currentNodeIds = [],
+  generationKey,
   nodeActions = {},
   onSelectNode,
   selectedNodeId,
   stage
 }: {
   currentNodeIds?: string[];
+  generationKey?: string;
   nodeActions?: Record<string, { disabled?: boolean; label: string; onClick?: () => void; variant?: "primary" | "muted" }>;
   onSelectNode: (nodeId: string) => void;
   selectedNodeId: string | null;
@@ -221,9 +223,9 @@ export function ProcessGraphStageView({
         bounds={bounds}
         contentHeight={contentHeight}
         contentWidth={contentWidth}
-        fitKey={stage.id}
-        fitPadding={60}
-        viewportClassName="h-[600px] lg:h-[640px]"
+        fitKey={`${stage.id}-${generationKey || "initial"}-${stage.nodes.map((node) => node.id).join("|")}`}
+        fitPadding={88}
+        viewportClassName="h-[720px] lg:h-[760px]"
       >
         <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${contentWidth} ${contentHeight}`} aria-hidden="true">
           <defs>
@@ -313,7 +315,7 @@ export function ProcessGraphStageView({
           const related = relatedNodeIds.has(node.id);
           const current = currentNodeIds.includes(node.id);
           const nodeAction = nodeActions[node.id];
-          const visibleTags = node.tags?.slice(0, 2) || [];
+          const visibleTags = node.type === "coreCourse" ? [] : node.tags?.slice(0, 2) || [];
           return (
             <div
               key={node.id}
@@ -350,13 +352,20 @@ export function ProcessGraphStageView({
                     </span>
                   ) : null}
                 </div>
-                <span className="mt-2 line-clamp-3 break-words text-sm font-black leading-5 text-slate-950">{node.title}</span>
+                <span className="mt-2 line-clamp-2 break-words text-[15px] font-black leading-[21px] text-slate-950">{node.title}</span>
                 <span className="mt-1 line-clamp-1 break-words text-[11px] font-bold leading-4 text-slate-500">{node.subtitle}</span>
-                <span className="mt-1.5 line-clamp-2 break-words text-[11px] font-semibold leading-4 text-slate-600">{node.description}</span>
+                <span
+                  className={cn(
+                    "mt-1.5 break-words text-xs font-semibold leading-[18px] text-slate-600",
+                    node.type === "coreCourse" ? "line-clamp-1" : "line-clamp-2"
+                  )}
+                >
+                  {node.description}
+                </span>
                 {visibleTags.length ? (
                   <span className="mt-auto flex flex-wrap gap-1.5 pt-2">
-                    {visibleTags.map((tag) => (
-                      <span key={tag} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                    {visibleTags.map((tag, index) => (
+                      <span key={`${node.id}-tag-${index}-${tag}`} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                         {tag}
                       </span>
                     ))}
@@ -389,8 +398,8 @@ export function ProcessGraphStageView({
       </GraphCanvasShell>
 
       <div className="grid min-w-0 gap-3 md:grid-cols-3">
-        {stage.keyItems.slice(0, 6).map((item) => (
-          <div key={`${stage.id}-${item.title}`} className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        {stage.keyItems.slice(0, 6).map((item, index) => (
+          <div key={`${stage.id}-key-item-${index}-${item.title}`} className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <h3 className="min-w-0 text-sm font-black text-slate-950">{item.title}</h3>
               {item.metric ? <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">{item.metric}</span> : null}
@@ -405,13 +414,15 @@ export function ProcessGraphStageView({
 
 export function ProcessGraphStageDetail({
   selectedNodeId,
-  stage
+  stage,
+  teachingModules = []
 }: {
   selectedNodeId: string | null;
   stage: ProcessGraphStage;
+  teachingModules?: Array<{ id: string; name: string }>;
 }) {
   const selectedNode = stage.nodes.find((node) => node.id === selectedNodeId) || stage.nodes[0];
-  const moduleLabelById = new Map<string, string>();
+  const moduleLabelById = new Map(teachingModules.map((module) => [module.id, module.name]));
   stage.nodes
     .filter((node) => node.type === "courseModule")
     .forEach((node) => {
@@ -425,7 +436,7 @@ export function ProcessGraphStageDetail({
           {stage.title}
         </span>
         <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">{selectedNode?.title || stage.title}</h2>
-        <p className="mt-2 text-sm text-slate-500">{selectedNode?.subtitle || "本地示例推导阶段"}</p>
+        <p className="mt-2 text-sm text-slate-500">{selectedNode?.subtitle || "图谱推导阶段"}</p>
       </div>
 
       {selectedNode ? (
@@ -453,9 +464,9 @@ export function ProcessGraphStageDetail({
                 关联课程模块
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {selectedNode.relatedModuleIds.map((moduleId) => (
-                  <span key={moduleId} className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                    {moduleLabelById.get(moduleId) || moduleId}
+                {selectedNode.relatedModuleIds.map((moduleId, index) => (
+                  <span key={`${selectedNode.id}-module-${index}-${moduleId}`} className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                    {moduleLabelById.get(moduleId) || "关联教学模块"}
                   </span>
                 ))}
               </div>
@@ -466,8 +477,8 @@ export function ProcessGraphStageDetail({
             <div>
               <p className="text-sm font-black text-slate-950">关联项</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {selectedNode.tags.map((tag) => (
-                  <span key={tag} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
+                {selectedNode.tags.map((tag, index) => (
+                  <span key={`${selectedNode.id}-detail-tag-${index}-${tag}`} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
                     {tag}
                   </span>
                 ))}

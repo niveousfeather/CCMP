@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Bot, CheckCircle2, Database, FileWarning, Sparkles, Wand2 } from "lucide-react";
+import { AlertCircle, Bot, CheckCircle2, ChevronDown, Database, FileWarning, Sparkles, Wand2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -48,6 +48,7 @@ const COMMON_REGIONS = [
 function cleanSegment(value: string) {
   return value
     .replace(/^(请|帮我|为|面向|生成|设计|构建|输出|制作|一个|一份|当地|本地)+/g, "")
+    .replace(/^(地区|区域|城市)+/g, "")
     .replace(/课程能力图谱/g, "")
     .replace(/课程/g, "")
     .replace(/[，。,；;：:\s]/g, "")
@@ -58,7 +59,11 @@ export function parseCourseRequestText(text: string, current: CourseAbilityGraph
   const compactText = text.replace(/\s+/g, "");
   const courseFromBrackets = text.match(/《([^》]+)》/)?.[1];
   const courseFromLabel = text.match(/(?:课程名称|课程)\s*[：:]\s*([^，。,；;\n]+)/)?.[1];
-  const courseName = cleanSegment(courseFromBrackets || courseFromLabel || current.courseName);
+  const courseFromCapabilityMap = text.match(/(?:请|帮我|为|面向|生成|设计|构建|输出|制作)?\s*([^《》\n，。,；;：:]+?)\s*课程能力图谱/)?.[1];
+  const plainCourseName = courseFromCapabilityMap?.includes("专业")
+    ? courseFromCapabilityMap.split("专业").pop()
+    : courseFromCapabilityMap;
+  const courseName = cleanSegment(courseFromBrackets || courseFromLabel || plainCourseName || current.courseName);
 
   const explicitRegion = text.match(/(?:地区|区域|城市|面向)\s*[：:]?\s*([\u4e00-\u9fa5]{2,8})/)?.[1];
   const regionFromText = COMMON_REGIONS.find((region) => compactText.includes(region));
@@ -76,21 +81,29 @@ export function parseCourseRequestText(text: string, current: CourseAbilityGraph
 }
 
 export function CourseRequestPanel({
+  diagnosticSummary = "生成诊断：当前使用本地示例数据。",
+  diagnosticMessages = [],
   error,
   form,
+  generating = false,
   onFormChange,
   onGenerate,
   onParse,
   onPromptChange,
-  prompt
+  prompt,
+  sourceNotice = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。"
 }: {
+  diagnosticSummary?: string;
+  diagnosticMessages?: string[];
   error: string | null;
   form: CourseAbilityGraphInput;
+  generating?: boolean;
   onFormChange: (form: CourseAbilityGraphInput) => void;
-  onGenerate: () => void;
+  onGenerate: () => void | Promise<void>;
   onParse: () => void;
   onPromptChange: (value: string) => void;
   prompt: string;
+  sourceNotice?: string;
 }) {
   return (
     <section className="rounded-3xl border border-blue-100 bg-white p-5 shadow-[0_20px_60px_rgba(37,99,235,0.08)]">
@@ -101,7 +114,7 @@ export function CourseRequestPanel({
         <div>
           <p className="text-sm font-semibold text-blue-700">AI 助手入口</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950">课程能力图谱生成系统</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">输入课程建设需求，系统会基于本地示例数据生成课程能力结构与教学建议。</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">输入课程建设需求，系统会生成从产业变化到课程映射的建设链路。</p>
         </div>
       </div>
 
@@ -129,11 +142,12 @@ export function CourseRequestPanel({
           <Button
             type="button"
             variant="primary"
-            onClick={onGenerate}
+            onClick={() => void onGenerate()}
+            disabled={generating}
             className="border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
           >
             <Sparkles className="h-4 w-4" />
-            生成图谱
+            {generating ? "生成中..." : "生成图谱"}
           </Button>
         </div>
 
@@ -172,8 +186,21 @@ export function CourseRequestPanel({
         ) : null}
 
         <div className="grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-          <StatusLine icon={Database} text="当前为本地示例数据，未接入真实资料库，不能作为正式引用。" />
-          <StatusLine icon={Sparkles} text="智能生成能力暂未开启，本轮仅进行本地解析与示例展示。" />
+          <StatusLine icon={Database} text={sourceNotice} />
+          {diagnosticMessages.length ? (
+            <details className="rounded-xl border border-amber-300/70 bg-white/60 px-3 py-2 text-xs font-bold leading-5 text-amber-900">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+                <span>{diagnosticSummary}</span>
+                <ChevronDown className="h-3.5 w-3.5" />
+              </summary>
+              <div className="mt-2 space-y-1 border-t border-amber-200 pt-2">
+                {diagnosticMessages.map((message, index) => (
+                  <p key={`${index}-${message}`}>{message}</p>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          <StatusLine icon={Sparkles} text="系统会将生成结果整理为可演示的产业、岗位、能力、课程和映射链路。" />
           <StatusLine icon={FileWarning} text="证据来源为占位说明，不提供正式政策、报告或网页引用。" />
         </div>
       </div>

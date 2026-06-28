@@ -3,9 +3,8 @@
 import { ArrowRight, FileText, Route } from "lucide-react";
 
 import type { CourseAbilityGraphPayload, CourseEvidenceSource, ImpactPath } from "@/lib/capability-map/course-ability-graph";
+import { capabilityMapCompactEvidenceStatus } from "@/lib/capability-map/source-status";
 import { cn } from "@/lib/utils";
-
-const DATA_NOTICE = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。";
 
 const stageLabels = ["产业变化", "岗位变化", "专业能力变化", "课程模块变化", "教学内容建议"] as const;
 
@@ -13,6 +12,10 @@ function compactItems(items: string[], limit = 2) {
   const visible = items.slice(0, limit);
   const rest = items.length - visible.length;
   return rest > 0 ? [...visible, `另有 ${rest} 项`] : visible;
+}
+
+function evidenceStatusText(graph: CourseAbilityGraphPayload) {
+  return capabilityMapCompactEvidenceStatus(graph);
 }
 
 export function IndustryImpactPaths({
@@ -73,7 +76,9 @@ export function IndustryImpactPaths({
             >
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-base font-black text-slate-950">链路 {pathIndex + 1}：{path.industryTrend}</h3>
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">{DATA_NOTICE}</span>
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+                  {evidenceStatusText(graph)}
+                </span>
               </div>
 
               <div className="grid gap-3 xl:grid-cols-[repeat(5,minmax(0,1fr))]">

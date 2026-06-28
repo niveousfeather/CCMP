@@ -52,7 +52,7 @@ const STAGE_GAP = 46;
 const MODULE_BLOCK_PAD_Y = 17;
 const MIN_MODULE_BLOCK_HEIGHT = 150;
 const EDGE_INSET = 8;
-const FIT_PADDING = 28;
+const FIT_PADDING = 88;
 
 type DisplayNode = {
   id: string;
@@ -282,10 +282,10 @@ function buildNodeBounds(nodes: DisplayNode[]): GraphCanvasBounds {
       minY: Math.min(bounds.minY, node.y - node.height / 2)
     }),
     {
-      maxX: Number.NEGATIVE_INFINITY,
+      maxX: Math.max(...COLUMN_ORDER.map((kind) => COLUMN_X[kind] + COLUMN_HEADER_WIDTH / 2)),
       maxY: Number.NEGATIVE_INFINITY,
-      minX: Number.POSITIVE_INFINITY,
-      minY: Number.POSITIVE_INFINITY
+      minX: Math.min(...COLUMN_ORDER.map((kind) => COLUMN_X[kind] - COLUMN_HEADER_WIDTH / 2)),
+      minY: COLUMN_HEADER_Y
     }
   );
 }
@@ -315,7 +315,7 @@ export function CourseAbilityGraphView({
       bounds={graphBounds}
       contentHeight={canvasHeight}
       contentWidth={CANVAS_WIDTH}
-      fitKey={`${graph.course.courseName}-${canvasHeight}`}
+      fitKey={`${graph.meta.generatedAt}-${graph.course.courseName}-${canvasHeight}`}
       fitPadding={FIT_PADDING}
       viewportClassName="h-[720px]"
     >
