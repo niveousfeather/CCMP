@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { Field, Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -20,23 +19,30 @@ export function LoginForm() {
     event.preventDefault();
     setLoading(true);
 
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
-    });
-    const data = await response.json().catch(() => ({}));
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const data = await response.json().catch(() => ({}));
 
-    setLoading(false);
+      if (!response.ok) {
+        toast({ type: "error", message: data.message || "登录失败" });
+        return;
+      }
 
-    if (!response.ok) {
-      toast({ type: "error", message: data.message || "登录失败" });
-      return;
+      const requestedNext = searchParams.get("next");
+      const destination = requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
+        ? requestedNext
+        : "/workspace";
+      toast({ type: "success", message: "登录成功，正在进入工作台" });
+      window.location.assign(destination);
+    } catch {
+      toast({ type: "error", message: "登录请求失败，请检查本地服务后重试" });
+    } finally {
+      setLoading(false);
     }
-
-    toast({ type: "success", message: "登录成功" });
-    router.push(searchParams.get("next") || "/workspace");
-    router.refresh();
   }
 
   return (

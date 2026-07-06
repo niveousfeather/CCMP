@@ -53,6 +53,10 @@ const STAGE_STATUS_LABELS: Record<string, string> = {
   NORMALIZE_COURSE_GRAPH_OK: "结构校验：课程能力图谱主结构正常",
   NORMALIZE_MODULE_MAPPING_PATCHED: "结构校验：课程映射已按最终教学模块补齐",
   NORMALIZE_PROCESS_GRAPH_OK: "结构校验：前置图谱结构正常",
+  TEMPLATE_PATTERN_DETECTED: "质量检查：部分结构可能偏模板化，建议人工检查",
+  COURSE_MODULES_TOO_SIMILAR: "质量检查：部分教学模块名称相似度较高",
+  MAPPING_CONTENT_TOO_SIMILAR: "质量检查：部分课程映射内容相似度较高",
+  DOMAIN_MISMATCH_WITH_INPUT: "质量检查：部分内容与当前专业或课程方向不完全匹配",
   STAGE_1_SEMANTIC_SKELETON_FAILED: "阶段状态：前置图谱语义骨架使用本地示例补齐",
   STAGE_1_SEMANTIC_SKELETON_USED_MODEL: "阶段状态：前置图谱语义骨架由 GPT-5.4 生成",
   STAGE_2_COURSE_STRUCTURE_FAILED: "阶段状态：课程结构骨架使用本地示例补齐",
@@ -126,6 +130,7 @@ export function CapabilityMapEntry() {
   const [generating, setGenerating] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editNotice, setEditNotice] = useState<string | null>(null);
+  const [parseNotice, setParseNotice] = useState<string | null>(null);
   const mappableModuleIds = graph.moduleMappings.map((mapping) => mapping.moduleId);
   const activeModuleMapping = activeMappingModuleId
     ? graph.moduleMappings.find((mapping) => mapping.moduleId === activeMappingModuleId) || null
@@ -152,6 +157,7 @@ export function CapabilityMapEntry() {
     setForm(parsed);
     setLastParsedText(requestText);
     setError(null);
+    setParseNotice(`已解析：${parsed.region} / ${parsed.majorDirection} / ${parsed.courseName}`);
   }
 
   async function generateLocalGraph() {
@@ -421,6 +427,7 @@ export function CapabilityMapEntry() {
               onGenerate={generateLocalGraph}
               onParse={parseRequest}
               onPromptChange={setRequestText}
+              parseNotice={parseNotice}
               prompt={requestText}
               sourceNotice={sourceNotice}
             />

@@ -55,7 +55,45 @@ function cleanSegment(value: string) {
     .trim();
 }
 
+function cleanDelimitedSegment(value: string) {
+  return value
+    .trim()
+    .replace(/^[《\s]+|[》\s]+$/g, "")
+    .replace(/[，。,；;]+$/g, "")
+    .trim();
+}
+
+function parseDelimitedRequest(text: string): CourseAbilityGraphInput | null {
+  const segments = text
+    .split(/\s*(?:\/|／|\||｜|→)\s*/)
+    .map(cleanDelimitedSegment)
+    .filter(Boolean);
+
+  if (segments.length < 3) return null;
+
+  const region = cleanDelimitedSegment(
+    segments[0].replace(/^(?:地区|区域|城市)\s*[：:]?\s*/, "").replace(/(?:地区|区域|城市)$/, "")
+  );
+  const majorDirection = cleanDelimitedSegment(
+    segments[1].replace(/^(?:专业方向|专业)\s*[：:]?\s*/, "").replace(/专业$/, "")
+  );
+  const courseName = cleanDelimitedSegment(
+    segments
+      .slice(2)
+      .join(" / ")
+      .replace(/^(?:课程名称|课程)\s*[：:]?\s*/, "")
+      .replace(/课程能力图谱$/, "")
+  );
+
+  if (!region || !majorDirection || !courseName) return null;
+
+  return { courseName, majorDirection, region };
+}
+
 export function parseCourseRequestText(text: string, current: CourseAbilityGraphInput): CourseAbilityGraphInput {
+  const delimitedRequest = parseDelimitedRequest(text);
+  if (delimitedRequest) return delimitedRequest;
+
   const compactText = text.replace(/\s+/g, "");
   const courseFromBrackets = text.match(/《([^》]+)》/)?.[1];
   const courseFromLabel = text.match(/(?:课程名称|课程)\s*[：:]\s*([^，。,；;\n]+)/)?.[1];
@@ -90,6 +128,7 @@ export function CourseRequestPanel({
   onGenerate,
   onParse,
   onPromptChange,
+  parseNotice,
   prompt,
   sourceNotice = "当前为本地示例数据，未接入真实资料库，不能作为正式引用。"
 }: {
@@ -102,6 +141,7 @@ export function CourseRequestPanel({
   onGenerate: () => void | Promise<void>;
   onParse: () => void;
   onPromptChange: (value: string) => void;
+  parseNotice?: string | null;
   prompt: string;
   sourceNotice?: string;
 }) {
@@ -150,6 +190,13 @@ export function CourseRequestPanel({
             {generating ? "生成中..." : "生成图谱"}
           </Button>
         </div>
+
+        {parseNotice ? (
+          <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm leading-5 text-blue-800">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{parseNotice}</span>
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">

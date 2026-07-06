@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { FileText, Network, ShieldCheck } from "lucide-react";
 
 import { GraphCanvasShell, type GraphCanvasBounds } from "@/components/capability-map/graph-canvas-shell";
@@ -13,9 +14,16 @@ const CANVAS_PAD_BOTTOM = 74;
 const COLUMN_GAP = 110;
 const COLUMN_HEADER_HEIGHT = 42;
 const COLUMN_HEADER_GAP = 34;
-const NODE_GAP = 24;
+const NODE_GAP = 28;
 const EDGE_INSET = 16;
 const COLUMN_HEADER_WIDTH = 176;
+const CARD_VERTICAL_PADDING = 28;
+const CARD_HEADER_HEIGHT = 22;
+const TITLE_MARGIN_TOP = 8;
+const SUBTITLE_MARGIN_TOP = 4;
+const DESCRIPTION_MARGIN_TOP = 6;
+const TAG_ROW_HEIGHT = 26;
+const ACTION_ROW_HEIGHT = 36;
 const NODE_WIDTH: Record<ProcessGraphNode["level"], number> = {
   1: 230,
   2: 250,
@@ -87,17 +95,26 @@ function lineCount(text: string | undefined, charsPerLine: number, maxLines: num
   return Math.min(maxLines, Math.max(1, Math.ceil(textLength(text) / charsPerLine)));
 }
 
-function measureNode(node: ProcessGraphNode) {
+function measureNode(node: ProcessGraphNode, measuredHeight?: number) {
   const width = NODE_WIDTH[node.level];
-  const charsPerLine = Math.max(8, Math.floor((width - 36) / 14));
-  const titleLines = lineCount(node.title, charsPerLine, 2);
-  const subtitleLines = lineCount(node.subtitle, charsPerLine + 4, 1);
-  const descriptionLines = lineCount(node.description, charsPerLine + 2, node.type === "coreCourse" ? 1 : 2);
+  const titleCharsPerLine = Math.max(8, Math.floor((width - 36) / 15));
+  const descriptionCharsPerLine = Math.max(10, Math.floor((width - 36) / 12));
+  const titleLines = lineCount(node.title, titleCharsPerLine, 2);
+  const subtitleLines = lineCount(node.subtitle, titleCharsPerLine + 3, 1);
+  const descriptionLines = lineCount(node.description, descriptionCharsPerLine, node.type === "coreCourse" ? 1 : 2);
   const hasTags = node.type !== "coreCourse" && Boolean(node.tags?.length);
-  const actionSpace = node.type === "coreCourse" ? 28 : 0;
+  const actionSpace = node.type === "coreCourse" ? ACTION_ROW_HEIGHT : 0;
+  const contentHeight =
+    CARD_VERTICAL_PADDING +
+    CARD_HEADER_HEIGHT +
+    (titleLines ? TITLE_MARGIN_TOP + titleLines * 21 : 0) +
+    (subtitleLines ? SUBTITLE_MARGIN_TOP + subtitleLines * 16 : 0) +
+    (descriptionLines ? DESCRIPTION_MARGIN_TOP + descriptionLines * 18 : 0) +
+    (hasTags ? TAG_ROW_HEIGHT : 0) +
+    actionSpace;
 
   return {
-    height: Math.max(118, 52 + titleLines * 21 + subtitleLines * 16 + descriptionLines * 18 + (hasTags ? 24 : 0) + actionSpace),
+    height: Math.max(140, measuredHeight || contentHeight),
     width
   };
 }
@@ -127,12 +144,12 @@ function buildColumnCenters() {
   };
 }
 
-function buildLayout(nodes: ProcessGraphNode[]) {
+function buildLayout(nodes: ProcessGraphNode[], measuredHeights: Record<string, number> = {}) {
   const { centers, contentWidth } = buildColumnCenters();
   const columns = {
-    1: groupByLevel(nodes, 1).map((node) => ({ ...node, ...measureNode(node), x: centers[1], y: 0 })),
-    2: groupByLevel(nodes, 2).map((node) => ({ ...node, ...measureNode(node), x: centers[2], y: 0 })),
-    3: groupByLevel(nodes, 3).map((node) => ({ ...node, ...measureNode(node), x: centers[3], y: 0 }))
+    1: groupByLevel(nodes, 1).map((node) => ({ ...node, ...measureNode(node, measuredHeights[node.id]), x: centers[1], y: 0 })),
+    2: groupByLevel(nodes, 2).map((node) => ({ ...node, ...measureNode(node, measuredHeights[node.id]), x: centers[2], y: 0 })),
+    3: groupByLevel(nodes, 3).map((node) => ({ ...node, ...measureNode(node, measuredHeights[node.id]), x: centers[3], y: 0 }))
   } satisfies Record<ProcessGraphNode["level"], LayoutNode[]>;
 
   const maxColumnHeight = Math.max(...LEVELS.map((level) => columnHeight(columns[level])), 1);
@@ -198,6 +215,47 @@ function edgePath(source: LayoutNode, target: LayoutNode) {
   return `M ${startX} ${startY} C ${startX + control} ${startY}, ${endX - control} ${endY}, ${endX} ${endY}`;
 }
 
+function ProcessNodeContent({ node }: { node: ProcessGraphNode }) {
+  const visibleTags = node.type === "coreCourse" ? [] : node.tags?.slice(0, 2) || [];
+
+  return (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black", TYPE_CLASS[node.type])}>
+          {TYPE_LABEL[node.type]}
+        </span>
+        {typeof node.weight === "number" ? (
+          <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">
+            {node.weight}%
+          </span>
+        ) : null}
+      </div>
+      <span className="mt-2 line-clamp-2 break-words text-[15px] font-black leading-[21px] text-slate-950">{node.title}</span>
+      <span className="mt-1 line-clamp-1 break-words text-[11px] font-bold leading-4 text-slate-500">{node.subtitle}</span>
+      <span
+        className={cn(
+          "mt-1.5 break-words text-xs font-semibold leading-[18px] text-slate-600",
+          node.type === "coreCourse" ? "line-clamp-1" : "line-clamp-2"
+        )}
+      >
+        {node.description}
+      </span>
+      {visibleTags.length ? (
+        <span className="mt-auto flex flex-wrap gap-1.5 pt-2">
+          {visibleTags.map((tag, index) => (
+            <span
+              key={`${node.id}-tag-${index}-${tag}`}
+              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600"
+            >
+              <span className="block max-w-[150px] truncate whitespace-nowrap">{tag}</span>
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 export function ProcessGraphStageView({
   currentNodeIds = [],
   generationKey,
@@ -214,8 +272,18 @@ export function ProcessGraphStageView({
   stage: ProcessGraphStage;
 }) {
   const activeNodeId = selectedNodeId || stage.nodes[0]?.id || "";
-  const { bounds, columnCenters, contentHeight, contentWidth, nodeMap, nodes } = buildLayout(stage.nodes);
+  const measurementRefs = useRef(new Map<string, HTMLDivElement>());
+  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
+  const { bounds, columnCenters, contentHeight, contentWidth, nodeMap, nodes } = buildLayout(stage.nodes, measuredHeights);
   const relatedNodeIds = getRelatedNodeIds(stage, activeNodeId);
+
+  useLayoutEffect(() => {
+    const nextHeights = Object.fromEntries(
+      stage.nodes.map((node) => [node.id, Math.ceil(measurementRefs.current.get(node.id)?.offsetHeight || 0)])
+    );
+    const changed = stage.nodes.some((node) => nextHeights[node.id] > 0 && nextHeights[node.id] !== measuredHeights[node.id]);
+    if (changed) setMeasuredHeights(nextHeights);
+  }, [measuredHeights, stage.nodes]);
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -227,6 +295,25 @@ export function ProcessGraphStageView({
         fitPadding={88}
         viewportClassName="h-[720px] lg:h-[760px]"
       >
+        <div aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0">
+          {stage.nodes.map((node) => (
+            <div
+              key={`measure-${node.id}`}
+              ref={(element) => {
+                if (element) measurementRefs.current.set(node.id, element);
+                else measurementRefs.current.delete(node.id);
+              }}
+              className={cn(
+                "flex w-full flex-col rounded-2xl border bg-white px-4 py-[14px] text-left",
+                node.type === "coreCourse" && "pb-12"
+              )}
+              style={{ width: NODE_WIDTH[node.level] }}
+            >
+              <ProcessNodeContent node={node} />
+            </div>
+          ))}
+        </div>
+
         <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${contentWidth} ${contentHeight}`} aria-hidden="true">
           <defs>
             <marker id={`arrow-${stage.id}`} markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
@@ -315,14 +402,13 @@ export function ProcessGraphStageView({
           const related = relatedNodeIds.has(node.id);
           const current = currentNodeIds.includes(node.id);
           const nodeAction = nodeActions[node.id];
-          const visibleTags = node.type === "coreCourse" ? [] : node.tags?.slice(0, 2) || [];
           return (
             <div
               key={node.id}
               data-graph-node="true"
               className={cn(
                 "absolute -translate-x-1/2 -translate-y-1/2",
-                selected && "z-20 scale-[1.02]",
+                selected && "z-20",
                 !selected && !related && "opacity-40"
               )}
               style={{
@@ -337,40 +423,13 @@ export function ProcessGraphStageView({
                 type="button"
                 onClick={() => onSelectNode(node.id)}
                 className={cn(
-                  "flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white px-4 py-3 text-left shadow-sm transition hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-200",
+                  "flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white px-4 py-[14px] text-left shadow-sm transition hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-200",
                   selected && "border-blue-500 ring-4 ring-blue-200 shadow-[0_20px_50px_rgba(37,99,235,0.2)]",
-                  current && !selected && "border-blue-300 shadow-[0_14px_34px_rgba(37,99,235,0.14)]"
+                  current && !selected && "border-blue-300 shadow-[0_14px_34px_rgba(37,99,235,0.14)]",
+                  nodeAction && "pb-12"
                 )}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black", TYPE_CLASS[node.type])}>
-                    {TYPE_LABEL[node.type]}
-                  </span>
-                  {typeof node.weight === "number" ? (
-                    <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">
-                      {node.weight}%
-                    </span>
-                  ) : null}
-                </div>
-                <span className="mt-2 line-clamp-2 break-words text-[15px] font-black leading-[21px] text-slate-950">{node.title}</span>
-                <span className="mt-1 line-clamp-1 break-words text-[11px] font-bold leading-4 text-slate-500">{node.subtitle}</span>
-                <span
-                  className={cn(
-                    "mt-1.5 break-words text-xs font-semibold leading-[18px] text-slate-600",
-                    node.type === "coreCourse" ? "line-clamp-1" : "line-clamp-2"
-                  )}
-                >
-                  {node.description}
-                </span>
-                {visibleTags.length ? (
-                  <span className="mt-auto flex flex-wrap gap-1.5 pt-2">
-                    {visibleTags.map((tag, index) => (
-                      <span key={`${node.id}-tag-${index}-${tag}`} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                        {tag}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
+                <ProcessNodeContent node={node} />
               </button>
               {nodeAction ? (
                 <button

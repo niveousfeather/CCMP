@@ -323,6 +323,7 @@ export type CourseAbilityGraphPayload = {
   tasks: CourseTaskNode[];
   moduleMappings: ModuleMapping[];
   impactPaths: ImpactPath[];
+  structureStrategy?: CapabilityMapStructureStrategy;
   meta: CourseAbilityGraphMeta;
 };
 
@@ -364,12 +365,39 @@ export type CourseAbilityGraphModelOutput = Partial<
 };
 
 export type ProcessGraphsSemanticSkeleton = {
-  coreCourses?: Array<{ isCurrentCourse?: boolean; name?: string; position?: string; reason?: string }>;
+  coreCourses?: Array<{
+    isCurrentCourse?: boolean;
+    name?: string;
+    position?: string;
+    reason?: string;
+    relatedJobNames?: string[];
+    supportedAbilityNames?: string[];
+  }>;
+  courseImpacts?: string[];
   industryChanges?: string[];
   industryKeywords?: string[];
-  majorAbilities?: Array<{ description?: string; name?: string; weight?: number }>;
+  majorAbilities?: Array<{
+    description?: string;
+    elements?: string[];
+    name?: string;
+    relatedJobNames?: string[];
+    weight?: number;
+  }>;
   meta?: Partial<CourseAbilityGraphMeta>;
-  regionalJobs?: Array<{ description?: string; name?: string; relevance?: number }>;
+  regionalJobs?: Array<{
+    description?: string;
+    industryKeywords?: string[];
+    name?: string;
+    relevance?: number;
+  }>;
+  structureStrategy?: CapabilityMapStructureStrategy;
+};
+
+export type CapabilityMapStructureStrategy = {
+  abilityLogic?: string;
+  courseLogic?: string;
+  industryLogic?: string;
+  jobLogic?: string;
 };
 
 export type CourseStructureSemanticSkeleton = {
@@ -413,6 +441,7 @@ export type MappingModuleReference = {
   hours?: number;
   moduleId: string;
   moduleName: string;
+  taskNames?: string[];
 };
 
 const DEFAULT_INPUT: CourseAbilityGraphInput = {
@@ -433,6 +462,74 @@ const DIMENSION_TITLES: Record<CourseMappingDimensionKey, string> = {
   assessmentMethods: "考核评价方式",
   enterpriseStandardsOrCertificates: "对应企业标准 / 大赛证书要求"
 };
+
+function fallbackCourseStructureSkeleton(input: CourseAbilityGraphInput): CourseStructureSemanticSkeleton {
+  const context = `${input.majorDirection}${input.courseName}`;
+  const task = (name: string, description: string) => ({ name, description });
+  const module = (name: string, hours: number, description: string, tasks: Array<{ name: string; description: string }>) => ({
+    name,
+    hours,
+    description,
+    tasks
+  });
+
+  if (/交互媒体|数字媒体技术|交互设计|媒体系统/i.test(context)) {
+    return {
+      courseName: input.courseName,
+      workflowStages: [
+        { name: "需求与体验定义", description: "明确用户、场景和交互目标。", modules: [module("交互需求与信息架构", 14, "完成需求分析、内容组织和体验路径。", [task("用户场景分析", "识别目标用户与关键使用场景。"), task("信息架构设计", "组织内容层级与交互路径。")])] },
+        { name: "原型与视觉设计", description: "形成可验证的界面与交互方案。", modules: [module("交互原型设计", 18, "完成流程、线框和可操作原型。", [task("交互流程设计", "完成核心任务流程与状态设计。"), task("高保真原型制作", "形成可操作的高保真原型。")]), module("界面视觉与动效", 18, "完成界面系统、反馈和动态表现。", [task("界面视觉规范", "建立色彩、字体和组件规范。"), task("交互动效设计", "设计状态反馈与过渡效果。")])] },
+        { name: "技术实现与整合", description: "完成媒体内容与交互功能实现。", modules: [module("前端媒体实现", 22, "实现界面、交互和媒体组件。", [task("界面组件开发", "实现可复用界面组件。"), task("媒体交互集成", "集成图像、音视频与交互行为。")]), module("测试与性能优化", 14, "完成可用性、兼容性和性能优化。", [task("可用性测试", "验证核心任务完成效率。"), task("性能与兼容优化", "修复兼容问题并优化加载表现。")])] },
+        { name: "发布与复盘", description: "完成发布、展示和迭代总结。", modules: [module("交互作品发布与复盘", 10, "完成部署、演示、评价和改进记录。", [task("作品部署发布", "完成运行环境配置与发布。"), task("项目展示复盘", "整理成果证据与改进方向。")])] }
+      ]
+    };
+  }
+
+  if (/短视频|视觉包装|栏目包装/i.test(context)) {
+    return {
+      courseName: input.courseName,
+      workflowStages: [
+        { name: "传播策划", description: "明确受众、平台与视觉主题。", modules: [module("短视频主题与视觉定位", 12, "完成传播目标、内容主题和风格定位。", [task("传播任务分析", "明确平台受众与传播目标。"), task("视觉概念提案", "形成主题、情绪与风格提案。")])] },
+        { name: "视觉资产生产", description: "完成包装所需图形、字体和动态资产。", modules: [module("品牌图形与版式系统", 18, "建立统一的图形、字体和版式语言。", [task("包装主视觉设计", "完成核心图形与标题版式。"), task("多画幅版式适配", "适配横竖屏与不同平台规格。")]), module("动态视觉资产制作", 20, "完成片头、转场、字幕和动态元素。", [task("动态标题设计", "完成标题与字幕动态表现。"), task("转场与元素动画", "制作转场和动态装饰元素。")])] },
+        { name: "视听整合", description: "完成剪辑、声音与包装合成。", modules: [module("剪辑节奏与声音包装", 18, "建立镜头节奏并完成声音协同。", [task("镜头节奏剪辑", "完成镜头组织与节奏控制。"), task("音乐音效匹配", "完成音乐、音效与画面同步。")]), module("短视频包装合成", 20, "整合画面、字幕、特效和品牌元素。", [task("包装元素合成", "完成视觉元素与视频画面合成。"), task("成片质量修订", "检查画面、声音和品牌一致性。")])] },
+        { name: "发布评估", description: "完成平台输出、展示和数据复盘。", modules: [module("多平台发布与复盘", 10, "完成输出适配、发布检查和项目复盘。", [task("平台规格输出", "按平台要求完成多版本输出。"), task("传播效果复盘", "依据反馈总结改进方向。")])] }
+      ]
+    };
+  }
+
+  if (/AIGC.*视觉|视觉内容创作|数字媒体艺术|品牌视觉|新媒体/i.test(context)) {
+    return {
+      courseName: input.courseName,
+      workflowStages: [
+        { name: "视觉主题策划", description: "明确传播目标、主题和视觉方向。", modules: [module("视觉主题与创意策划", 12, "完成需求分析、主题提炼和创意提案。", [task("传播需求分析", "识别受众、场景与成果要求。"), task("视觉概念提案", "形成主题、关键词和参考方向。")])] },
+        { name: "智能视觉生成", description: "完成图像生成、筛选和风格控制。", modules: [module("AIGC图像生成", 20, "完成提示策略、图像生成和方案筛选。", [task("提示策略设计", "设计主题、构图和风格提示策略。"), task("生成方案筛选", "依据目标筛选并记录生成结果。")]), module("视觉风格控制与精修", 18, "统一角色、场景、色彩和画面细节。", [task("风格一致性控制", "统一系列画面的视觉语言。"), task("图像精修优化", "修复细节并提升输出质量。")])] },
+        { name: "视觉系统整合", description: "完成版式、品牌与动态内容整合。", modules: [module("版式与品牌视觉整合", 18, "把生成素材转化为完整视觉系统。", [task("版式层级设计", "组织图形、字体和信息层级。"), task("品牌视觉延展", "完成不同载体的视觉适配。")]), module("短视频视觉包装", 18, "完成动态版式、镜头节奏和视听包装。", [task("动态视觉设计", "制作标题、转场和动态元素。"), task("视听节奏整合", "协调画面、音乐和信息节奏。")])] },
+        { name: "发布与复盘", description: "完成多平台交付和创作复盘。", modules: [module("数字内容发布与复盘", 10, "完成输出、发布、展示和过程复盘。", [task("多平台输出", "按平台规格导出并检查成果。"), task("创作过程复盘", "说明生成决策、人工优化和改进方向。")])] }
+      ]
+    };
+  }
+
+  if (/三维角色|角色动画|影视动画|动画制作/i.test(context)) {
+    return {
+      courseName: input.courseName,
+      workflowStages: [
+        { name: "角色与动作规划", description: "明确角色结构、表演目标和动作方案。", modules: [module("角色结构与动作分析", 12, "分析角色结构、动作目标和镜头需求。", [task("角色结构检查", "检查模型结构与动画可用性。"), task("动作方案设计", "形成动作节奏与表演方案。")])] },
+        { name: "绑定与控制", description: "建立角色骨骼和动画控制系统。", modules: [module("角色骨骼绑定", 22, "完成骨骼、蒙皮和基础控制。", [task("骨骼系统搭建", "建立符合角色结构的骨骼系统。"), task("蒙皮权重调整", "优化关节变形与权重分配。")]), module("动画控制器制作", 16, "完成控制器、约束和变形测试。", [task("控制器设计", "建立清晰高效的动画控制器。"), task("绑定测试修订", "测试极限姿态并修复变形问题。")])] },
+        { name: "角色动画制作", description: "完成关键动作、节奏和表演细化。", modules: [module("关键姿态与运动规律", 20, "完成关键姿态、重心和运动节奏。", [task("关键姿态设计", "建立清晰有力的关键动作。"), task("运动节奏调整", "优化重心、惯性和动作节奏。")]), module("角色表演与镜头动画", 22, "完成角色表演、镜头配合和动画精修。", [task("角色表演制作", "完成情绪、动作和表演细节。"), task("动画曲线精修", "优化曲线、节奏和动作衔接。")])] },
+        { name: "输出与复盘", description: "完成预览、渲染、展示和项目复盘。", modules: [module("动画输出与项目复盘", 12, "完成预览输出、质量检查和成果说明。", [task("动画预览输出", "完成镜头预览与质量检查。"), task("项目展示复盘", "整理作品与技术问题改进记录。")])] }
+      ]
+    };
+  }
+
+  return {
+    courseName: input.courseName,
+    workflowStages: [
+      { name: "需求与方案", description: "完成需求分析和项目方案。", modules: [module(`${input.courseName}需求分析`, 12, "明确课程项目对象、目标和成果要求。", [task("需求分析", "识别项目对象与成果要求。"), task("方案设计", "形成可执行项目方案。")])] },
+      { name: "项目实施", description: "完成课程核心工作任务。", modules: [module(`${input.courseName}核心技能训练`, 20, "训练课程对应核心技能与工作方法。", [task("核心任务实施", "完成课程核心工作任务。"), task("阶段质量检查", "依据标准检查并修订成果。")]), module(`${input.courseName}综合项目制作`, 24, "整合技能完成综合项目成果。", [task("综合项目制作", "按流程完成综合项目。"), task("项目成果优化", "根据反馈优化项目成果。")])] },
+      { name: "交付与评价", description: "完成成果交付、展示和复盘。", modules: [module(`${input.courseName}成果交付`, 12, "完成成果整理、展示、评价和复盘。", [task("成果交付展示", "按规范提交并展示成果。"), task("项目评价复盘", "总结问题与后续改进方向。")])] }
+    ]
+  };
+}
 
 const DIMENSION_ORDER: CourseMappingDimensionKey[] = [
   "coreTasks",
@@ -754,7 +851,85 @@ function digitalMediaCourseFillers(): CoreCourseSuggestion[] {
   ];
 }
 
-function rotatingValues(values: string[], index: number, size: number) {
+function coreCourseFallbackPool(course: CourseAbilityGraphInput): CoreCourseSuggestion[] {
+  const context = `${course.majorDirection}${course.courseName}`;
+  const item = (
+    name: string,
+    position: string,
+    abilities: string[],
+    jobs: string[]
+  ): CoreCourseSuggestion => ({
+    id: semanticId("core_course", name, 0),
+    name,
+    position,
+    supportedAbilityNames: abilities,
+    relatedJobNames: jobs,
+    description: position,
+    status: "placeholder"
+  });
+
+  if (/数字媒体技术|交互|前端|实时渲染|媒体系统/i.test(context)) {
+    return [
+      item("交互媒体原型设计", "面向交互产品策划与原型验证，训练信息架构、交互流程和可用性测试。", ["交互流程设计", "原型验证", "用户体验评价"], ["交互设计师", "产品设计助理"]),
+      item("Web前端媒体开发", "面向数字媒体应用实现，训练界面开发、媒体组件集成和响应式适配。", ["前端实现", "媒体组件开发", "跨端适配"], ["前端开发工程师", "互动媒体开发"]),
+      item("实时图形与引擎应用", "面向实时互动内容，训练场景组织、材质表现和运行性能优化。", ["实时渲染", "引擎应用", "性能优化"], ["技术美术", "实时互动开发"]),
+      item("数据可视化设计与实现", "面向数据传播场景，训练数据叙事、可视编码和交互呈现。", ["数据表达", "信息可视化", "交互实现"], ["数据可视化设计师", "前端可视化开发"]),
+      item("数字媒体系统项目实训", "面向完整媒体系统交付，训练需求分析、协作开发、测试发布和项目复盘。", ["系统集成", "项目协作", "测试交付"], ["数字媒体项目执行", "媒体应用开发"])
+    ];
+  }
+
+  if (/游戏|关卡|引擎美术/i.test(context)) {
+    return [
+      item("游戏角色与道具设计", "面向游戏角色和道具资产生产，训练造型设计、规范制作和风格统一。", ["角色设计", "资产制作", "风格控制"], ["游戏角色设计师", "游戏美术设计师"]),
+      item("游戏场景与关卡视觉", "面向关卡空间表达，训练场景规划、视觉引导和氛围塑造。", ["场景设计", "关卡视觉", "氛围表现"], ["游戏场景设计师", "关卡美术"]),
+      item("引擎美术与实时表现", "面向游戏引擎内效果实现，训练材质、灯光、特效和性能平衡。", ["引擎美术", "实时特效", "性能优化"], ["技术美术", "游戏特效设计师"]),
+      item("角色动作与交互表现", "面向角色运动和交互反馈，训练动作设计、状态衔接和表现优化。", ["动作设计", "状态动画", "交互反馈"], ["游戏动作设计师", "动画设计师"]),
+      item("游戏美术项目实训", "面向团队化游戏项目，训练资产协作、版本管理、整合测试和成果展示。", ["美术协作", "资产整合", "项目交付"], ["游戏美术项目执行", "数字资产制作员"])
+    ];
+  }
+
+  if (/短视频|视觉包装|栏目包装/i.test(context)) {
+    return [
+      item("短视频内容策划与脚本", "面向短视频传播任务，训练选题、脚本结构、镜头规划和平台表达。", ["内容策划", "脚本设计", "镜头规划"], ["短视频策划", "内容编导"]),
+      item("动态视觉与栏目包装", "面向栏目和品牌内容包装，训练动态图形、标题字幕、转场和视觉识别。", ["动态图形", "栏目包装", "品牌识别"], ["动态视觉设计师", "包装设计师"]),
+      item("短视频剪辑与视听语言", "面向短视频成片生产，训练镜头组织、节奏控制和声音协同。", ["视频剪辑", "视听节奏", "声音设计"], ["短视频剪辑师", "后期制作"]),
+      item("新媒体品牌视觉传播", "面向多平台品牌传播，训练视觉系统、内容适配和传播执行。", ["品牌视觉", "平台适配", "传播执行"], ["新媒体视觉设计师", "品牌内容设计师"]),
+      item("短视频运营与数据复盘", "面向内容发布和持续运营，训练平台输出、数据观察和迭代优化。", ["内容发布", "数据分析", "运营复盘"], ["内容运营专员", "新媒体运营"])
+    ];
+  }
+
+  if (/AIGC.*视觉|视觉内容创作|生成式视觉/i.test(context)) {
+    return [
+      item("视觉创意与概念设计", "面向视觉传播项目，训练主题提炼、概念构建和创意提案。", ["视觉策划", "概念设计", "提案表达"], ["视觉设计师", "创意设计师"]),
+      item("生成式图像设计", "面向AIGC图像生产，训练提示策略、生成控制、筛选与人工精修。", ["提示设计", "生成控制", "图像精修"], ["AIGC视觉设计师", "生成式内容设计师"]),
+      item("品牌视觉系统设计", "面向品牌传播，训练标识语言、版式系统和多场景视觉延展。", ["品牌识别", "版式系统", "视觉延展"], ["品牌视觉设计师", "数字美术设计师"]),
+      item("动态图形与短视频视觉", "面向动态内容生产，训练动态图形、镜头节奏和视听包装。", ["动态图形", "短视频包装", "视听节奏"], ["动态视觉设计师", "短视频包装设计师"]),
+      item("数字内容发布与运营", "面向多平台数字内容，训练发布适配、内容运营和效果复盘。", ["平台适配", "内容运营", "效果复盘"], ["数字内容运营", "新媒体内容执行"])
+    ];
+  }
+
+  if (/影视动画|三维角色|动画制作|角色动画/i.test(context)) {
+    return [
+      item("动画剧本与分镜设计", "面向动画前期策划，训练故事结构、镜头拆解和视觉叙事表达。", ["剧本设计", "分镜表达", "视觉叙事"], ["动画分镜师", "动画导演助理"]),
+      item("三维角色与资产制作", "面向角色、道具等数字资产生产，训练造型、拓扑、材质和资产规范。", ["角色建模", "材质制作", "资产优化"], ["三维模型师", "数字资产制作员"]),
+      item("角色绑定与动作表现", "面向角色运动制作，训练骨骼绑定、动作节奏和表演表达。", ["角色绑定", "动作设计", "表演控制"], ["角色动画师", "三维动画师"]),
+      item("动画场景与镜头渲染", "面向动画镜头生产，训练场景搭建、灯光材质和渲染输出。", ["场景搭建", "灯光材质", "镜头渲染"], ["场景设计师", "灯光渲染师"]),
+      item("影视动画后期合成", "面向成片交付，训练剪辑、合成、声音配合和视觉包装。", ["后期合成", "剪辑包装", "成片输出"], ["影视后期制作", "合成师"]),
+      item("动画项目综合实训", "面向动画项目全流程，训练团队协作、生产管理、成果交付和项目复盘。", ["流程协作", "项目管理", "成果评价"], ["动画项目执行", "数字内容项目执行"])
+    ];
+  }
+
+  if (/数字媒体艺术|视觉|短视频|品牌|AIGC|新媒体/i.test(context)) return digitalMediaCourseFillers();
+
+  return [
+    item(`${course.majorDirection}创意策划`, "面向专业项目策划，训练需求分析、创意形成和方案表达。", ["需求分析", "创意策划", "方案表达"], ["创意策划", "项目助理"]),
+    item(`${course.majorDirection}工具与方法`, "面向专业生产工具和方法，训练规范操作、方案实现和质量控制。", ["工具应用", "方案实现", "质量控制"], ["专业制作人员", "项目执行"]),
+    item(`${course.majorDirection}项目制作`, "面向典型工作任务，训练完整生产流程和成果交付。", ["项目制作", "流程协作", "成果交付"], ["内容制作人员", "项目执行"]),
+    item(`${course.majorDirection}成果展示与评价`, "面向专业成果呈现，训练展示表达、评价反馈和迭代优化。", ["成果展示", "评价反馈", "迭代优化"], ["项目展示专员", "内容运营"])
+  ];
+}
+
+function rotatingValues<T>(values: T[], index: number, size: number) {
   if (!values.length) return [];
   return Array.from({ length: Math.min(size, values.length) }, (_, offset) => values[(index + offset) % values.length]);
 }
@@ -818,31 +993,18 @@ function normalizeCoreCourseSuggestions(
       };
     })
     .filter((item): item is CoreCourseSuggestion => Boolean(item));
-  const seenAbilitySignatures = new Set<string>();
-  const seenJobSignatures = new Set<string>();
-  const differentiatedModelSuggestions = normalizedModelSuggestions.map((item, index) => {
-    const abilitySignature = item.supportedAbilityNames.map(canonicalDisplayName).sort().join("|");
-    const jobSignature = item.relatedJobNames.map(canonicalDisplayName).sort().join("|");
-    const supportedAbilityNames = seenAbilitySignatures.has(abilitySignature)
-      ? rotatingValues(fallbackAbilityPool, index * 2, 4)
-      : item.supportedAbilityNames;
-    const relatedJobNames = seenJobSignatures.has(jobSignature)
-      ? rotatingValues(fallbackJobPool, index * 2, 3)
-      : item.relatedJobNames;
-    seenAbilitySignatures.add(supportedAbilityNames.map(canonicalDisplayName).sort().join("|"));
-    seenJobSignatures.add(relatedJobNames.map(canonicalDisplayName).sort().join("|"));
-    return { ...item, relatedJobNames, supportedAbilityNames };
-  });
-
-  const domainFillers = /数字媒体|视觉|新媒体|AIGC/i.test(`${course.majorDirection}${currentName}`)
-    ? digitalMediaCourseFillers()
-    : fallback.filter((item) => !item.isCurrentCourse);
+  const domainFillers = coreCourseFallbackPool(course);
   const seen = new Set<string>([currentKey]);
   const uniqueSuggestions = [currentCourse];
-  const candidates = [...differentiatedModelSuggestions, ...domainFillers, ...digitalMediaCourseFillers()];
+  const candidates = hasValidSuggestions
+    ? [...normalizedModelSuggestions, ...(normalizedModelSuggestions.length < 3 ? domainFillers : [])]
+    : [...domainFillers, ...fallback.filter((item) => !item.isCurrentCourse)];
+  const targetCount = hasValidSuggestions
+    ? Math.max(4, Math.min(8, normalizedModelSuggestions.length + 1))
+    : Math.max(4, Math.min(8, domainFillers.length + 1));
 
   candidates.forEach((item, index) => {
-    if (uniqueSuggestions.length >= 6) return;
+    if (uniqueSuggestions.length >= targetCount) return;
     const name = cleanDisplayText(item.name, "", 80);
     const key = canonicalDisplayName(name);
     if (!key || seen.has(key)) return;
@@ -866,7 +1028,7 @@ function normalizeCoreCourseSuggestions(
   if (uniqueSuggestions.length > uniqueModelNameCount) warnings.push("CORE_COURSE_SUGGESTIONS_LOCAL_SUPPLEMENT");
   if (!currentCandidate) warnings.push("coreCourseSuggestions 缺少当前课程入口，已自动补充当前课程入口。");
 
-  return uniqueSuggestions.slice(0, 6);
+  return uniqueSuggestions.slice(0, 8);
 }
 
 function normalizeProcessGraphStageText(stage: ProcessGraphStage): ProcessGraphStage {
@@ -969,17 +1131,44 @@ function rebuildCoreCourseGraph(baseGraph: ProcessGraphStage, suggestions: CoreC
   });
 }
 
+function semanticTextTokens(value: unknown) {
+  const normalized = cleanDisplayText(value, "", 500).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+  const tokens = new Set<string>();
+  for (let index = 0; index < normalized.length - 1; index += 1) tokens.add(normalized.slice(index, index + 2));
+  return tokens;
+}
+
+function semanticTextSimilarity(left: unknown, right: unknown) {
+  const leftTokens = semanticTextTokens(left);
+  const rightTokens = semanticTextTokens(right);
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  let intersection = 0;
+  leftTokens.forEach((token) => {
+    if (rightTokens.has(token)) intersection += 1;
+  });
+  return intersection / Math.max(leftTokens.size, rightTokens.size);
+}
+
+function relatedModulesForNode(node: ProcessGraphNode, teachingModules: TeachingModuleNode[], count = 2) {
+  const nodeText = [node.title, node.description, ...(node.tags || [])].join(" ");
+  const ranked = teachingModules
+    .map((module) => ({ module, score: semanticTextSimilarity(nodeText, `${module.name} ${module.description || ""}`) }))
+    .sort((left, right) => right.score - left.score);
+  const meaningful = ranked.filter((item) => item.score > 0).slice(0, count).map((item) => item.module);
+  return meaningful.length ? meaningful : teachingModules.slice(0, count);
+}
+
 function alignProcessStageWithTeachingModules(stage: ProcessGraphStage, teachingModules: TeachingModuleNode[]) {
   if (!teachingModules.length || stage.id === "coreCourses") return stage;
   const oldCourseModuleIds = new Set(stage.nodes.filter((node) => node.type === "courseModule").map((node) => node.id));
   const nonModuleNodes = stage.nodes
     .filter((node) => node.type !== "courseModule")
-    .map((node, index) => {
+    .map((node) => {
       if (!node.relatedModuleIds?.length) return node;
       const relationCount = Math.min(2, Math.max(1, node.relatedModuleIds.length));
       return {
         ...node,
-        relatedModuleIds: rotatingValues(teachingModules.map((module) => module.id), index, relationCount)
+        relatedModuleIds: relatedModulesForNode(node, teachingModules, relationCount).map((module) => module.id)
       };
     });
 
@@ -996,10 +1185,11 @@ function alignProcessStageWithTeachingModules(stage: ProcessGraphStage, teaching
   }));
   const middleNodes = nonModuleNodes.filter((node) => node.level === 2);
   const retainedEdges = stage.edges.filter((edge) => !oldCourseModuleIds.has(edge.source) && !oldCourseModuleIds.has(edge.target));
-  const moduleEdges = middleNodes.flatMap<ProcessGraphEdge>((node, index) =>
-    rotatingValues(moduleNodes.map((module) => module.id), index, Math.min(2, moduleNodes.length)).map((target) => ({
+  const moduleNodeByModuleId = new Map(moduleNodes.map((node) => [node.relatedModuleIds?.[0], node]));
+  const moduleEdges = middleNodes.flatMap<ProcessGraphEdge>((node) =>
+    relatedModulesForNode(node, teachingModules, Math.min(2, teachingModules.length)).map((module) => ({
       source: node.id,
-      target,
+      target: moduleNodeByModuleId.get(module.id)!.id,
       label: "支撑"
     }))
   );
@@ -1978,28 +2168,90 @@ function createMockCourseAbilityGraph(input: CourseAbilityGraphInput = DEFAULT_I
     }
   };
 
-  if (/数字媒体|视觉|新媒体|AIGC/i.test(`${course.majorDirection}${course.courseName}`)) {
-    const defaults = processGraphSemanticDefaults(course);
-    const processGraphFallback = expandProcessGraphsSemanticSkeleton(
-      {
-        industryChanges: defaults.industryChanges,
-        industryKeywords: defaults.industryKeywords,
-        regionalJobs: defaults.regionalJobs,
-        majorAbilities: defaults.majorAbilities,
-        coreCourses: readableCoreCourseSuggestions.map((suggestion) => ({
-          isCurrentCourse: suggestion.isCurrentCourse,
+  const dynamicCourseOutput = expandCourseStructureSemanticSkeleton(fallbackCourseStructureSkeleton(course), course, payload);
+  payload.workflowStages = dynamicCourseOutput.workflowStages as WorkflowStage[];
+  payload.teachingModules = dynamicCourseOutput.teachingModules as TeachingModuleNode[];
+  payload.tasks = dynamicCourseOutput.tasks as CourseTaskNode[];
+  payload.courseAbilityMap = dynamicCourseOutput.courseAbilityMap as CourseAbilityMap;
+  payload.abilityTree = buildAbilityTree(payload.courseAbilityMap.nodes);
+  payload.courseProfile = {
+    positioning: payload.courseAbilityMap.rootNode.description,
+    targetJobIds: [],
+    coreAbilityStructure: payload.workflowStages.map((stage) => `${stage.name}（${stage.moduleIds.length} 个教学模块）`),
+    mockNotice: DATA_NOTICE
+  };
+  payload.moduleMappings = buildGenericModuleMappings(course, payload.teachingModules);
+
+  const defaults = processGraphSemanticDefaults(course);
+  const fallbackCourses = coreCourseFallbackPool(course);
+  const fallbackAbilities = defaults.majorAbilities.map((ability) => cleanDisplayText(ability.name, "专业能力", 60));
+  const fallbackJobs = defaults.regionalJobs.map((job) => cleanDisplayText(job.name, "相关岗位", 60));
+  const processGraphFallback = expandProcessGraphsSemanticSkeleton(
+    {
+      structureStrategy: {
+        industryLogic: `围绕${course.region}地区${course.majorDirection}相关产业变化组织课程建设依据。`,
+        jobLogic: `从${course.region}地区典型岗位任务识别课程服务对象。`,
+        abilityLogic: `从岗位任务中抽取支撑《${course.courseName}》的专业能力。`,
+        courseLogic: `根据${course.majorDirection}专业能力结构形成差异化核心课程体系。`
+      },
+      industryChanges: defaults.industryChanges,
+      industryKeywords: defaults.industryKeywords,
+      courseImpacts: payload.workflowStages.map((stage) => `课程需要覆盖${stage.name}`),
+      regionalJobs: defaults.regionalJobs,
+      majorAbilities: defaults.majorAbilities,
+      coreCourses: [
+        {
+          isCurrentCourse: true,
+          name: course.courseName,
+          position: `面向${course.majorDirection}专业的综合项目课程，训练与${course.courseName}相关的完整工作流程。`,
+          reason: `承担${course.courseName}核心技能、项目实施与成果交付训练。`,
+          supportedAbilityNames: fallbackAbilities.slice(0, 5),
+          relatedJobNames: fallbackJobs.slice(0, 4)
+        },
+        ...fallbackCourses.map((suggestion) => ({
+          isCurrentCourse: false,
           name: suggestion.name,
           position: suggestion.position,
-          reason: suggestion.description
+          reason: suggestion.description,
+          supportedAbilityNames: suggestion.supportedAbilityNames,
+          relatedJobNames: suggestion.relatedJobNames
         }))
-      },
-      course,
-      payload
-    );
-    payload.industryGraph = normalizeProcessGraphStageText(processGraphFallback.industryGraph as ProcessGraphStage);
-    payload.regionalJobGraph = normalizeProcessGraphStageText(processGraphFallback.regionalJobGraph as ProcessGraphStage);
-    payload.majorAbilityGraph = normalizeProcessGraphStageText(processGraphFallback.majorAbilityGraph as ProcessGraphStage);
-  }
+      ]
+    },
+    course,
+    payload
+  );
+  payload.industryGraph = normalizeProcessGraphStageText(processGraphFallback.industryGraph as ProcessGraphStage);
+  payload.regionalJobGraph = normalizeProcessGraphStageText(processGraphFallback.regionalJobGraph as ProcessGraphStage);
+  payload.majorAbilityGraph = normalizeProcessGraphStageText(processGraphFallback.majorAbilityGraph as ProcessGraphStage);
+  payload.coreCourseSuggestions = processGraphFallback.coreCourseSuggestions as CoreCourseSuggestion[];
+  payload.coreCourseGraph = normalizeProcessGraphStageText(processGraphFallback.coreCourseGraph as ProcessGraphStage);
+  payload.structureStrategy = processGraphFallback.structureStrategy as CapabilityMapStructureStrategy;
+  payload.relatedJobs = defaults.regionalJobs.map((job, index) => ({
+    id: semanticId("job", cleanDisplayText(job.name, `岗位${index + 1}`, 60), index),
+    title: cleanDisplayText(job.name, `岗位${index + 1}`, 60),
+    relevance: semanticPercent(job.relevance, 80),
+    reason: cleanDescription(job.description, `该岗位与《${course.courseName}》课程能力相关。`, 160)
+  }));
+  payload.skillWeights = defaults.majorAbilities.map((ability) => ({
+    skill: cleanDisplayText(ability.name, "专业能力", 60),
+    weight: semanticPercent(ability.weight, 15),
+    description: cleanDescription(ability.description, `该能力支撑《${course.courseName}》课程项目实施。`, 160)
+  }));
+  payload.salaryRanges = payload.relatedJobs.map((job) => ({
+    jobTitle: job.title,
+    min: 0,
+    max: 0,
+    unit: "CNY/month",
+    region: course.region,
+    note: "当前未接入真实招聘资料，薪资区间待后续人工校准。"
+  }));
+  payload.updateSuggestions = payload.workflowStages.slice(0, 4).map((stage, index) => ({
+    title: `围绕${stage.name}更新课程项目`,
+    priority: index === 0 ? "high" : "medium",
+    reason: `${stage.name}是《${course.courseName}》工作流程中的关键环节，需要通过项目成果验证。`,
+    actions: stage.moduleIds.map((moduleId) => `完善${payload.teachingModules.find((module) => module.id === moduleId)?.name || "教学模块"}任务与评价要求`)
+  }));
 
   return payload;
 }
@@ -2057,8 +2309,78 @@ function semanticTextArray(value: unknown, fallback: string[], max = 8, fillFrom
     .slice(0, max);
 }
 
-function processGraphSemanticDefaults(input: CourseAbilityGraphInput) {
-  const digitalVisualCourse = /数字媒体|视觉|新媒体|AIGC/i.test(`${input.majorDirection}${input.courseName}`);
+function processGraphSemanticDefaults(input: CourseAbilityGraphInput): {
+  industryChanges: string[];
+  industryKeywords: string[];
+  majorAbilities: NonNullable<ProcessGraphsSemanticSkeleton["majorAbilities"]>;
+  regionalJobs: NonNullable<ProcessGraphsSemanticSkeleton["regionalJobs"]>;
+} {
+  const context = `${input.majorDirection}${input.courseName}`;
+
+  if (/数字媒体技术|交互媒体|交互设计|媒体系统/i.test(context)) {
+    return {
+      industryChanges: ["交互内容向多端实时体验演进", "媒体应用强化前端技术与数据表达", "数字展陈重视体验测试与稳定交付", "实时图形技术进入互动内容生产"],
+      industryKeywords: ["交互媒体应用", "数字展陈与体验设计", "前端媒体技术", "实时图形与可视化"],
+      regionalJobs: [
+        { name: "交互设计师", relevance: 94, description: "负责用户流程、交互原型和体验验证。", industryKeywords: ["交互媒体应用", "数字展陈与体验设计"] },
+        { name: "前端媒体开发工程师", relevance: 91, description: "负责界面、媒体组件和交互功能实现。", industryKeywords: ["前端媒体技术"] },
+        { name: "数字展陈设计师", relevance: 86, description: "负责展陈内容组织、互动体验和现场呈现。", industryKeywords: ["数字展陈与体验设计"] },
+        { name: "数据可视化设计师", relevance: 84, description: "负责数据叙事、可视编码和交互呈现。", industryKeywords: ["实时图形与可视化"] },
+        { name: "数字媒体项目执行", relevance: 81, description: "负责需求协同、测试发布和项目交付。", industryKeywords: ["交互媒体应用", "前端媒体技术"] }
+      ],
+      majorAbilities: [
+        { name: "交互需求与体验设计能力", weight: 20, description: "能够分析用户场景并设计清晰的交互流程。", elements: ["用户场景分析", "信息架构", "交互流程"] },
+        { name: "界面原型与视觉设计能力", weight: 18, description: "能够完成界面系统、高保真原型和反馈动效。", elements: ["界面规范", "高保真原型", "交互动效"] },
+        { name: "前端媒体实现能力", weight: 22, description: "能够实现界面组件、媒体集成和交互逻辑。", elements: ["组件开发", "媒体集成", "交互逻辑"] },
+        { name: "测试与性能优化能力", weight: 16, description: "能够开展可用性测试、兼容检查和性能优化。", elements: ["可用性测试", "兼容性检查", "性能优化"] },
+        { name: "媒体项目交付能力", weight: 14, description: "能够完成部署发布、成果展示和项目复盘。", elements: ["部署发布", "成果说明", "项目复盘"] }
+      ]
+    };
+  }
+
+  if (/三维角色|角色动画|影视动画|动画制作/i.test(context)) {
+    return {
+      industryChanges: ["角色动画生产强化数字资产协同", "实时预览缩短动画反馈周期", "绑定与动作质量成为岗位核心评价项", "动画项目更重视标准化交付"],
+      industryKeywords: ["影视动画内容生产", "三维角色资产", "角色动画制作", "实时动画预览"],
+      regionalJobs: [
+        { name: "角色动画师", relevance: 96, description: "负责角色动作、表演和动画曲线精修。", industryKeywords: ["角色动画制作"] },
+        { name: "角色绑定师", relevance: 91, description: "负责骨骼、蒙皮、控制器和变形测试。", industryKeywords: ["三维角色资产"] },
+        { name: "三维动画师", relevance: 89, description: "负责镜头动画、动作表现和预览输出。", industryKeywords: ["影视动画内容生产", "实时动画预览"] },
+        { name: "动画技术美术", relevance: 83, description: "负责动画技术流程、工具和实时表现优化。", industryKeywords: ["实时动画预览"] },
+        { name: "动画项目执行", relevance: 80, description: "负责资产协同、进度检查和成果交付。", industryKeywords: ["影视动画内容生产"] }
+      ],
+      majorAbilities: [
+        { name: "角色结构与动作分析能力", weight: 16, description: "能够分析角色结构、运动目标和表演需求。", elements: ["角色结构检查", "动作方案设计", "表演分析"] },
+        { name: "角色绑定与变形控制能力", weight: 22, description: "能够完成骨骼、蒙皮、控制器和变形修订。", elements: ["骨骼搭建", "蒙皮权重", "控制器设计"] },
+        { name: "运动规律与关键姿态能力", weight: 20, description: "能够控制重心、惯性、节奏和关键姿态。", elements: ["关键姿态", "重心控制", "运动节奏"] },
+        { name: "角色表演与动画精修能力", weight: 24, description: "能够完成角色表演、曲线调整和动作衔接。", elements: ["角色表演", "动画曲线", "动作衔接"] },
+        { name: "动画输出与项目复盘能力", weight: 14, description: "能够完成预览输出、质量检查和问题复盘。", elements: ["预览输出", "质量检查", "项目复盘"] }
+      ]
+    };
+  }
+
+  if (/短视频|视觉包装|栏目包装/i.test(context)) {
+    return {
+      industryChanges: ["短视频平台要求多画幅快速适配", "品牌传播强化动态视觉识别", "栏目包装重视视听节奏协同", "内容生产转向高频迭代与数据复盘"],
+      industryKeywords: ["短视频内容生产", "动态视觉包装", "品牌新媒体传播", "多平台内容运营"],
+      regionalJobs: [
+        { name: "短视频视觉包装设计师", relevance: 96, description: "负责片头、字幕、转场和动态视觉系统。", industryKeywords: ["短视频内容生产", "动态视觉包装"] },
+        { name: "动态视觉设计师", relevance: 92, description: "负责动态图形、品牌动效和视听表达。", industryKeywords: ["动态视觉包装", "品牌新媒体传播"] },
+        { name: "短视频剪辑师", relevance: 88, description: "负责镜头组织、节奏控制和声音配合。", industryKeywords: ["短视频内容生产"] },
+        { name: "新媒体视觉设计师", relevance: 85, description: "负责多平台品牌视觉与传播素材设计。", industryKeywords: ["品牌新媒体传播"] },
+        { name: "内容运营执行", relevance: 79, description: "负责发布检查、平台适配和效果复盘。", industryKeywords: ["多平台内容运营"] }
+      ],
+      majorAbilities: [
+        { name: "短视频传播策划能力", weight: 16, description: "能够根据平台和受众形成内容与视觉定位。", elements: ["受众分析", "内容主题", "视觉定位"] },
+        { name: "动态视觉系统设计能力", weight: 22, description: "能够设计标题、字幕、转场和动态元素。", elements: ["动态图形", "动态版式", "转场设计"] },
+        { name: "剪辑与视听节奏能力", weight: 20, description: "能够组织镜头并协调音乐、音效和画面节奏。", elements: ["镜头剪辑", "声音匹配", "节奏控制"] },
+        { name: "品牌包装整合能力", weight: 18, description: "能够保持品牌视觉一致并完成多场景延展。", elements: ["品牌识别", "包装合成", "多画幅适配"] },
+        { name: "发布与传播复盘能力", weight: 14, description: "能够完成平台输出、发布检查和效果复盘。", elements: ["平台输出", "发布检查", "数据复盘"] }
+      ]
+    };
+  }
+
+  const digitalVisualCourse = /数字媒体艺术|视觉|新媒体|AIGC/i.test(context);
   if (!digitalVisualCourse) {
     return {
       industryChanges: ["智能工具进入创意生产流程", "项目成果成为岗位评价的重要依据", "多平台内容交付要求提升"],
@@ -2154,22 +2476,53 @@ export function expandProcessGraphsSemanticSkeleton(
   fallback: CourseAbilityGraphPayload
 ): CourseAbilityGraphModelOutput {
   const semanticDefaults = processGraphSemanticDefaults(input);
-  const prioritizeDigitalVisualDefaults = /数字媒体|视觉|新媒体|AIGC/i.test(`${input.majorDirection}${input.courseName}`);
-  const modelIndustryKeywords = semanticTextArray(skeleton.industryKeywords, [], 6);
-  const industryKeywords = semanticTextArray(
-    prioritizeDigitalVisualDefaults ? [...semanticDefaults.industryKeywords, ...modelIndustryKeywords] : [...modelIndustryKeywords, ...semanticDefaults.industryKeywords],
-    semanticDefaults.industryKeywords,
+  const expansionWarnings: string[] = [];
+  if (!Array.isArray(skeleton.industryKeywords) || !skeleton.industryKeywords.length) expansionWarnings.push("LOCAL_FIELD_FALLBACK_INDUSTRY_KEYWORDS");
+  if (!Array.isArray(skeleton.industryChanges) || !skeleton.industryChanges.length) expansionWarnings.push("LOCAL_FIELD_FALLBACK_INDUSTRY_CHANGES");
+  if (!Array.isArray(skeleton.courseImpacts) || !skeleton.courseImpacts.length) expansionWarnings.push("LOCAL_FIELD_FALLBACK_COURSE_IMPACTS");
+  const industryKeywords = semanticTextArray(skeleton.industryKeywords, semanticDefaults.industryKeywords, 6);
+  const industryChanges = semanticTextArray(skeleton.industryChanges, semanticDefaults.industryChanges, 7);
+  const courseImpacts = semanticTextArray(
+    skeleton.courseImpacts,
+    [
+      `更新《${input.courseName}》课程内容`,
+      `重组${input.courseName}项目工作流程`,
+      "强化可评价的项目成果",
+      "建立面向岗位交付的课程评价"
+    ],
     6
   );
-  const industryChanges = semanticTextArray(skeleton.industryChanges, semanticDefaults.industryChanges, 6, true);
+  const structureStrategy: CapabilityMapStructureStrategy = {
+    industryLogic: cleanDescription(
+      skeleton.structureStrategy?.industryLogic,
+      `围绕${input.region}地区${input.majorDirection}相关产业变化组织产业图谱。`,
+      220
+    ),
+    jobLogic: cleanDescription(
+      skeleton.structureStrategy?.jobLogic,
+      `从${input.region}地区与${input.majorDirection}相关的典型岗位任务提炼岗位图谱。`,
+      220
+    ),
+    abilityLogic: cleanDescription(
+      skeleton.structureStrategy?.abilityLogic,
+      `从岗位任务中抽取支撑《${input.courseName}》的专业能力与能力要素。`,
+      220
+    ),
+    courseLogic: cleanDescription(
+      skeleton.structureStrategy?.courseLogic,
+      `根据专业能力结构形成${input.majorDirection}核心课程体系。`,
+      220
+    )
+  };
   const modelRegionalJobs = Array.isArray(skeleton.regionalJobs)
     ? skeleton.regionalJobs.filter((job) => {
         const name = cleanDisplayText(job.name, "", 60);
         return Boolean(name) && !isLowQualitySemanticText(name);
       })
     : [];
+  if (!modelRegionalJobs.length) expansionWarnings.push("LOCAL_FIELD_FALLBACK_REGIONAL_JOBS");
   const regionalJobNames = new Set<string>();
-  const regionalJobs = (prioritizeDigitalVisualDefaults ? [...semanticDefaults.regionalJobs, ...modelRegionalJobs] : [...modelRegionalJobs, ...semanticDefaults.regionalJobs]).filter((job) => {
+  const regionalJobs = (modelRegionalJobs.length ? modelRegionalJobs : semanticDefaults.regionalJobs).filter((job) => {
     const key = canonicalDisplayName(cleanDisplayText(job.name, "", 60));
     if (!key || regionalJobNames.has(key)) return false;
     regionalJobNames.add(key);
@@ -2186,19 +2539,45 @@ export function expandProcessGraphsSemanticSkeleton(
         );
       })
     : [];
+  if (!modelMajorAbilities.length) expansionWarnings.push("LOCAL_FIELD_FALLBACK_MAJOR_ABILITIES");
   const majorAbilityNames = new Set<string>();
-  const majorAbilityGroups = new Set<string>();
-  const majorAbilities = (prioritizeDigitalVisualDefaults ? [...semanticDefaults.majorAbilities, ...modelMajorAbilities] : [...modelMajorAbilities, ...semanticDefaults.majorAbilities]).filter((ability) => {
+  const majorAbilities = (modelMajorAbilities.length ? modelMajorAbilities : semanticDefaults.majorAbilities).filter((ability) => {
     const title = cleanDisplayText(ability.name, "", 60);
     const key = canonicalDisplayName(title);
-    const group = majorAbilitySemanticGroup(title);
     if (!key || majorAbilityNames.has(key)) return false;
-    if (group && majorAbilityGroups.has(group)) return false;
     majorAbilityNames.add(key);
-    if (group) majorAbilityGroups.add(group);
     return true;
-  }).slice(0, 7);
-  const coreCourses = Array.isArray(skeleton.coreCourses) ? skeleton.coreCourses.filter((course) => cleanDisplayText(course.name, "", 80)) : [];
+  }).slice(0, 8);
+  const seenCourseNames = new Set<string>();
+  const modelCoreCourses = Array.isArray(skeleton.coreCourses)
+    ? skeleton.coreCourses.filter((course) => {
+        const key = canonicalDisplayName(cleanDisplayText(course.name, "", 80));
+        if (!key || seenCourseNames.has(key)) return false;
+        seenCourseNames.add(key);
+        return true;
+      }).slice(0, 8)
+    : [];
+  if (!modelCoreCourses.length) expansionWarnings.push("LOCAL_FIELD_FALLBACK_CORE_COURSES");
+  const coreCourses = modelCoreCourses.length
+    ? modelCoreCourses
+    : [
+        {
+          name: input.courseName,
+          isCurrentCourse: true,
+          position: `面向${input.majorDirection}专业的综合项目课程。`,
+          reason: `承担《${input.courseName}》相关工作流程和项目交付训练。`,
+          supportedAbilityNames: majorAbilities.slice(0, 5).map((ability) => cleanDisplayText(ability.name, "专业能力", 60)),
+          relatedJobNames: regionalJobs.slice(0, 4).map((job) => cleanDisplayText(job.name, "相关岗位", 60))
+        },
+        ...coreCourseFallbackPool(input).slice(0, 7).map((course) => ({
+          name: course.name,
+          isCurrentCourse: false,
+          position: course.position,
+          reason: course.description,
+          supportedAbilityNames: course.supportedAbilityNames,
+          relatedJobNames: course.relatedJobNames
+        }))
+      ];
   if (!industryKeywords.length || !industryChanges.length || !regionalJobs.length || !majorAbilities.length || !coreCourses.length) {
     throw new Error("MODEL_OUTPUT_MISSING_CORE_FIELDS");
   }
@@ -2221,12 +2600,7 @@ export function expandProcessGraphsSemanticSkeleton(
     level: 2,
     relatedModuleIds: fallback.teachingModules.slice(index % 2, index % 2 + 2).map((module) => module.id)
   }));
-  const impactNodes: ProcessGraphNode[] = [
-    "调整课程内容",
-    "强化项目化流程",
-    "补充 AI 工具链",
-    "强化作品展示评价"
-  ].map((title, index) => ({
+  const impactNodes: ProcessGraphNode[] = courseImpacts.map((title, index) => ({
     id: semanticId("impact", title, index),
     type: "impact",
     title,
@@ -2240,12 +2614,16 @@ export function expandProcessGraphsSemanticSkeleton(
     id: "industry",
     title: "产业图谱",
     lead: "从产业变化识别课程内容更新方向。",
-    summary: `围绕${input.region}地区${input.majorDirection}产业变化，识别《${input.courseName}》的内容更新、项目流程与评价方向。`,
+    summary: structureStrategy.industryLogic || `围绕${input.region}地区${input.majorDirection}产业变化，识别《${input.courseName}》的内容更新方向。`,
     notice: DATA_NOTICE,
     nodes: [...industryNodes, ...changeNodes, ...impactNodes],
     edges: [
-      ...industryNodes.flatMap((source) => changeNodes.slice(0, 3).map((target) => ({ source: source.id, target: target.id, label: "影响" }))),
-      ...changeNodes.map((source, index) => ({ source: source.id, target: impactNodes[index % impactNodes.length].id, label: "推导" }))
+      ...changeNodes.flatMap((target, index) =>
+        rotatingValues(industryNodes.map((node) => node.id), index, Math.min(2, industryNodes.length)).map((source) => ({ source, target: target.id, label: "影响" }))
+      ),
+      ...changeNodes.flatMap((source, index) =>
+        rotatingValues(impactNodes.map((node) => node.id), index, Math.min(2, impactNodes.length)).map((target) => ({ source: source.id, target, label: "推导" }))
+      )
     ],
     keyItems: industryChanges.slice(0, 4).map((change) => ({
       title: change,
@@ -2285,11 +2663,17 @@ export function expandProcessGraphsSemanticSkeleton(
     id: "regionalJobs",
     title: "区域岗位图谱",
     lead: "从区域岗位需求定位课程服务对象。",
-    summary: `从${input.region}地区数字内容产业方向识别典型岗位，并说明岗位任务与《${input.courseName}》教学模块的关系。`,
+    summary: structureStrategy.jobLogic || `从${input.region}地区识别典型岗位，并说明岗位任务与《${input.courseName}》的关系。`,
     notice: DATA_NOTICE,
     nodes: [...regionNodes, ...jobNodes, ...regionalModuleNodes],
     edges: [
-      ...regionNodes.flatMap((source) => jobNodes.slice(0, 4).map((target) => ({ source: source.id, target: target.id, label: "对应" }))),
+      ...jobNodes.flatMap((target, index) => {
+        const job = regionalJobs[index];
+        const requested = semanticTextArray(job?.industryKeywords, [], regionNodes.length);
+        const related = regionNodes.filter((source) => requested.some((keyword) => canonicalDisplayName(source.title).includes(canonicalDisplayName(keyword))));
+        const sources = related.length ? related : rotatingValues(regionNodes, index, Math.min(2, regionNodes.length));
+        return sources.map((source) => ({ source: source.id, target: target.id, label: "对应" }));
+      }),
       ...jobNodes.flatMap((job, index) =>
         fallback.teachingModules.slice(index % 3, index % 3 + 2).map((module) => ({ source: job.id, target: `regional_module_${module.id}`, label: "支撑" }))
       )
@@ -2306,17 +2690,18 @@ export function expandProcessGraphsSemanticSkeleton(
     level: 1,
     weight: semanticPercent(ability.weight, 15)
   }));
-  const elementNodes: ProcessGraphNode[] = abilityNodes.map((ability, index) => {
-    const title = abilityElementTitle(ability.title);
-    return {
-      id: `${ability.id}_element_1`,
+  const elementNodes: ProcessGraphNode[] = abilityNodes.flatMap((ability, index) => {
+    const sourceAbility = majorAbilities[index];
+    const elements = semanticTextArray(sourceAbility?.elements, [abilityElementTitle(ability.title)], 4);
+    return elements.map((title, elementIndex) => ({
+      id: `${ability.id}_element_${elementIndex + 1}`,
       type: "element" as const,
       title,
       subtitle: "关键能力要素",
       description: `${title}用于把${ability.title}落实到课程项目任务和可评价成果。`,
       level: 2 as const,
-      relatedModuleIds: [fallback.teachingModules[index % fallback.teachingModules.length]?.id].filter(Boolean)
-    };
+      relatedModuleIds: [fallback.teachingModules[(index + elementIndex) % fallback.teachingModules.length]?.id].filter(Boolean)
+    }));
   });
   const majorModuleNodes: ProcessGraphNode[] = fallback.teachingModules.map((module) => ({
     id: `major_module_${module.id}`,
@@ -2331,7 +2716,7 @@ export function expandProcessGraphsSemanticSkeleton(
     id: "majorAbilities",
     title: "专业能力图谱",
     lead: "从岗位能力抽取专业能力结构。",
-    summary: `从${input.region}地区岗位任务抽取${input.majorDirection}专业能力，并映射到《${input.courseName}》的关键训练要素与教学模块。`,
+    summary: structureStrategy.abilityLogic || `从${input.region}地区岗位任务抽取${input.majorDirection}专业能力，并映射到课程关键训练要素。`,
     notice: DATA_NOTICE,
     nodes: [...abilityNodes, ...elementNodes, ...majorModuleNodes],
     edges: [
@@ -2341,15 +2726,28 @@ export function expandProcessGraphsSemanticSkeleton(
     keyItems: abilityNodes.map((ability) => ({ title: ability.title, description: ability.description, metric: ability.subtitle }))
   };
 
+  let currentCourseAssigned = false;
   const coreCourseSuggestions: CoreCourseSuggestion[] = coreCourses.slice(0, 8).map((course, index) => {
     const name = cleanDisplayText(course.name, index === 0 ? input.courseName : `核心课程${index + 1}`, 80);
-    const isCurrentCourse = Boolean(course.isCurrentCourse) || name === input.courseName || index === 0;
+    const wantsCurrent = Boolean(course.isCurrentCourse) || canonicalDisplayName(name) === canonicalDisplayName(input.courseName);
+    const isCurrentCourse = !currentCourseAssigned && (wantsCurrent || (index === coreCourses.length - 1 && !currentCourseAssigned));
+    if (isCurrentCourse) currentCourseAssigned = true;
+    const supportedAbilityNames = semanticTextArray(
+      course.supportedAbilityNames,
+      rotatingValues(abilityNodes.map((ability) => ability.title), index, Math.min(4, abilityNodes.length)),
+      5
+    );
+    const relatedJobNames = semanticTextArray(
+      course.relatedJobNames,
+      rotatingValues(jobNodes.map((job) => job.title), index, Math.min(3, jobNodes.length)),
+      4
+    );
     return {
       id: isCurrentCourse ? "core_course_current" : semanticId("core_course", name, index),
       name: isCurrentCourse ? input.courseName : name,
       position: cleanDescription(course.position, cleanDescription(course.reason, `${name}承接专业能力体系中的专项训练和项目交付要求。`, 160), 180),
-      supportedAbilityNames: abilityNodes.slice(0, 4).map((ability) => ability.title),
-      relatedJobNames: jobNodes.slice(0, 4).map((job) => job.title),
+      supportedAbilityNames,
+      relatedJobNames,
       description: cleanDescription(course.reason, `${name}承接${input.majorDirection}专业能力结构中的关键训练任务。`, 160),
       isCurrentCourse,
       status: isCurrentCourse ? "available" : "placeholder"
@@ -2378,13 +2776,19 @@ export function expandProcessGraphsSemanticSkeleton(
     id: "coreCourses",
     title: "专业核心课程建设建议",
     lead: "从专业能力结构推导专业核心课程体系。",
-    summary: `从${input.majorDirection}专业能力结构推导核心课程体系，并说明课程定位、支撑岗位和后续图谱生成状态。`,
+    summary: structureStrategy.courseLogic || `从${input.majorDirection}专业能力结构推导核心课程体系。`,
     notice: DATA_NOTICE,
     nodes: [...abilityNodes.map((node) => ({ ...node, id: `core_${node.id}` })), ...coreCourseNodes, ...positionNodes],
     edges: [
-      ...coreCourseNodes.flatMap((course, index) =>
-        abilityNodes.slice(0, 3).map((ability) => ({ source: `core_${ability.id}`, target: course.id, label: index === 0 ? "重点支撑" : "支撑" }))
-      ),
+      ...coreCourseSuggestions.flatMap((course, index) => {
+        const related = abilityNodes.filter((ability) => course.supportedAbilityNames.some((name) => {
+          const abilityKey = canonicalDisplayName(ability.title);
+          const nameKey = canonicalDisplayName(name);
+          return abilityKey === nameKey || abilityKey.includes(nameKey) || nameKey.includes(abilityKey);
+        }));
+        const targets = related.length ? related : rotatingValues(abilityNodes, index, Math.min(3, abilityNodes.length));
+        return targets.map((ability) => ({ source: `core_${ability.id}`, target: course.id, label: course.isCurrentCourse ? "重点支撑" : "支撑" }));
+      }),
       ...coreCourseNodes.map((course) => ({ source: course.id, target: `${course.id}_position`, label: "定位" }))
     ],
     keyItems: coreCourseSuggestions.map((course) => ({ title: course.name, description: course.position, metric: course.status === "available" ? "可查看图谱" : "后续可生成" }))
@@ -2396,7 +2800,8 @@ export function expandProcessGraphsSemanticSkeleton(
     majorAbilityGraph,
     coreCourseSuggestions,
     coreCourseGraph,
-    meta: stageMetaFromSkeleton(skeleton.meta, ["LOCAL_EXPANSION_PROCESS_GRAPHS"])
+    structureStrategy,
+    meta: stageMetaFromSkeleton(skeleton.meta, ["LOCAL_EXPANSION_PROCESS_GRAPHS", ...expansionWarnings])
   };
 }
 
@@ -2417,48 +2822,48 @@ export function expandCourseStructureSemanticSkeleton(
   const tasks: CourseTaskNode[] = [];
   let totalModuleCount = 0;
 
-  stages.slice(0, 3).forEach((stage, stageIndex) => {
+  stages.slice(0, 5).forEach((stage, stageIndex) => {
     const stageName = cleanDisplayText(stage.name, `工作流程${stageIndex + 1}`, 60);
     const stageId = uniqueSemanticId("stage", stageName, stageIndex, usedStageIds);
     const moduleIds: string[] = [];
-    (stage.modules || []).slice(0, 5).forEach((module, moduleIndex) => {
-      if (totalModuleCount >= 5) return;
+    (stage.modules || []).slice(0, 8).forEach((module, moduleIndex) => {
+      if (totalModuleCount >= 8) return;
       const moduleName = cleanDisplayText(module.name, `教学模块${moduleIndex + 1}`, 60);
       const moduleId = uniqueSemanticId("module", moduleName, moduleIndex, usedModuleIds);
       const moduleTasks = Array.isArray(module.tasks) && module.tasks.length ? module.tasks : [{ name: `${moduleName}任务`, description: module.description }];
-      const taskIds = moduleTasks.slice(0, 4).map((taskItem, taskIndex) => `${moduleId}_task_${taskIndex + 1}`);
+      const taskIds = moduleTasks.slice(0, 5).map((taskItem, taskIndex) => `${moduleId}_task_${taskIndex + 1}`);
       totalModuleCount += 1;
       moduleIds.push(moduleId);
       teachingModules.push({
         id: moduleId,
         name: moduleName,
-        hours: typeof module.hours === "number" && module.hours > 0 ? Math.round(module.hours) : fallback.teachingModules[moduleIndex % fallback.teachingModules.length]?.hours,
+        hours: typeof module.hours === "number" && module.hours > 0 ? Math.round(module.hours) : 16,
         description: cleanDescription(module.description, `${moduleName}围绕${input.courseName}课程项目展开。`, 160),
         workflowStageId: stageId,
         taskIds,
-        relatedJobIds: fallback.relatedJobs.slice(0, 3).map((job) => job.id),
+        relatedJobIds: [],
         evidenceSourceIds: fallback.evidenceSources.slice(0, 2).map((evidence) => evidence.id),
-        trendIds: fallback.industryTrends.slice(0, 2).map((trend) => trend.id),
+        trendIds: [],
         teachingSuggestions: ["采用项目任务驱动教学", "要求提交过程记录与成果说明"],
         assessmentMethods: ["阶段成果评审", "过程记录检查", "作品质量评价"]
       });
-      moduleTasks.slice(0, 4).forEach((taskItem, taskIndex) => {
+      moduleTasks.slice(0, 5).forEach((taskItem, taskIndex) => {
         tasks.push({
           id: taskIds[taskIndex],
           name: cleanDisplayText(taskItem.name, `${moduleName}任务${taskIndex + 1}`, 60),
           description: cleanDescription(taskItem.description, `${moduleName}中的任务能力点。`, 160),
           moduleId,
           abilityTags: [moduleName, stageName],
-          aiTools: ["AI辅助工具"],
-          relatedJobIds: fallback.relatedJobs.slice(0, 3).map((job) => job.id),
+          aiTools: [],
+          relatedJobIds: [],
           evidenceSourceIds: fallback.evidenceSources.slice(0, 2).map((evidence) => evidence.id),
-          trendIds: fallback.industryTrends.slice(0, 2).map((trend) => trend.id),
+          trendIds: [],
           teachingSuggestions: ["以任务成果、过程记录和问题修订作为评价依据"],
           assessmentMethods: ["任务成果质量", "过程记录完整度", "课堂展示与答辩"]
         });
       });
     });
-    workflowStages.push({
+    if (moduleIds.length) workflowStages.push({
       id: stageId,
       name: stageName,
       description: cleanDescription(stage.description, `${stageName}支撑${input.courseName}课程项目实施。`, 160),
@@ -2473,9 +2878,9 @@ export function expandCourseStructureSemanticSkeleton(
     name: `课程：${cleanDisplayText(skeleton.courseName, input.courseName, 60)}`,
     weight: 100,
     description: `${input.courseName}是${input.majorDirection}专业面向${input.region}地区岗位能力建设的项目化课程。`,
-    relatedJobIds: fallback.relatedJobs.map((job) => job.id),
+    relatedJobIds: [],
     evidenceSourceIds: fallback.evidenceSources.slice(0, 2).map((evidence) => evidence.id),
-    trendIds: fallback.industryTrends.map((trend) => trend.id),
+    trendIds: [],
     coreAbilityNodeIds: workflowStages.map((stage) => stage.id),
     x: 520,
     y: 330
@@ -2548,7 +2953,8 @@ export function expandMappingAnalysisSemanticSkeleton(
     : fallback.teachingModules.map((module) => ({
         moduleId: module.id,
         moduleName: module.name,
-        hours: module.hours
+        hours: module.hours,
+        taskNames: fallback.tasks.filter((task) => task.moduleId === module.id).map((task) => task.name)
       }))
   ).filter((module) => module.moduleId && module.moduleName);
   if (!finalModules.length) throw new Error("MODEL_OUTPUT_MISSING_CORE_FIELDS");
@@ -2614,11 +3020,11 @@ export function expandMappingAnalysisSemanticSkeleton(
       hours: module.hours,
       typicalProjectName: `${module.moduleName}典型工作项目`,
       typicalProjectDescription: `面向${input.region}地区${input.majorDirection}岗位任务，完成${module.moduleName}相关项目交付。`,
-      focus: module.moduleName,
+      focus: module.taskNames?.join("、") || module.moduleName,
       artifact: `${module.moduleName}项目成果`,
-      workflow: ["接收任务", "分析需求", "制定方案", "完成制作", "检查修订", "提交成果"],
-      skills: ["项目任务理解能力", "AI 工具辅助制作能力", "过程记录与问题修订能力", "成果展示与说明能力"],
-      knowledge: ["课程模块知识", "工作流程规范", "成果质量标准", "工具使用边界"],
+      workflow: ["接收任务", `分析${module.moduleName}要求`, ...(module.taskNames?.slice(0, 3) || ["完成模块任务"]), "检查修订", "提交成果"],
+      skills: (module.taskNames?.length ? module.taskNames.map((task) => `${task}实施能力`) : [`${module.moduleName}项目实施能力`]).slice(0, 4),
+      knowledge: [ `${module.moduleName}基础原理`, `${module.moduleName}工作流程规范`, `${module.moduleName}成果质量标准`, "工具使用边界"],
       assessment: ["过程记录检查", "阶段成果评审", "作品展示答辩"],
       standards: ["当前为占位映射，后续需接入真实企业标准、大赛证书或课程标准后校准"]
     });
@@ -2684,6 +3090,53 @@ export function expandMappingAnalysisSemanticSkeleton(
   };
 }
 
+function similarPairRatio(values: string[], threshold: number) {
+  if (values.length < 2) return 0;
+  let pairs = 0;
+  let similarPairs = 0;
+  for (let left = 0; left < values.length; left += 1) {
+    for (let right = left + 1; right < values.length; right += 1) {
+      pairs += 1;
+      if (semanticTextSimilarity(values[left], values[right]) >= threshold) similarPairs += 1;
+    }
+  }
+  return pairs ? similarPairs / pairs : 0;
+}
+
+export function detectCapabilityMapTemplatePatterns(payload: CourseAbilityGraphPayload) {
+  const warnings: string[] = [];
+  const courseNames = payload.coreCourseSuggestions.map((course) => course.name);
+  const canonicalCourseNames = courseNames.map(canonicalDisplayName).filter(Boolean);
+  const duplicateCourseNames = canonicalCourseNames.length !== new Set(canonicalCourseNames).size;
+  if (duplicateCourseNames || similarPairRatio(courseNames, 0.82) >= 0.35) warnings.push("TEMPLATE_PATTERN_DETECTED");
+
+  const moduleNames = payload.teachingModules.map((module) => module.name);
+  if (similarPairRatio(moduleNames, 0.72) >= 0.4) warnings.push("COURSE_MODULES_TOO_SIMILAR");
+
+  const mappingTexts = payload.moduleMappings.map((mapping) =>
+    mapping.mappingDimensions
+      .flatMap((dimension) => dimension.items.map((item) => item.text))
+      .join(" ")
+  );
+  if (similarPairRatio(mappingTexts, 0.68) >= 0.35) warnings.push("MAPPING_CONTENT_TOO_SIMILAR");
+
+  const inputContext = `${payload.course.majorDirection}${payload.course.courseName}`;
+  const generatedContext = [
+    ...payload.teachingModules.map((module) => `${module.name} ${module.description || ""}`),
+    ...payload.tasks.map((task) => `${task.name} ${task.description || ""}`),
+    ...payload.coreCourseSuggestions.map((course) => `${course.name} ${course.position}`)
+  ].join(" ");
+  const animationTerms = generatedContext.match(/动画剧本|动画分镜|角色绑定|骨骼蒙皮|动画模型|三维动画|角色动画|镜头动画/g) || [];
+  const inputIsAnimation = /影视动画|动画制作|角色动画|三维角色/i.test(inputContext);
+  const digitalMediaArtMismatch = /数字媒体艺术/i.test(payload.course.majorDirection) && animationTerms.length >= 3;
+  if ((!inputIsAnimation && animationTerms.length >= 3) || digitalMediaArtMismatch) warnings.push("DOMAIN_MISMATCH_WITH_INPUT");
+
+  if (warnings.some((warning) => warning !== "TEMPLATE_PATTERN_DETECTED") && !warnings.includes("TEMPLATE_PATTERN_DETECTED")) {
+    warnings.unshift("TEMPLATE_PATTERN_DETECTED");
+  }
+  return warnings;
+}
+
 export function normalizeCourseAbilityGraphPayload(
   raw: CourseAbilityGraphModelOutput | null | undefined,
   input: CourseAbilityGraphInput = DEFAULT_INPUT
@@ -2715,6 +3168,13 @@ export function normalizeCourseAbilityGraphPayload(
   const regionalJobGraph = useProcessStage("regionalJobGraph", "regionalJobs");
   const majorAbilityGraph = useProcessStage("majorAbilityGraph", "majorAbilities");
   const rawCoreCourseGraph = useProcessStage("coreCourseGraph", "coreCourses");
+  if (Array.isArray(rawGraph.coreCourseSuggestions)) {
+    const rawCourseNames = rawGraph.coreCourseSuggestions
+      .filter(isRecord)
+      .map((item) => canonicalDisplayName(cleanDisplayText(item.name, "", 80)))
+      .filter(Boolean);
+    if (rawCourseNames.length !== new Set(rawCourseNames).size) warnings.push("TEMPLATE_PATTERN_DETECTED");
+  }
   const coreCourseSuggestions = normalizeCoreCourseSuggestions(rawGraph.coreCourseSuggestions, fallback.coreCourseSuggestions, course, warnings);
   const coreCourseGraph = rebuildCoreCourseGraph(rawCoreCourseGraph, coreCourseSuggestions);
 
@@ -2963,6 +3423,14 @@ export function normalizeCourseAbilityGraphPayload(
     tasks,
     moduleMappings: normalizedModuleMappings,
     impactPaths,
+    structureStrategy: isRecord(rawGraph.structureStrategy)
+      ? {
+          industryLogic: cleanDescription(rawGraph.structureStrategy.industryLogic, fallback.structureStrategy?.industryLogic || industryGraph.summary, 220),
+          jobLogic: cleanDescription(rawGraph.structureStrategy.jobLogic, fallback.structureStrategy?.jobLogic || regionalJobGraph.summary, 220),
+          abilityLogic: cleanDescription(rawGraph.structureStrategy.abilityLogic, fallback.structureStrategy?.abilityLogic || majorAbilityGraph.summary, 220),
+          courseLogic: cleanDescription(rawGraph.structureStrategy.courseLogic, fallback.structureStrategy?.courseLogic || coreCourseGraph.summary, 220)
+        }
+      : fallback.structureStrategy,
     meta: normalizeMeta(
       rawGraph.meta,
       isRecord(raw) ? "model" : "mock",
@@ -2976,6 +3444,8 @@ export function normalizeCourseAbilityGraphPayload(
         : warnings
     )
   };
+
+  payload.meta.warnings = Array.from(new Set([...payload.meta.warnings, ...detectCapabilityMapTemplatePatterns(payload)]));
 
   return payload;
 }

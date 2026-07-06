@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getSessionFromRequest } from "@/lib/session-edge";
 
-const protectedRoutes = ["/workspace", "/chat", "/image", "/video", "/users", "/settings"];
+const protectedRoutes = ["/workspace", "/chat", "/image", "/video", "/users", "/settings", "/smart-tools"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -34,5 +34,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/login", "/workspace/:path*", "/chat/:path*", "/image/:path*", "/video/:path*", "/users/:path*", "/settings/:path*"]
+  matcher: ["/login", "/workspace/:path*", "/chat/:path*", "/image/:path*", "/video/:path*", "/users/:path*", "/settings/:path*", "/smart-tools/:path*"]
 };

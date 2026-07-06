@@ -972,7 +972,13 @@ export async function generateCourseAbilityGraph(input: CourseAbilityGraphInput,
           mappingModules.push({
             moduleId: id,
             moduleName: name,
-            ...(typeof hours === "number" ? { hours } : {})
+            ...(typeof hours === "number" ? { hours } : {}),
+            taskNames: Array.isArray(merged.tasks)
+              ? merged.tasks
+                  .filter((task) => isRecord(task) && task.moduleId === id && typeof task.name === "string")
+                  .map((task) => String((task as { name: string }).name))
+                  .slice(0, 5)
+              : []
           });
         });
         context.mappingModules = mappingModules;

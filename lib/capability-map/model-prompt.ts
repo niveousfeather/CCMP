@@ -72,8 +72,8 @@ export function buildCourseAbilityGraphMessages(input: CourseAbilityGraphInput):
         },
         contentRequirements: [
           "围绕地区、专业方向和课程名称生成，不要泛泛而谈。",
-          "课程能力图谱默认生成 3 个工作流程、5 个教学模块、每个模块 2-4 个任务能力点。",
-          "核心课程建议中突出当前课程，并说明它承接 AI 工具链 + 动画全流程项目实践。",
+          "课程能力图谱根据课程动态生成 3-5 个工作流程、4-8 个教学模块、每个模块 2-5 个任务能力点。",
+          "核心课程建议中突出当前课程，并根据专业能力说明它在专业课程体系中的真实定位。",
           "所有 evidenceSourceIds 必须能在 evidenceSources 中找到。",
           "所有 relatedJobIds 应尽量能在 relatedJobs 或 regionalJobMap 中找到。"
         ]
@@ -89,7 +89,8 @@ export function buildCapabilityMapProcessGraphsMessages(input: CourseAbilityGrap
       content: [
         "你是课程体系语义骨架生成助手。",
         JSON_ONLY_RULES,
-        "本阶段只输出轻量字段：industryKeywords、industryChanges、regionalJobs、majorAbilities、coreCourses、meta。",
+        "本阶段只输出轻量字段：structureStrategy、industryKeywords、industryChanges、courseImpacts、regionalJobs、majorAbilities、coreCourses、meta。",
+        "节点数量、名称、权重和关系必须根据本次地区、专业与课程动态推导，不得套用影视动画或任何固定母版。",
         "不要生成完整图谱节点、边、课程能力图谱或课程映射。"
       ].join("\n")
     },
@@ -99,14 +100,28 @@ export function buildCapabilityMapProcessGraphsMessages(input: CourseAbilityGrap
         task: "生成课程体系前置推导语义骨架 JSON",
         course: courseContext(input),
         outputShape: {
-          industryKeywords: ["3-5 个产业关键词"],
-          industryChanges: ["4-6 个产业变化或生产方式变化"],
-          regionalJobs: [{ name: "岗位名称", relevance: "1-100", description: "一句话岗位说明" }],
-          majorAbilities: [{ name: "专业能力名称", weight: "1-100", description: "一句话能力说明" }],
-          coreCourses: [{ name: "核心课程名称", position: "课程定位", reason: "推荐原因", isCurrentCourse: "当前课程 true/false" }],
+          structureStrategy: {
+            industryLogic: "为什么选择这些产业方向",
+            jobLogic: "为什么选择这些区域岗位",
+            abilityLogic: "专业能力如何从岗位任务中抽取",
+            courseLogic: "核心课程体系如何承接专业能力"
+          },
+          industryKeywords: ["3-6 个产业关键词"],
+          industryChanges: ["3-7 个产业变化或生产方式变化"],
+          courseImpacts: ["3-6 个由产业变化推导出的课程建设影响"],
+          regionalJobs: [{ name: "岗位名称", relevance: "1-100", description: "一句话岗位说明", industryKeywords: ["相关产业关键词"] }],
+          majorAbilities: [{ name: "专业能力名称", weight: "1-100", description: "一句话能力说明", elements: ["2-4 个能力要素"], relatedJobNames: ["支撑岗位名称"] }],
+          coreCourses: [{ name: "核心课程名称", position: "课程定位", reason: "推荐原因", isCurrentCourse: "当前课程 true/false", supportedAbilityNames: ["支撑能力名称"], relatedJobNames: ["相关岗位名称"] }],
           meta: { source: "model", provider: "xheai", model: "gpt-5.4" }
         },
-        requirements: ["coreCourses 至少 6 门，当前课程必须 isCurrentCourse=true。", "所有内容围绕地区、专业方向和课程名称。"]
+        requirements: [
+          "regionalJobs 生成 4-8 个，majorAbilities 生成 4-8 个，coreCourses 生成 4-8 门。",
+          "当前课程必须且只能出现一次，并设置 isCurrentCourse=true。",
+          "不同课程不得同义重复，课程体系要覆盖该专业不同能力方向。",
+          "关系字段只能引用本次 JSON 中已经出现的名称。",
+          "所有说明控制在 40 个中文字符内，关系数组每项最多引用 4 个名称。",
+          "所有内容围绕地区、专业方向和课程名称，不得沿用无关专业母版。"
+        ]
       })
     }
   ];
@@ -117,68 +132,22 @@ export function buildCapabilityMapCourseGraphMessages(input: CourseAbilityGraphI
     courseName: input.courseName,
     workflowStages: [
       {
-        name: "前期策划阶段",
-        description: "完成主题、剧本、分镜和视觉设定。",
+        name: "需求与方案阶段",
+        description: "完成需求分析、方案设计和实施规划。",
         modules: [
           {
-            name: "动画剧本设定",
-            hours: 16,
-            description: "完成剧本、分镜、原画和场景设定。",
+            name: "课程专属方案模块",
+            hours: 12,
+            description: "根据课程对象设计专属方案。",
             tasks: [
-              { name: "动画剧本撰写", description: "完成主题、人物关系和剧情结构。" },
-              { name: "动画分镜设计", description: "完成镜头脚本与画面调度设计。" }
+              { name: "需求分析", description: "识别对象、目标和成果要求。" },
+              { name: "方案设计", description: "形成可执行的项目方案。" }
             ]
           }
         ]
       },
-      {
-        name: "资产制作阶段",
-        description: "完成角色、道具和场景资产制作。",
-        modules: [
-          {
-            name: "动画模型制作",
-            hours: 20,
-            description: "完成角色、道具和基础模型资产。",
-            tasks: [
-              { name: "角色模型生成", description: "完成角色模型生成与结构检查。" },
-              { name: "模型资产优化", description: "完成模型修正、命名和资产整理。" }
-            ]
-          },
-          {
-            name: "动画场景搭建",
-            hours: 16,
-            description: "完成场景空间、灯光和材质设定。",
-            tasks: [
-              { name: "场景空间搭建", description: "完成镜头所需场景空间组织。" },
-              { name: "灯光材质设置", description: "完成视觉风格和渲染基础设置。" }
-            ]
-          }
-        ]
-      },
-      {
-        name: "动画输出阶段",
-        description: "完成镜头动画、合成、渲染和展示。",
-        modules: [
-          {
-            name: "动画制作",
-            hours: 24,
-            description: "完成镜头动作、节奏和动画表现。",
-            tasks: [
-              { name: "镜头动画制作", description: "完成关键镜头动作与节奏控制。" },
-              { name: "动画效果修订", description: "根据反馈优化动作和镜头衔接。" }
-            ]
-          },
-          {
-            name: "动画渲染输出",
-            hours: 16,
-            description: "完成合成、渲染、剪辑和作品展示。",
-            tasks: [
-              { name: "渲染合成输出", description: "完成画面合成、渲染和文件输出。" },
-              { name: "作品展示复盘", description: "完成作品展示、评价和修改记录。" }
-            ]
-          }
-        ]
-      }
+      { name: "实施阶段", description: "完成课程核心项目生产。", modules: [{ name: "课程专属制作模块A", hours: 20, description: "根据课程目标动态命名。", tasks: [{ name: "项目任务A", description: "形成可检查的阶段成果。" }, { name: "质量修订A", description: "根据标准完成成果修订。" }] }, { name: "课程专属制作模块B", hours: 20, description: "根据课程流程动态命名。", tasks: [{ name: "项目任务B", description: "完成另一类核心工作任务。" }, { name: "质量修订B", description: "根据反馈优化阶段成果。" }] }] },
+      { name: "交付阶段", description: "完成成果交付、展示和复盘。", modules: [{ name: "成果交付与复盘", hours: 12, description: "完成发布、展示、评价和复盘。", tasks: [{ name: "成果发布", description: "按平台规范完成成果交付。" }, { name: "项目复盘", description: "总结流程、问题和改进方向。" }] }] }
     ],
     meta: { note: "course-structure-skeleton" }
   };
@@ -191,7 +160,8 @@ export function buildCapabilityMapCourseGraphMessages(input: CourseAbilityGraphI
         "不要 Markdown，不要代码块，不要解释性文字。",
         "本阶段只能输出 courseName、workflowStages、meta。",
         "禁止输出 courseAbilityMap、moduleMappings、evidenceSources、teachingModules、tasks、节点坐标或边。",
-        "workflowStages 必须正好 3 个；modules 总数必须为 5 个；每个 module 的 tasks 为 2-4 个。",
+        "workflowStages 根据课程动态生成 3-5 个；modules 总数根据课程复杂度生成 4-8 个；每个 module 的 tasks 为 2-5 个。",
+        "模块名称必须紧扣本课程，不得套用与课程无关的动画剧本、动画模型等固定名称。",
         "每条 description 不超过 40 个中文字符。"
       ].join("\n")
     },
@@ -203,9 +173,10 @@ export function buildCapabilityMapCourseGraphMessages(input: CourseAbilityGraphI
         `地区：${input.region}`,
         "请只返回一个 JSON 对象，字段只能有 courseName、workflowStages、meta。",
         "不要输出 courseAbilityMap、moduleMappings、evidenceSources、teachingModules、tasks。",
-        "workflowStages 正好 3 个，modules 总数正好 5 个，每个 module 的 tasks 为 2-4 个。",
+        "workflowStages 生成 3-5 个，modules 总数生成 4-8 个，每个 module 的 tasks 为 2-5 个。",
+        "请根据课程真实工作流程决定数量、名称、学时和任务，不要机械复制示例。",
         "所有字符串必须使用英文双引号完整闭合；不要使用注释；不要使用尾随逗号。",
-        "如果不确定如何生成，请直接按下面示例结构返回，并只做必要的课程名称替换。",
+        "下面仅展示 JSON 字段形状，禁止照抄其中的名称和结构数量。",
         JSON.stringify(example)
       ].join("\n")
     }
@@ -216,11 +187,9 @@ export function buildCapabilityMapMappingAnalysisMessages(input: CourseAbilityGr
   const resolvedModules = mappingModules?.length
     ? mappingModules
     : [
-        { moduleId: "script_design", moduleName: "动画剧本设定", hours: 16 },
-        { moduleId: "model_generation", moduleName: "动画模型制作", hours: 20 },
-        { moduleId: "animation_production", moduleName: "动画制作", hours: 24 },
-        { moduleId: "scene_building", moduleName: "动画场景搭建", hours: 16 },
-        { moduleId: "render_output", moduleName: "动画渲染输出", hours: 12 }
+        { moduleId: "course_planning", moduleName: `${input.courseName}需求与方案`, hours: 12, taskNames: ["需求分析", "方案设计"] },
+        { moduleId: "course_production", moduleName: `${input.courseName}核心项目制作`, hours: 24, taskNames: ["项目实施", "质量修订"] },
+        { moduleId: "course_delivery", moduleName: `${input.courseName}成果交付与复盘`, hours: 12, taskNames: ["成果发布", "项目复盘"] }
       ];
   return [
     {
@@ -231,7 +200,9 @@ export function buildCapabilityMapMappingAnalysisMessages(input: CourseAbilityGr
         "本阶段只输出轻量字段：moduleMappings、skillWeights、relatedJobs、updateSuggestions、meta。",
         "不要生成薪资区间、证据来源、完整 mappingDimensions 或真实来源。",
         "moduleMappings 必须严格使用用户给定的 teachingModules；不允许新增模块、不允许改名、不允许省略模块。",
-        "moduleMappings.length 必须等于 teachingModules.length；每个 moduleMapping 必须包含给定 moduleId 和 moduleName。"
+        "moduleMappings.length 必须等于 teachingModules.length；每个 moduleMapping 必须包含给定 moduleId 和 moduleName。",
+        "每个模块的七维内容必须结合该模块的 taskNames 单独推导，禁止多个模块复用同一组套话。",
+        "七个维度每类只返回 1-2 个短句，每个短句不超过 24 个中文字符。"
       ].join("\n")
     },
     {
@@ -265,6 +236,8 @@ export function buildCapabilityMapMappingAnalysisMessages(input: CourseAbilityGr
         requirements: [
           "moduleMappings 必须逐一覆盖 teachingModules，顺序尽量保持一致。",
           "只能使用 teachingModules 中给出的 moduleId 和 moduleName。",
+          "七维内容必须体现各模块 taskNames 的差异，不能只替换模块名称。",
+          "每个维度返回 1-2 条可执行、可评价的短句，控制整体 JSON 体量。",
           "不要输出 evidenceSources、salaryRanges 或 URL。"
         ]
       })
